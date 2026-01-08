@@ -73,6 +73,25 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Data classes
+data class PlanetElements(
+    val name: String,
+    val color: Color,
+    val L_0: Double,   // Mean Longitude at Epoch
+    val L_rate: Double,// Rate (deg/day)
+    val a: Double,     // AU
+    val e: Double,     // Eccentricity
+    val i: Double,     // Inclination (deg)
+    val w_bar: Double, // Longitude of Perihelion (deg)
+    val N: Double      // Longitude of Ascending Node (deg)
+)
+
+data class PlanetEvents(
+    val rise: Double,
+    val transit: Double,
+    val set: Double
+)
+
 @Composable
 fun OrreryApp(lat: Double, lon: Double) {
     var currentInstant by remember { mutableStateOf(Instant.now()) }
@@ -134,10 +153,8 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
-        val centerY = h / 2
 
         // --- 1. SETUP SCALE & MARGINS ---
-        // Increase paddingLeft to 35f to make room for text + descent
         val paddingLeft = 35f
         val paddingRight = 17f
         val drawingWidth = w - paddingLeft - paddingRight
@@ -152,9 +169,8 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
         val solsticeMonth = if (lat >= 0) 12 else 6
         val solsticeDay = 21
         val solsticeDate = ZonedDateTime.of(year, solsticeMonth, solsticeDay, 12, 0, 0, 0, zoneId)
-        val (solsticeRise, solsticeSet) = calculateSunTimes(solsticeDate.toLocalDate().toEpochDay(), lat, lon, offsetHours)
+        val (solsticeRise, solsticeSet) = calculateSunTimes(solsticeDate.toLocalDate().toEpochDay().toDouble(), lat, lon, offsetHours)
 
-        // Nmax logic
         val nMaxDuration = (solsticeRise + (24.0 - solsticeSet))
         val pixelsPerHour = drawingWidth / nMaxDuration
 
@@ -163,11 +179,12 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
 
         val nowZoned = ZonedDateTime.ofInstant(now, zoneId)
         val nowDate = nowZoned.toLocalDate()
+        val nowEpochDay = nowDate.toEpochDay().toDouble()
 
         fun getYForDate(date: LocalDate): Float {
             val daysOffset = ChronoUnit.DAYS.between(nowDate, date)
             val fraction = daysOffset / 365.25
-            return (centerY - (fraction * h)).toFloat()
+            return (h - (fraction * h)).toFloat()
         }
 
         drawIntoCanvas { canvas ->
@@ -179,10 +196,9 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 typeface = android.graphics.Typeface.MONOSPACE
             }
 
-            // --- 2. DRAW TIME LABELS (Top) ---
+            // --- 2. DRAW TIME LABELS ---
             for (k in -14..14) {
                 val xPos = centerX + (k * pixelsPerHour)
-
                 if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
                     var hour = (k % 24)
                     if (hour < 0) hour += 24
@@ -190,72 +206,70 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 }
             }
 
-            // --- 3. DRAW MONTH LABELS (Left, Rotated) ---
-            val monthPaint = Paint(paint).apply {
-                textAlign = Paint.Align.CENTER
-            }
-
-            val startDate = nowDate.minusMonths(7).withDayOfMonth(1)
-            val endDate = nowDate.plusMonths(7).withDayOfMonth(1)
-
-            // Move text to x = 10 + (textSize/2) = 25
+            // --- 3. DRAW MONTH LABELS ---
+            val monthPaint = Paint(paint).apply { textAlign = Paint.Align.CENTER }
+            val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
+            val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
             val textX = 25f
 
             var d = startDate
             while (d.isBefore(endDate)) {
                 val nextMonth = d.plusMonths(1)
-
                 val y1 = getYForDate(d)
                 val y2 = getYForDate(nextMonth)
 
-                if (y1 >= textHeight && y1 <= h && y2 >= textHeight && y2 <= h) {
-                    val yMid = (y1 + y2) / 2f
+                val yMid = (y1 + y2) / 2f
+                if (yMid >= textHeight && yMid <= h) {
                     val monthName = d.format(DateTimeFormatter.ofPattern("MMM"))
-
                     canvas.nativeCanvas.save()
-                    // Rotate around the new text position
                     canvas.nativeCanvas.rotate(-90f, textX, yMid)
                     canvas.nativeCanvas.drawText(monthName, textX, yMid, monthPaint)
                     canvas.nativeCanvas.restore()
                 }
-
                 d = nextMonth
             }
         }
 
-        // --- 4. DRAW CURRENT DATE LINE ---
-        if (centerY > textHeight) {
-            drawLine(
-                color = Color(0xFFADD8E6),
-                start = Offset(0f, centerY),
-                end = Offset(w, centerY),
-                strokeWidth = 2f
-            )
-        }
+        // --- 4. DEFINE PLANETS ---
+        val blueGreen = Color(0xFF20B2AA)
+        val orange = Color(0xFFFFA500)
 
-        // --- 5. DRAW PLOT POINTS & MONTH LINES ---
-        val points = ArrayList<Offset>()
+        val planets = listOf(
+            PlanetElements("Mercury", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
+            PlanetElements("Venus",   Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
+            PlanetElements("Mars",    Color.Red,    355.45, 0.52403, 1.52368, 0.09340, 1.850, 336.04, 49.558),
+            PlanetElements("Jupiter", orange,        34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
+            PlanetElements("Saturn",  Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
+            PlanetElements("Uranus",  blueGreen,    313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
+            PlanetElements("Neptune", Color.Blue,   304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+        )
+
+        // --- 5. DRAW PLOT POINTS ---
+
+        val sunPoints = ArrayList<Offset>()
+        val planetTransits = planets.associate { it.name to ArrayList<Offset>() }
+        val planetRises = planets.associate { it.name to ArrayList<Offset>() }
+        val planetSets = planets.associate { it.name to ArrayList<Offset>() }
 
         for (y in textHeight.toInt() until h.toInt()) {
-            val fraction = (centerY - y) / h
+            val fraction = (h - y) / h
             val daysOffset = fraction * 365.25
 
+            val targetEpochDay = nowEpochDay + daysOffset
             val rowDate = nowZoned.plusDays(daysOffset.toLong()).toLocalDate()
-            val rowJulianDay = rowDate.toEpochDay()
 
-            val (_, setTimePrev) = calculateSunTimes(rowJulianDay - 1, lat, lon, offsetHours)
-            val (riseTimeCurr, _) = calculateSunTimes(rowJulianDay, lat, lon, offsetHours)
+            // SUN
+            val (_, setTimePrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours)
+            val (riseTimeCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours)
 
             val xOffsetSunset = (setTimePrev - 24.0) * pixelsPerHour
             val xSunset = centerX + xOffsetSunset
-
             val xOffsetSunrise = riseTimeCurr * pixelsPerHour
             val xSunrise = centerX + xOffsetSunrise
-
             val validSunset = !xSunset.isNaN()
             val validSunrise = !xSunrise.isNaN()
 
-            // Draw monthly line if it's the 1st of the month
+            // Monthly line
             if (rowDate.dayOfMonth == 1 && validSunset && validSunrise) {
                 drawLine(
                     color = Color.DarkGray,
@@ -265,20 +279,78 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 )
             }
 
-            if (validSunset) {
-                points.add(Offset(xSunset.toFloat(), y.toFloat()))
-            }
-            if (validSunrise) {
-                points.add(Offset(xSunrise.toFloat(), y.toFloat()))
+            if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
+            if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
+
+            // PLANETS
+            if (validSunset && validSunrise) {
+                for (planet in planets) {
+                    val events = calculatePlanetEvents(targetEpochDay, lat, lon, offsetHours, planet)
+
+                    fun processEvent(time: Double, list: ArrayList<Offset>) {
+                        if (time.isNaN()) return
+                        var diff = time - 24.0
+                        if (diff < -12.0) diff += 24.0
+                        else if (diff > 12.0) diff -= 24.0
+                        val xPos = centerX + (diff * pixelsPerHour)
+
+                        if (xPos >= xSunset && xPos <= xSunrise) {
+                            list.add(Offset(xPos.toFloat(), y.toFloat()))
+                        }
+                    }
+
+                    processEvent(events.transit, planetTransits[planet.name]!!)
+                    processEvent(events.rise, planetRises[planet.name]!!)
+                    processEvent(events.set, planetSets[planet.name]!!)
+                }
             }
         }
 
+        // Draw Sun
         drawPoints(
-            points = points,
+            points = sunPoints,
             pointMode = PointMode.Points,
             color = Color.White,
             strokeWidth = 2f
         )
+
+        // Draw Planets
+        for (planet in planets) {
+            val isInner = planet.name == "Mercury" || planet.name == "Venus"
+
+            // 1. Draw Transits (Outer planets only, inner planets transits are usually day-time hidden)
+            // Code already filters by visibility, but if visible, draw full brightness
+            if (!isInner) {
+                drawPoints(
+                    points = planetTransits[planet.name]!!,
+                    pointMode = PointMode.Points,
+                    color = planet.color,
+                    strokeWidth = 4f
+                )
+            }
+
+            // 2. Draw Rise/Set
+            // Venus & Mercury: Full Brightness
+            // Others: Dimmed (0.35 alpha)
+            val riseSetColor = if (isInner) {
+                planet.color
+            } else {
+                planet.color.copy(alpha = 0.35f)
+            }
+
+            drawPoints(
+                points = planetRises[planet.name]!!,
+                pointMode = PointMode.Points,
+                color = riseSetColor,
+                strokeWidth = 3f
+            )
+            drawPoints(
+                points = planetSets[planet.name]!!,
+                pointMode = PointMode.Points,
+                color = riseSetColor,
+                strokeWidth = 3f
+            )
+        }
     }
 }
 
@@ -299,7 +371,7 @@ fun calculateLST(instant: Instant, lon: Double): String {
     return "%02d:%02d".format(hours, minutes)
 }
 
-fun calculateSunTimes(epochDay: Long, lat: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
+fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
     val jd = 2440587.5 + epochDay + 0.5
     val n = jd - 2451545.0
     var L = 280.460 + 0.9856474 * n
@@ -344,4 +416,91 @@ fun calculateSunTimes(epochDay: Long, lat: Double, lon: Double, timezoneOffset: 
     while (set >= 24) set -= 24.0
 
     return Pair(rise, set)
+}
+
+fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
+    val jd = 2440587.5 + epochDay + 0.5
+    val d = jd - 2451545.0
+
+    // Earth Elements
+    val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
+    val Le = Math.toRadians((280.466 + 0.98564736 * d) % 360.0)
+    val Ce = 1.915 * sin(Me) + 0.020 * sin(2 * Me)
+    val trueLongSun = Le + Math.toRadians(Ce)
+    val Re = 1.00014 - 0.01671 * cos(Me) - 0.00014 * cos(2 * Me)
+
+    val Le_earth = trueLongSun + Math.PI
+    val xe = Re * cos(Le_earth)
+    val ye = Re * sin(Le_earth)
+    val ze = 0.0
+
+    // Planet Elements
+    val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
+    val Np = Math.toRadians(p.N)
+    val ip = Math.toRadians(p.i)
+    val w_bar_p = Math.toRadians(p.w_bar)
+
+    var Mp = Lp - w_bar_p
+
+    var Ep = Mp + p.e * sin(Mp)
+    Ep = Mp + p.e * sin(Ep)
+    Ep = Mp + p.e * sin(Ep)
+
+    val xv = p.a * (cos(Ep) - p.e)
+    val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
+    val rp = sqrt(xv*xv + yv*yv)
+    val v = atan2(yv, xv)
+
+    val u = v + w_bar_p - Np
+
+    val xh = rp * (cos(u) * cos(Np) - sin(u) * sin(Np) * cos(ip))
+    val yh = rp * (cos(u) * sin(Np) + sin(u) * cos(Np) * cos(ip))
+    val zh = rp * (sin(u) * sin(ip))
+
+    val xg = xh - xe
+    val yg = yh - ye
+    val zg = zh - ze
+
+    val ecl = Math.toRadians(23.439 - 0.0000004 * d)
+    val xeq = xg
+    val yeq = yg * cos(ecl) - zg * sin(ecl)
+    val zeq = yg * sin(ecl) + zg * cos(ecl)
+
+    val raRad = atan2(yeq, xeq)
+    val raHours = Math.toDegrees(raRad) / 15.0
+    val decRad = atan2(zeq, sqrt(xeq*xeq + yeq*yeq))
+
+    var GMST0 = 6.697374558 + 0.06570982441908 * d
+    GMST0 %= 24.0
+    if (GMST0 < 0) GMST0 += 24.0
+
+    var transitUT = raHours - (lon / 15.0) - GMST0
+    while (transitUT < 0) transitUT += 24.0
+    while (transitUT >= 24) transitUT -= 24.0
+
+    var transitStandard = transitUT + timezoneOffset
+    while (transitStandard < 0) transitStandard += 24.0
+    while (transitStandard >= 24) transitStandard -= 24.0
+
+    val altRad = Math.toRadians(-0.5667)
+    val latRad = Math.toRadians(lat)
+    val cosH = (sin(altRad) - sin(latRad) * sin(decRad)) / (cos(latRad) * cos(decRad))
+
+    var rise = Double.NaN
+    var set = Double.NaN
+
+    if (cosH >= -1.0 && cosH <= 1.0) {
+        val H = acos(cosH)
+        val H_hours = Math.toDegrees(H) / 15.0
+
+        rise = transitStandard - H_hours
+        set = transitStandard + H_hours
+
+        while (rise < 0) rise += 24.0
+        while (rise >= 24) rise -= 24.0
+        while (set < 0) set += 24.0
+        while (set >= 24) set -= 24.0
+    }
+
+    return PlanetEvents(rise, transitStandard, set)
 }
