@@ -3,6 +3,7 @@ package com.example.orrery
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -76,6 +78,7 @@ class MainActivity : ComponentActivity() {
 // Data classes
 data class PlanetElements(
     val name: String,
+    val symbol: String,
     val color: Color,
     val L_0: Double,   // Mean Longitude at Epoch
     val L_rate: Double,// Rate (deg/day)
@@ -90,6 +93,13 @@ data class PlanetEvents(
     val rise: Double,
     val transit: Double,
     val set: Double
+)
+
+data class LabelPosition(
+    var x: Float = 0f,
+    var y: Float = 0f,
+    var minDistToCenter: Float = Float.MAX_VALUE,
+    var found: Boolean = false
 )
 
 @Composable
@@ -193,7 +203,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 textSize = 30f
                 textAlign = Paint.Align.CENTER
                 isAntiAlias = true
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Typeface.MONOSPACE
             }
 
             // --- 2. DRAW TIME LABELS ---
@@ -235,21 +245,29 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
         val orange = Color(0xFFFFA500)
 
         val planets = listOf(
-            PlanetElements("Mercury", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
-            PlanetElements("Venus",   Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
-            PlanetElements("Mars",    Color.Red,    355.45, 0.52403, 1.52368, 0.09340, 1.850, 336.04, 49.558),
-            PlanetElements("Jupiter", orange,        34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
-            PlanetElements("Saturn",  Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
-            PlanetElements("Uranus",  blueGreen,    313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
-            PlanetElements("Neptune", Color.Blue,   304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+            PlanetElements("Mercury", "☿", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
+            PlanetElements("Venus",   "♀", Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
+            PlanetElements("Mars",    "♂", Color.Red,    355.45, 0.52403, 1.52368, 0.09340, 1.850, 336.04, 49.558),
+            PlanetElements("Jupiter", "♃", orange,        34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
+            PlanetElements("Saturn",  "♄", Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
+            PlanetElements("Uranus",  "⛢", blueGreen,    313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
+            PlanetElements("Neptune", "♆", Color.Blue,   304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
         )
 
-        // --- 5. DRAW PLOT POINTS ---
+        // --- 5. DRAW PLOT POINTS & CALCULATE LABELS ---
 
         val sunPoints = ArrayList<Offset>()
+
         val planetTransits = planets.associate { it.name to ArrayList<Offset>() }
         val planetRises = planets.associate { it.name to ArrayList<Offset>() }
         val planetSets = planets.associate { it.name to ArrayList<Offset>() }
+
+        val bestLabels = HashMap<String, LabelPosition>()
+        for (p in planets) {
+            bestLabels["${p.name}_t"] = LabelPosition()
+            bestLabels["${p.name}_r"] = LabelPosition()
+            bestLabels["${p.name}_s"] = LabelPosition()
+        }
 
         for (y in textHeight.toInt() until h.toInt()) {
             val fraction = (h - y) / h
@@ -269,7 +287,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             val validSunset = !xSunset.isNaN()
             val validSunrise = !xSunrise.isNaN()
 
-            // Monthly line
             if (rowDate.dayOfMonth == 1 && validSunset && validSunrise) {
                 drawLine(
                     color = Color.DarkGray,
@@ -282,26 +299,35 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
             if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 
-            // PLANETS
             if (validSunset && validSunrise) {
                 for (planet in planets) {
                     val events = calculatePlanetEvents(targetEpochDay, lat, lon, offsetHours, planet)
 
-                    fun processEvent(time: Double, list: ArrayList<Offset>) {
+                    fun processEvent(time: Double, list: ArrayList<Offset>, keySuffix: String) {
                         if (time.isNaN()) return
                         var diff = time - 24.0
                         if (diff < -12.0) diff += 24.0
                         else if (diff > 12.0) diff -= 24.0
                         val xPos = centerX + (diff * pixelsPerHour)
+                        val yPos = y.toFloat()
 
                         if (xPos >= xSunset && xPos <= xSunrise) {
-                            list.add(Offset(xPos.toFloat(), y.toFloat()))
+                            list.add(Offset(xPos.toFloat(), yPos))
+
+                            val dist = abs(xPos - centerX)
+                            val labelTracker = bestLabels["${planet.name}_$keySuffix"]!!
+                            if (dist < labelTracker.minDistToCenter) {
+                                labelTracker.minDistToCenter = dist.toFloat()
+                                labelTracker.x = xPos.toFloat()
+                                labelTracker.y = yPos
+                                labelTracker.found = true
+                            }
                         }
                     }
 
-                    processEvent(events.transit, planetTransits[planet.name]!!)
-                    processEvent(events.rise, planetRises[planet.name]!!)
-                    processEvent(events.set, planetSets[planet.name]!!)
+                    processEvent(events.transit, planetTransits[planet.name]!!, "t")
+                    processEvent(events.rise, planetRises[planet.name]!!, "r")
+                    processEvent(events.set, planetSets[planet.name]!!, "s")
                 }
             }
         }
@@ -314,42 +340,104 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             strokeWidth = 2f
         )
 
-        // Draw Planets
-        for (planet in planets) {
-            val isInner = planet.name == "Mercury" || planet.name == "Venus"
+        // Draw Planets and Labels
+        val mainTextPaint = Paint().apply {
+            textSize = 28f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+        val subTextPaint = Paint().apply {
+            textSize = 18f
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        }
 
-            // 1. Draw Transits (Outer planets only, inner planets transits are usually day-time hidden)
-            // Code already filters by visibility, but if visible, draw full brightness
-            if (!isInner) {
+        fun drawLabelWithSubscript(canvas: android.graphics.Canvas, x: Float, y: Float, symbol: String, subscript: String, color: Int) {
+            val symbolWidth = mainTextPaint.measureText(symbol)
+            val subWidth = subTextPaint.measureText(subscript)
+
+            // Changed from 1.5f to 1.0f as requested
+            val symX = x + (1.0f * symbolWidth)
+
+            // Draw Symbol
+            mainTextPaint.color = color
+            mainTextPaint.style = Paint.Style.FILL
+
+            // Halo
+            mainTextPaint.style = Paint.Style.STROKE
+            mainTextPaint.strokeWidth = 4f
+            mainTextPaint.color = android.graphics.Color.BLACK
+            canvas.drawText(symbol, symX, y, mainTextPaint)
+
+            // Fill
+            mainTextPaint.style = Paint.Style.FILL
+            mainTextPaint.color = color
+            canvas.drawText(symbol, symX, y, mainTextPaint)
+
+            // Draw Subscript
+            // Start at right edge of centered symbol + subWidth padding
+            val symbolRightEdge = symX + (symbolWidth / 2f)
+            val subX = symbolRightEdge + subWidth
+            val subY = y + 8f
+
+            subTextPaint.color = color
+            // Halo
+            subTextPaint.style = Paint.Style.STROKE
+            subTextPaint.strokeWidth = 3f
+            subTextPaint.color = android.graphics.Color.BLACK
+            canvas.drawText(subscript, subX, subY, subTextPaint)
+
+            // Fill
+            subTextPaint.style = Paint.Style.FILL
+            subTextPaint.color = color
+            canvas.drawText(subscript, subX, subY, subTextPaint)
+        }
+
+        drawIntoCanvas { canvas ->
+            for (planet in planets) {
+                val isInner = planet.name == "Mercury" || planet.name == "Venus"
+
+                // 1. Transit
+                if (!isInner) {
+                    drawPoints(
+                        points = planetTransits[planet.name]!!,
+                        pointMode = PointMode.Points,
+                        color = planet.color,
+                        strokeWidth = 4f
+                    )
+                    val label = bestLabels["${planet.name}_t"]!!
+                    if (label.found) {
+                        drawLabelWithSubscript(canvas.nativeCanvas, label.x, label.y, planet.symbol, "t", planet.color.toArgb())
+                    }
+                }
+
+                // 2. Rise & Set
+                val riseSetColor = if (isInner) planet.color else planet.color.copy(alpha = 0.35f)
+
                 drawPoints(
-                    points = planetTransits[planet.name]!!,
+                    points = planetRises[planet.name]!!,
                     pointMode = PointMode.Points,
-                    color = planet.color,
-                    strokeWidth = 4f
+                    color = riseSetColor,
+                    strokeWidth = 3f
                 )
-            }
+                val rLabel = bestLabels["${planet.name}_r"]!!
+                if (rLabel.found) {
+                    drawLabelWithSubscript(canvas.nativeCanvas, rLabel.x, rLabel.y, planet.symbol, "r", planet.color.toArgb())
+                }
 
-            // 2. Draw Rise/Set
-            // Venus & Mercury: Full Brightness
-            // Others: Dimmed (0.35 alpha)
-            val riseSetColor = if (isInner) {
-                planet.color
-            } else {
-                planet.color.copy(alpha = 0.35f)
+                drawPoints(
+                    points = planetSets[planet.name]!!,
+                    pointMode = PointMode.Points,
+                    color = riseSetColor,
+                    strokeWidth = 3f
+                )
+                val sLabel = bestLabels["${planet.name}_s"]!!
+                if (sLabel.found) {
+                    drawLabelWithSubscript(canvas.nativeCanvas, sLabel.x, sLabel.y, planet.symbol, "s", planet.color.toArgb())
+                }
             }
-
-            drawPoints(
-                points = planetRises[planet.name]!!,
-                pointMode = PointMode.Points,
-                color = riseSetColor,
-                strokeWidth = 3f
-            )
-            drawPoints(
-                points = planetSets[planet.name]!!,
-                pointMode = PointMode.Points,
-                color = riseSetColor,
-                strokeWidth = 3f
-            )
         }
     }
 }
