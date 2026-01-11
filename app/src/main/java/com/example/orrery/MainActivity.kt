@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -13,11 +14,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -27,9 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
@@ -88,7 +92,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Data classes
+// --- DATA CLASSES ---
 data class PlanetElements(
     val name: String,
     val symbol: String,
@@ -100,6 +104,9 @@ data class PlanetElements(
 
 data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
 data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCenter: Float = Float.MAX_VALUE, var found: Boolean = false)
+
+// Navigation Enum
+enum class Screen { TRANSITS, SCHEMATIC, SCALE }
 
 // --- CACHE CLASS ---
 class AstroCache(
@@ -142,6 +149,9 @@ class AstroCache(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
+    // --- NAVIGATION STATE ---
+    var currentScreen by remember { mutableStateOf(Screen.TRANSITS) }
+
     // --- LOCATION STATE ---
     var usePhoneLocation by remember { mutableStateOf(true) }
     var manualLat by remember { mutableStateOf(0.0) }
@@ -152,15 +162,34 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 
     // --- TIME STATE ---
     var usePhoneTime by remember { mutableStateOf(true) }
-    var manualDate by remember { mutableStateOf(LocalDate.now()) }
+    var manualEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay().toDouble()) }
 
     var currentInstant by remember { mutableStateOf(Instant.now()) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Lifecycle Observer (Only updates if using phone time)
+    // --- ANIMATION STATE ---
+    var isAnimating by remember { mutableStateOf(false) }
+    var animationTargetEpoch by remember { mutableStateOf(0.0) }
+    var animationStep by remember { mutableStateOf(0.0) }
+
+    // Animation Loop
+    LaunchedEffect(isAnimating) {
+        if (isAnimating) {
+            while (abs(manualEpochDay - animationTargetEpoch) > animationStep) {
+                manualEpochDay += animationStep
+                currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
+                delay(12L) // ~80 frames per second
+            }
+            manualEpochDay = animationTargetEpoch
+            currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
+            isAnimating = false
+        }
+    }
+
+    // Lifecycle Observer (Standard Time)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && usePhoneTime) {
+            if (event == Lifecycle.Event.ON_RESUME && usePhoneTime && !isAnimating) {
                 currentInstant = Instant.now()
             }
         }
@@ -168,9 +197,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Time Loop
-    LaunchedEffect(usePhoneTime, manualDate) {
-        if (usePhoneTime) {
+    // Standard Time Loop
+    LaunchedEffect(usePhoneTime, isAnimating) {
+        if (usePhoneTime && !isAnimating) {
             while (true) {
                 val now = Instant.now()
                 currentInstant = now
@@ -178,26 +207,27 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
                 delay(millisUntilNextMinute)
             }
-        } else {
-            // Force 00:00 UT on the user's date
-            currentInstant = manualDate.atStartOfDay(ZoneOffset.UTC).toInstant()
+        } else if (!usePhoneTime && !isAnimating) {
+            currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
         }
     }
 
     // Calculation Loop
     val zoneId = ZoneId.systemDefault()
     val effectiveDate = currentInstant.atZone(zoneId).toLocalDate()
-    val timeKey = if (usePhoneTime) currentInstant.atZone(zoneId).hour else effectiveDate.toEpochDay().toInt()
 
-    val cache by produceState<AstroCache?>(initialValue = null, key1 = timeKey, key2 = effectiveLat, key3 = effectiveLon) {
-        value = withContext(Dispatchers.Default) {
-            calculateCache(effectiveDate, effectiveLat, effectiveLon, zoneId)
+    val cache by produceState<AstroCache?>(initialValue = null, key1 = currentScreen, key2 = effectiveDate.toEpochDay()) {
+        if (currentScreen == Screen.TRANSITS) {
+            value = withContext(Dispatchers.Default) {
+                calculateCache(effectiveDate, effectiveLat, effectiveLon, zoneId)
+            }
         }
     }
 
     val utFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("UTC"))
     val utString = utFormatter.format(currentInstant)
     val lstString = calculateLST(currentInstant, effectiveLon)
+    val dateString = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(effectiveDate)
 
     // UI State
     var showMenu by remember { mutableStateOf(false) }
@@ -205,21 +235,18 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var showDateDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
+    // Dialogs
     if (showLocationDialog) {
         LocationDialog(
             currentUsePhone = usePhoneLocation,
             onDismiss = { showLocationDialog = false },
             onConfirm = { usePhone, lat, lon ->
                 usePhoneLocation = usePhone
-                if (!usePhone) {
-                    manualLat = lat
-                    manualLon = lon
-                }
+                if (!usePhone) { manualLat = lat; manualLon = lon }
                 showLocationDialog = false
             }
         )
     }
-
     if (showDateDialog) {
         DateDialog(
             currentUsePhone = usePhoneTime,
@@ -227,17 +254,26 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             onConfirm = { usePhone, date ->
                 usePhoneTime = usePhone
                 if (!usePhone && date != null) {
-                    manualDate = date
+                    manualEpochDay = date.toEpochDay().toDouble()
                 }
                 showDateDialog = false
             }
         )
     }
-
     if (showAboutDialog) {
-        AboutDialog(
-            onDismiss = { showAboutDialog = false }
-        )
+        AboutDialog(onDismiss = { showAboutDialog = false })
+    }
+
+    fun startAnimation(years: Int, step: Double) {
+        usePhoneTime = false
+        if (!isAnimating) {
+            manualEpochDay = currentInstant.atZone(ZoneId.of("UTC")).toLocalDate().toEpochDay().toDouble()
+        }
+        val currentLD = LocalDate.ofEpochDay(manualEpochDay.toLong())
+        val targetLD = currentLD.plusYears(years.toLong())
+        animationTargetEpoch = targetLD.toEpochDay().toDouble()
+        animationStep = step
+        isAnimating = true
     }
 
     Scaffold(
@@ -247,7 +283,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         if (!usePhoneTime) {
                             Text(
-                                text = manualDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                                text = dateString,
                                 style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.align(Alignment.CenterStart)
                             )
@@ -264,31 +300,84 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                         Icon(Icons.Default.MoreVert, "Options", tint = Color.White)
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Location") },
-                            onClick = {
-                                showMenu = false
-                                showLocationDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Date") },
-                            onClick = {
-                                showMenu = false
-                                showDateDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("About") },
-                            onClick = {
-                                showMenu = false
-                                showAboutDialog = true
-                            }
-                        )
+                        DropdownMenuItem(text = { Text("Planet Transits") }, onClick = { currentScreen = Screen.TRANSITS; showMenu = false })
+                        DropdownMenuItem(text = { Text("Schematic Orrery") }, onClick = { currentScreen = Screen.SCHEMATIC; showMenu = false })
+                        DropdownMenuItem(text = { Text("To-scale Orrery") }, onClick = { currentScreen = Screen.SCALE; showMenu = false })
+                        HorizontalDivider()
+                        DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
+                        DropdownMenuItem(text = { Text("Date") }, onClick = { showMenu = false; showDateDialog = true })
+                        DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; showAboutDialog = true })
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White)
             )
+        },
+        bottomBar = {
+            if (currentScreen != Screen.TRANSITS) {
+                BottomAppBar(
+                    containerColor = Color.Black,
+                    contentColor = Color.White
+                ) {
+                    if (isAnimating) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Button(
+                                onClick = { isAnimating = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                            ) { Text("STOP") }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val buttonColors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                            val buttonPadding = PaddingValues(horizontal = 4.dp)
+                            val buttonModifier = Modifier.defaultMinSize(minWidth = 1.dp)
+                            val textStyle = TextStyle(fontSize = 12.sp)
+
+                            Button(
+                                onClick = { startAnimation(1, 0.125) },
+                                colors = buttonColors,
+                                contentPadding = buttonPadding,
+                                modifier = buttonModifier
+                            ) { Text("+1 Yr", style = textStyle) }
+
+                            Button(
+                                onClick = { startAnimation(10, 1.25) },
+                                colors = buttonColors,
+                                contentPadding = buttonPadding,
+                                modifier = buttonModifier
+                            ) { Text("+10 Yrs", style = textStyle) }
+
+                            Button(
+                                onClick = { startAnimation(100, 12.5) },
+                                colors = buttonColors,
+                                contentPadding = buttonPadding,
+                                modifier = buttonModifier
+                            ) { Text("+100 Yrs", style = textStyle) }
+
+                            Button(
+                                onClick = {
+                                    usePhoneTime = true
+                                    val now = LocalDate.now()
+                                    manualEpochDay = now.toEpochDay().toDouble()
+                                    currentInstant = Instant.now()
+                                },
+                                enabled = !usePhoneTime,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.DarkGray,
+                                    contentColor = Color(0xFF00FF00),
+                                    disabledContainerColor = Color.DarkGray.copy(alpha = 0.5f),
+                                    disabledContentColor = Color.Gray
+                                ),
+                                contentPadding = buttonPadding,
+                                modifier = buttonModifier
+                            ) { Text("Reset", style = textStyle) }
+                        }
+                    }
+                }
+            }
         },
         containerColor = Color.Black
     ) { innerPadding ->
@@ -299,21 +388,307 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon),
-                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                )
-                Text(
-                    text = "UT $utString  LST $lstString",
-                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                )
+                if (currentScreen == Screen.TRANSITS) {
+                    Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                } else {
+                    Text(text = "Date: $dateString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    Text(text = "UT $utString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                }
             }
-            // GRAPHICS WINDOW
+
+            // MAIN CONTENT
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-                if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!)
+                val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
+
+                when (currentScreen) {
+                    Screen.TRANSITS -> {
+                        if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!)
+                    }
+                    Screen.SCHEMATIC -> {
+                        SchematicOrrery(displayEpoch)
+                    }
+                    Screen.SCALE -> {
+                        ScaleOrrery(displayEpoch)
+                    }
+                }
             }
         }
     }
+}
+
+// --- COMPOSABLE: TO-SCALE ORRERY ---
+@Composable
+fun ScaleOrrery(epochDay: Double) {
+    val planetList = remember { getOrreryPlanets() }
+    var scale by remember { mutableStateOf(1f) }
+
+    val baseFitAU = 31.25f
+    val maxScale = baseFitAU / 0.47f
+    val minScale = 1f
+
+    val textPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 30f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+    }
+    val labelPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 24f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTransformGestures { _, _, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(minScale, maxScale)
+                }
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h / 2f
+            val minDim = min(w, h)
+
+            val pixelsPerAU = (minDim / 2f) / baseFitAU
+            val currentPixelsPerAU = pixelsPerAU * scale
+
+            drawCircle(color = Color.Yellow, radius = 12f, center = Offset(cx, cy))
+
+            val d = (2440587.5 + epochDay) - 2451545.0
+
+            for (p in planetList) {
+                val orbitPath = androidx.compose.ui.graphics.Path()
+                for (angleIdx in 0..100) {
+                    val M_sim = (angleIdx / 100.0) * 2.0 * Math.PI
+                    var E = M_sim + p.e * sin(M_sim)
+                    for (k in 0..5) { E += (M_sim - (E - p.e * sin(E))) / (1 - p.e * cos(E)) }
+
+                    val xv = p.a * (cos(E) - p.e)
+                    val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
+                    val v = atan2(yv, xv)
+
+                    val w_bar = Math.toRadians(p.w_bar)
+                    val N = Math.toRadians(p.N)
+                    val i_rad = Math.toRadians(p.i)
+                    val u = v + w_bar - N
+                    val r = p.a * (1 - p.e * cos(E))
+
+                    val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
+                    val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
+
+                    val px = cx + (x_ecl * currentPixelsPerAU).toFloat()
+                    val py = cy - (y_ecl * currentPixelsPerAU).toFloat()
+
+                    if (angleIdx == 0) orbitPath.moveTo(px, py) else orbitPath.lineTo(px, py)
+                }
+                orbitPath.close()
+                drawPath(orbitPath, color = Color.Gray, style = Stroke(width = 2f))
+
+                val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
+                val w_bar_curr = Math.toRadians(p.w_bar)
+                val M_curr = Lp - w_bar_curr
+
+                var E_curr = M_curr + p.e * sin(M_curr)
+                for (k in 0..5) { E_curr += (M_curr - (E_curr - p.e * sin(E_curr))) / (1 - p.e * cos(E_curr)) }
+
+                val xv_curr = p.a * (cos(E_curr) - p.e)
+                val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
+                val v_curr = atan2(yv_curr, xv_curr)
+
+                val N_curr = Math.toRadians(p.N)
+                val i_curr = Math.toRadians(p.i)
+                val u_curr = v_curr + w_bar_curr - N_curr
+                val r_curr = p.a * (1 - p.e * cos(E_curr))
+
+                val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
+                val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
+
+                val px = cx + (x_pos * currentPixelsPerAU).toFloat()
+                val py = cy - (y_pos * currentPixelsPerAU).toFloat()
+
+                drawCircle(color = p.color, radius = 12f, center = Offset(px, py))
+
+                val dist = sqrt(x_pos*x_pos + y_pos*y_pos)
+                if (dist > 0) {
+                    val unitX = x_pos / dist
+                    val unitY = y_pos / dist
+                    val symbolOffset = 45f * 0.6f
+                    val tx = px - (unitX * symbolOffset).toFloat()
+                    val ty = py + (unitY * symbolOffset).toFloat()
+
+                    val textY = ty - ((textPaint.descent() + textPaint.ascent()) / 2)
+                    textPaint.color = p.color.toArgb()
+                    drawIntoCanvas { canvas ->
+                        canvas.nativeCanvas.drawText(p.symbol, tx, textY, textPaint)
+                    }
+                }
+            }
+
+            val arrowDist = 32.0
+            val ay = cy - (arrowDist * currentPixelsPerAU).toFloat()
+            val arrowTipY = ay - 40f
+
+            drawLine(color = Color.White, start = Offset(cx, ay), end = Offset(cx, arrowTipY), strokeWidth = 2f)
+            val arrowHeadPath = Path().apply {
+                moveTo(cx, arrowTipY - 5f)
+                lineTo(cx - 5f, arrowTipY + 5f)
+                lineTo(cx + 5f, arrowTipY + 5f)
+                close()
+            }
+            val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                canvas.nativeCanvas.drawText("To Vernal Equinox", cx, arrowTipY - 10f, labelPaint)
+            }
+        }
+    }
+}
+
+// --- COMPOSABLE: SCHEMATIC ORRERY ---
+@Composable
+fun SchematicOrrery(epochDay: Double) {
+    val planetList = remember { getOrreryPlanets() }
+
+    val textPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 30f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+    }
+    val labelPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 24f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        }
+    }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+        val minDim = min(w, h)
+
+        val topPadding = 60f
+        val maxRadius = (minDim / 2f) - topPadding
+        val orbitStep = maxRadius / 8f
+
+        drawCircle(color = Color.Yellow, radius = 12f, center = Offset(cx, cy))
+
+        val d = (2440587.5 + epochDay) - 2451545.0
+
+        for (i in 0 until planetList.size) {
+            val p = planetList[i]
+            val radius = orbitStep * (i + 1)
+
+            drawCircle(color = Color.Gray, radius = radius, center = Offset(cx, cy), style = Stroke(width = 2f))
+
+            val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
+            val w_bar = Math.toRadians(p.w_bar)
+            val M = Lp - w_bar
+
+            var E = M + p.e * sin(M)
+            for (k in 0..5) {
+                val dE = (M - (E - p.e * sin(E))) / (1 - p.e * cos(E))
+                E += dE
+            }
+
+            val xv = p.a * (cos(E) - p.e)
+            val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
+            val v = atan2(yv, xv)
+            val helioLong = v + w_bar
+
+            // CCW Calculation: x = cx - r*sin, y = cy - r*cos
+            val px = cx - (radius * sin(helioLong)).toFloat()
+            val py = cy - (radius * cos(helioLong)).toFloat()
+
+            if (p.name == "Earth") {
+                val earthTextY = py - ((textPaint.descent() + textPaint.ascent()) / 2)
+                textPaint.color = p.color.toArgb()
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawText(p.symbol, px, earthTextY, textPaint)
+                }
+
+                val moonOrbitRadius = orbitStep / 2f
+                drawCircle(color = Color.Gray, radius = moonOrbitRadius, center = Offset(px, py), style = Stroke(width = 1f))
+
+                val elongationRad = Math.toRadians(calculateMoonPhaseAngle(epochDay))
+                val vecES_x = cx - px
+                val vecES_y = py - cy
+                val sunAngleStandard = atan2(vecES_y.toDouble(), vecES_x.toDouble())
+
+                val moonAngleStandard = sunAngleStandard + elongationRad
+
+                val mx = px + (moonOrbitRadius * cos(moonAngleStandard)).toFloat()
+                val my = py - (moonOrbitRadius * sin(moonAngleStandard)).toFloat()
+
+                drawCircle(color = Color.Gray, radius = 5f, center = Offset(mx, my))
+
+            } else {
+                drawCircle(color = p.color, radius = 12f, center = Offset(px, py))
+
+                val textRadius = radius - 25f
+                val tx = cx - (textRadius * sin(helioLong)).toFloat() // Also CCW
+                val ty = cy - (textRadius * cos(helioLong)).toFloat()
+                val textY = ty - ((textPaint.descent() + textPaint.ascent()) / 2)
+
+                textPaint.color = p.color.toArgb()
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawText(p.symbol, tx, textY, textPaint)
+                }
+            }
+        }
+
+        val outerRadius = orbitStep * 8f
+        val arrowBaseY = cy - outerRadius - 15f
+        val arrowTipY = arrowBaseY - 40f
+
+        drawLine(color = Color.White, start = Offset(cx, arrowBaseY), end = Offset(cx, arrowTipY), strokeWidth = 2f)
+        val arrowHeadPath = Path().apply {
+            moveTo(cx, arrowTipY - 5f)
+            lineTo(cx - 5f, arrowTipY + 5f)
+            lineTo(cx + 5f, arrowTipY + 5f)
+            close()
+        }
+        val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        drawIntoCanvas { canvas ->
+            canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+            canvas.nativeCanvas.drawText("To Vernal Equinox", cx, arrowTipY - 10f, labelPaint)
+        }
+    }
+}
+
+// Separate list including Earth for Orrery View
+fun getOrreryPlanets(): List<PlanetElements> {
+    return listOf(
+        PlanetElements("Mercury", "☿", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
+        PlanetElements("Venus",   "♀", Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
+        PlanetElements("Earth",   "⊕", Color(0xFF87CEFA), 100.46, 0.985647, 1.00000, 0.01671, 0.000, 102.94, 0.0),
+        PlanetElements("Mars",    "♂", Color.Red,    355.45, 0.52403, 1.52368, 0.09340, 1.850, 336.04, 49.558),
+        PlanetElements("Jupiter", "♃", Color(0xFFFFA500), 34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
+        PlanetElements("Saturn",  "♄", Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
+        PlanetElements("Uranus",  "⛢", Color(0xFF20B2AA), 313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
+        PlanetElements("Neptune", "♆", Color(0xFF4D4DFF), 304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+    )
 }
 
 // --- DIALOGS ---
@@ -347,35 +722,17 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("About", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
-
                 Spacer(modifier = Modifier.height(16.dp))
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(Color.Black)
-                        .padding(8.dp)
-                ) {
+                Box(modifier = Modifier.weight(1f).background(Color.Black).padding(8.dp)) {
                     val scrollState = rememberScrollState()
                     Text(
                         text = aboutText,
-                        style = TextStyle(
-                            color = Color.LightGray,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
+                        style = TextStyle(color = Color.LightGray, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxSize().verticalScroll(scrollState)
                     )
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                ) {
+                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
                     Text("OK", color = Color.Black)
                 }
             }
@@ -625,20 +982,10 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache) {
                 val validSunset = !xSunset.isNaN()
                 val validSunrise = !xSunrise.isNaN()
 
-                // BUG FIX: Handle "Twilight All Night"
-                // If the sun sets (validSunset) but never gets fully dark (astroSet is NaN),
-                // we draw a continuous gradient from Sunset (Blue) to Midnight (Black) to Sunrise (Blue).
                 if (validSunset && validSunrise && (astroSetPrev.isNaN() || astroRiseCurr.isNaN())) {
-                    twilightPaint.shader = LinearGradient(
-                        xSunset.toFloat(), y.toFloat(),
-                        xSunrise.toFloat(), y.toFloat(),
-                        intArrayOf(darkBlueArgb, blackArgb, darkBlueArgb),
-                        floatArrayOf(0f, 0.5f, 1f),
-                        Shader.TileMode.CLAMP
-                    )
+                    twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), intArrayOf(darkBlueArgb, blackArgb, darkBlueArgb), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
                     canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
                 } else {
-                    // Normal behavior: Two separate twilight zones with black in between
                     if (validSunset && !astroSetPrev.isNaN()) {
                         val xAstroEnd = centerX + ((astroSetPrev - 24.0) * pixelsPerHour)
                         twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), darkBlueArgb, blackArgb, Shader.TileMode.CLAMP)
