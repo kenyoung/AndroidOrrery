@@ -2,8 +2,10 @@ package com.example.orrery
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -128,13 +131,31 @@ fun OrreryApp(lat: Double, lon: Double) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(top = topPadding)
+            .padding(top = statusBarHeight)
     ) {
-        // --- TEXT LINE ---
+        // --- APP TITLE ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Orrery",
+                style = TextStyle(
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+            )
+        }
+
+        // --- INFO LINE ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
         ) {
@@ -167,7 +188,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
 
         // --- 1. SETUP SCALE & MARGINS ---
         val paddingLeft = 35f
-        val paddingRight = 42f // Right margin
+        val paddingRight = 42f
         val drawingWidth = w - paddingLeft - paddingRight
         val centerX = paddingLeft + (drawingWidth / 2f)
 
@@ -192,118 +213,23 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
         val nowDate = nowZoned.toLocalDate()
         val nowEpochDay = nowDate.toEpochDay().toDouble()
 
-        // Helper for grid lines (integer days)
         fun getYForDate(date: LocalDate): Float {
             val daysOffset = ChronoUnit.DAYS.between(nowDate, date)
             val fraction = daysOffset / 365.25
             return (h - (fraction * h)).toFloat()
         }
 
-        // New helper for precise placement (fractional days)
         fun getYForEpochDay(targetEpochDay: Double): Float {
             val daysOffset = targetEpochDay - nowEpochDay
             val fraction = daysOffset / 365.25
             return (h - (fraction * h)).toFloat()
         }
 
-        // Helper: Calculate Sunset X (used for month labels)
         fun getXSunsetForDate(date: LocalDate): Float {
             val epochDay = date.toEpochDay().toDouble()
             val (_, setTimePrev) = calculateSunTimes(epochDay - 1.0, lat, lon, offsetHours)
             val diff = setTimePrev - 24.0
             return (centerX + (diff * pixelsPerHour)).toFloat()
-        }
-
-        drawIntoCanvas { canvas ->
-            val paint = Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 30f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.MONOSPACE
-            }
-
-            // --- 2. DRAW TIME LABELS ---
-            for (k in -14..14) {
-                val xPos = centerX + (k * pixelsPerHour)
-                if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
-                    var hour = (k % 24)
-                    if (hour < 0) hour += 24
-                    canvas.nativeCanvas.drawText(hour.toString(), xPos.toFloat(), textY, paint)
-                }
-            }
-
-            // --- 3. DRAW MONTH LABELS & GRID LINES ---
-            val monthPaint = Paint(paint).apply { textAlign = Paint.Align.CENTER }
-            val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
-            val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
-
-            val minX = 25f
-
-            var d = startDate
-            while (d.isBefore(endDate)) {
-                val nextMonth = d.plusMonths(1)
-
-                // 1. Always Draw Horizontal Grid Line at Start of Month
-                val yStart = getYForDate(d)
-
-                // Calculate Sun line positions for this date to clip the line properly
-                val x1_grid = getXSunsetForDate(d)
-                val epochDayGrid = d.toEpochDay().toDouble()
-                val (riseGrid, _) = calculateSunTimes(epochDayGrid, lat, lon, offsetHours)
-
-                if (yStart >= textHeight && yStart <= h && !riseGrid.isNaN()) {
-                    var diffGrid = riseGrid - 24.0
-                    if (diffGrid < -12.0) diffGrid += 24.0
-                    else if (diffGrid > 12.0) diffGrid -= 24.0
-                    val x2_grid = centerX + (diffGrid * pixelsPerHour)
-
-                    drawLine(
-                        color = Color.DarkGray,
-                        start = Offset(x1_grid, yStart),
-                        end = Offset(x2_grid.toFloat(), yStart),
-                        strokeWidth = 1f
-                    )
-                }
-
-                // 2. Count visible days for LABEL visibility
-                var visibleDays = 0
-                var iterDate = d
-                while (iterDate.isBefore(nextMonth)) {
-                    val yDay = getYForDate(iterDate)
-                    if (yDay >= textHeight && yDay <= h) {
-                        visibleDays++
-                    }
-                    iterDate = iterDate.plusDays(1)
-                }
-
-                // 3. Draw Label if visible enough
-                if (visibleDays >= 15) {
-                    val monthName = d.format(DateTimeFormatter.ofPattern("MMM"))
-                    val yEnd = getYForDate(nextMonth)
-
-                    val yMid = (yStart + yEnd) / 2f
-                    val midMonthDate = d.withDayOfMonth(15)
-                    val xSunsetMid = getXSunsetForDate(midMonthDate)
-                    val charHeight = monthPaint.textSize
-                    val targetX = xSunsetMid - charHeight
-                    val finalX = max(minX, targetX)
-
-                    val x1 = getXSunsetForDate(d)
-                    val x2 = getXSunsetForDate(nextMonth)
-
-                    val dx = x2 - x1
-                    val dy = yEnd - yStart
-                    val angleRad = atan2(dy, dx)
-                    val angleDeg = Math.toDegrees(angleRad.toDouble()).toFloat()
-
-                    canvas.nativeCanvas.save()
-                    canvas.nativeCanvas.rotate(angleDeg, finalX, yMid)
-                    canvas.nativeCanvas.drawText(monthName, finalX, yMid, monthPaint)
-                    canvas.nativeCanvas.restore()
-                }
-                d = nextMonth
-            }
         }
 
         // --- 4. DEFINE PLANETS ---
@@ -320,10 +246,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             PlanetElements("Neptune", "♆", Color.Blue,   304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
         )
 
-        // --- 5. DRAW PLOT POINTS & CALCULATE LABELS ---
-
         val sunPoints = ArrayList<Offset>()
-
         val planetTransits = planets.associate { it.name to ArrayList<Offset>() }
         val planetRises = planets.associate { it.name to ArrayList<Offset>() }
         val planetSets = planets.associate { it.name to ArrayList<Offset>() }
@@ -335,13 +258,197 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             bestLabels["${p.name}_s"] = LabelPosition()
         }
 
-        // --- MOON CALCULATION LOOP ---
+        // --- LAYER 1: TWILIGHT (BACKGROUND) & CALCULATION LOOP ---
+        val darkBlueArgb = 0xFF0000D1.toInt()
+        val blackArgb = android.graphics.Color.BLACK
+        val twilightPaint = Paint().apply {
+            strokeWidth = 1f
+            style = Paint.Style.STROKE
+        }
+
+        drawIntoCanvas { canvas ->
+            for (y in textHeight.toInt() until h.toInt()) {
+                val fraction = (h - y) / h
+                val daysOffset = fraction * 365.25
+                val targetEpochDay = nowEpochDay + daysOffset
+
+                val (_, setTimePrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours)
+                val (riseTimeCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours)
+                val (_, astroSetPrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours, -18.0)
+                val (astroRiseCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours, -18.0)
+
+                val xOffsetSunset = (setTimePrev - 24.0) * pixelsPerHour
+                val xSunset = centerX + xOffsetSunset
+                val xOffsetSunrise = riseTimeCurr * pixelsPerHour
+                val xSunrise = centerX + xOffsetSunrise
+                val validSunset = !xSunset.isNaN()
+                val validSunrise = !xSunrise.isNaN()
+
+                if (validSunset && !astroSetPrev.isNaN()) {
+                    val xAstroEnd = centerX + (astroSetPrev - 24.0) * pixelsPerHour
+                    twilightPaint.shader = LinearGradient(
+                        xSunset.toFloat(), y.toFloat(),
+                        xAstroEnd.toFloat(), y.toFloat(),
+                        darkBlueArgb, blackArgb,
+                        Shader.TileMode.CLAMP
+                    )
+                    canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), twilightPaint)
+                }
+
+                if (validSunrise && !astroRiseCurr.isNaN()) {
+                    var diffAstro = astroRiseCurr - 24.0
+                    if (diffAstro < -12.0) diffAstro += 24.0
+                    else if (diffAstro > 12.0) diffAstro -= 24.0
+                    val xAstroStart = centerX + (diffAstro * pixelsPerHour)
+
+                    twilightPaint.shader = LinearGradient(
+                        xAstroStart.toFloat(), y.toFloat(),
+                        xSunrise.toFloat(), y.toFloat(),
+                        blackArgb, darkBlueArgb,
+                        Shader.TileMode.CLAMP
+                    )
+                    canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
+                }
+
+                if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
+                if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
+
+                if (validSunset && validSunrise) {
+                    for (planet in planets) {
+                        val events = calculatePlanetEvents(targetEpochDay, lat, lon, offsetHours, planet)
+
+                        // Determine offset for label target based on planet name
+                        val targetHourOffset = when (planet.name) {
+                            "Mars" -> -2.0    // 22 hours
+                            "Jupiter" -> -1.0 // 23 hours
+                            "Saturn" -> 0.0   // 0 hours
+                            "Uranus" -> 1.0   // 1 hour
+                            "Neptune" -> 2.0  // 2 hours
+                            else -> 0.0       // Default center
+                        }
+                        val targetX = centerX + (targetHourOffset * pixelsPerHour)
+
+                        fun processEvent(time: Double, list: ArrayList<Offset>, keySuffix: String) {
+                            if (time.isNaN()) return
+                            var diff = time - 24.0
+                            if (diff < -12.0) diff += 24.0
+                            else if (diff > 12.0) diff -= 24.0
+                            val xPos = centerX + (diff * pixelsPerHour)
+                            val yPos = y.toFloat()
+
+                            if (xPos >= xSunset && xPos <= xSunrise) {
+                                list.add(Offset(xPos.toFloat(), yPos))
+
+                                // Calculate distance to the planet-specific target X
+                                val dist = abs(xPos - targetX)
+                                val labelTracker = bestLabels["${planet.name}_$keySuffix"]!!
+                                if (dist < labelTracker.minDistToCenter) {
+                                    labelTracker.minDistToCenter = dist.toFloat()
+                                    labelTracker.x = xPos.toFloat()
+                                    labelTracker.y = yPos
+                                    labelTracker.found = true
+                                }
+                            }
+                        }
+                        processEvent(events.transit, planetTransits[planet.name]!!, "t")
+                        processEvent(events.rise, planetRises[planet.name]!!, "r")
+                        processEvent(events.set, planetSets[planet.name]!!, "s")
+                    }
+                }
+            }
+        }
+
+        // --- LAYER 2: SUN CURVE ---
+        drawPoints(
+            points = sunPoints,
+            pointMode = PointMode.Points,
+            color = Color.White,
+            strokeWidth = 2f
+        )
+
+        // --- LAYER 3: GRID LINES & MONTH LABELS ---
+        drawIntoCanvas { canvas ->
+            val monthPaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 30f
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+                typeface = Typeface.MONOSPACE
+            }
+            val gridPaint = Paint().apply {
+                color = 0xFF666666.toInt()
+                strokeWidth = 1f
+                style = Paint.Style.STROKE
+            }
+
+            val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
+            val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
+            var d = startDate
+            while (d.isBefore(endDate)) {
+                val nextMonth = d.plusMonths(1)
+                val yStart = getYForDate(d)
+                val x1_grid = getXSunsetForDate(d)
+                val epochDayGrid = d.toEpochDay().toDouble()
+                val (riseGrid, _) = calculateSunTimes(epochDayGrid, lat, lon, offsetHours)
+
+                if (yStart >= textHeight && yStart <= h && !riseGrid.isNaN()) {
+                    var diffGrid = riseGrid - 24.0
+                    if (diffGrid < -12.0) diffGrid += 24.0
+                    else if (diffGrid > 12.0) diffGrid -= 24.0
+                    val x2_grid = centerX + (diffGrid * pixelsPerHour)
+                    canvas.nativeCanvas.drawLine(x1_grid, yStart, x2_grid.toFloat(), yStart, gridPaint)
+                }
+
+                var visibleDays = 0
+                var iterDate = d
+                while (iterDate.isBefore(nextMonth)) {
+                    val yDay = getYForDate(iterDate)
+                    if (yDay >= textHeight && yDay <= h) visibleDays++
+                    iterDate = iterDate.plusDays(1)
+                }
+
+                if (visibleDays >= 15) {
+                    val monthName = d.format(DateTimeFormatter.ofPattern("MMM"))
+                    val yEnd = getYForDate(nextMonth)
+                    val yMid = (yStart + yEnd) / 2f
+                    val midMonthDate = d.withDayOfMonth(15)
+                    val xSunsetMid = getXSunsetForDate(midMonthDate)
+                    val charHeight = monthPaint.textSize
+                    val targetX = xSunsetMid - charHeight
+                    val finalX = max(25f, targetX)
+
+                    val x1 = getXSunsetForDate(d)
+                    val x2 = getXSunsetForDate(nextMonth)
+                    val dx = x2 - x1
+                    val dy = yEnd - yStart
+                    val angleDeg = Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
+
+                    canvas.nativeCanvas.save()
+                    canvas.nativeCanvas.rotate(angleDeg, finalX, yMid)
+                    canvas.nativeCanvas.drawText(monthName, finalX, yMid, monthPaint)
+                    canvas.nativeCanvas.restore()
+                }
+                d = nextMonth
+            }
+        }
+
+        // --- LAYER 4: PLANET TRACKS ---
+        for (planet in planets) {
+            val isInner = planet.name == "Mercury" || planet.name == "Venus"
+            val riseSetColor = if (isInner) planet.color else planet.color.copy(alpha = 0.35f)
+
+            if (!isInner) {
+                drawPoints(points = planetTransits[planet.name]!!, pointMode = PointMode.Points, color = planet.color, strokeWidth = 4f)
+            }
+            drawPoints(points = planetRises[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
+            drawPoints(points = planetSets[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
+        }
+
+        // --- LAYER 5: MOONS & LABELS ---
         val fullMoons = ArrayList<Offset>()
         val newMoons = ArrayList<Offset>()
         val firstQuarters = ArrayList<Offset>()
         val lastQuarters = ArrayList<Offset>()
-
-        // Scan upcoming year for Full Moons
         val scanRange = 380
         var prevElong = calculateMoonPhaseAngle(nowEpochDay - 1.0)
 
@@ -349,7 +456,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             val scanEpochDay = nowEpochDay + dIdx
             val currElong = calculateMoonPhaseAngle(scanEpochDay)
 
-            // Helper to normalize angle to -180..180
             fun norm(a: Double): Double {
                 var v = a % 360.0
                 if (v > 180) v -= 360
@@ -357,7 +463,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 return v
             }
 
-            // Function to check crossing and add to list
             fun checkCrossing(targetAngle: Double, list: ArrayList<Offset>) {
                 val prevDiff = (prevElong - targetAngle)
                 val currDiff = (currElong - targetAngle)
@@ -368,218 +473,103 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                     val totalSpan = cNorm - pNorm
                     val fractionOfDay = -pNorm / totalSpan
                     val exactMoonDay = (scanEpochDay - 1.0) + fractionOfDay
-
                     val refDay = scanEpochDay - 1.0
                     val (riseTime, _) = calculateSunTimes(refDay, lat, lon, offsetHours)
 
                     if (!riseTime.isNaN()) {
                         val xSunrise = centerX + (riseTime * pixelsPerHour)
-                        // Updated offset: 13f + 2f = 15f
                         val xMoon = xSunrise + 15f
                         val yMoon = getYForEpochDay(exactMoonDay)
-
-                        // Bounds check to ensure we only plot within the graph area
                         if (yMoon >= textHeight && yMoon <= h) {
                             list.add(Offset(xMoon.toFloat(), yMoon))
                         }
                     }
                 }
             }
-
-            checkCrossing(0.0, newMoons)       // New Moon
-            checkCrossing(90.0, firstQuarters) // First Quarter
-            checkCrossing(180.0, fullMoons)    // Full Moon
-            checkCrossing(270.0, lastQuarters) // Last Quarter
-
+            checkCrossing(0.0, newMoons)
+            checkCrossing(90.0, firstQuarters)
+            checkCrossing(180.0, fullMoons)
+            checkCrossing(270.0, lastQuarters)
             prevElong = currElong
         }
 
-        // --- MAIN DRAW LOOP ---
-        for (y in textHeight.toInt() until h.toInt()) {
-            val fraction = (h - y) / h
-            val daysOffset = fraction * 365.25
-
-            val targetEpochDay = nowEpochDay + daysOffset
-            val rowDate = nowZoned.plusDays(daysOffset.toLong()).toLocalDate()
-
-            // SUN
-            val (_, setTimePrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours)
-            val (riseTimeCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours)
-
-            val xOffsetSunset = (setTimePrev - 24.0) * pixelsPerHour
-            val xSunset = centerX + xOffsetSunset
-            val xOffsetSunrise = riseTimeCurr * pixelsPerHour
-            val xSunrise = centerX + xOffsetSunrise
-            val validSunset = !xSunset.isNaN()
-            val validSunrise = !xSunrise.isNaN()
-
-            // NOTE: We moved the horizontal grid line drawing to the Month Loop above
-            // to ensure it draws even if the exact pixel row for day 1 is missed by this loop.
-
-            if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
-            if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
-
-            if (validSunset && validSunrise) {
-                for (planet in planets) {
-                    val events = calculatePlanetEvents(targetEpochDay, lat, lon, offsetHours, planet)
-
-                    fun processEvent(time: Double, list: ArrayList<Offset>, keySuffix: String) {
-                        if (time.isNaN()) return
-                        var diff = time - 24.0
-                        if (diff < -12.0) diff += 24.0
-                        else if (diff > 12.0) diff -= 24.0
-                        val xPos = centerX + (diff * pixelsPerHour)
-                        val yPos = y.toFloat()
-
-                        if (xPos >= xSunset && xPos <= xSunrise) {
-                            list.add(Offset(xPos.toFloat(), yPos))
-
-                            val dist = abs(xPos - centerX)
-                            val labelTracker = bestLabels["${planet.name}_$keySuffix"]!!
-                            if (dist < labelTracker.minDistToCenter) {
-                                labelTracker.minDistToCenter = dist.toFloat()
-                                labelTracker.x = xPos.toFloat()
-                                labelTracker.y = yPos
-                                labelTracker.found = true
-                            }
-                        }
-                    }
-
-                    processEvent(events.transit, planetTransits[planet.name]!!, "t")
-                    processEvent(events.rise, planetRises[planet.name]!!, "r")
-                    processEvent(events.set, planetSets[planet.name]!!, "s")
-                }
-            }
-        }
-
-        // Draw Sun
-        drawPoints(
-            points = sunPoints,
-            pointMode = PointMode.Points,
-            color = Color.White,
-            strokeWidth = 2f
-        )
-
-        // Draw Planets and Labels
-        val mainTextPaint = Paint().apply {
-            textSize = 42f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        }
-        val subTextPaint = Paint().apply {
-            textSize = 27f
-            textAlign = Paint.Align.LEFT
-            isAntiAlias = true
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        }
-
-        fun drawLabelWithSubscript(canvas: android.graphics.Canvas, x: Float, y: Float, symbol: String, subscript: String, color: Int) {
-            val symbolWidth = mainTextPaint.measureText(symbol)
-            val subWidth = subTextPaint.measureText(subscript)
-
-            // 1.0x width offset
-            val symX = x + (1.0f * symbolWidth)
-
-            // Draw Symbol
-            mainTextPaint.color = color
-            mainTextPaint.style = Paint.Style.FILL
-
-            // Halo
-            mainTextPaint.style = Paint.Style.STROKE
-            mainTextPaint.strokeWidth = 4f
-            mainTextPaint.color = android.graphics.Color.BLACK
-            canvas.drawText(symbol, symX, y, mainTextPaint)
-
-            // Fill
-            mainTextPaint.style = Paint.Style.FILL
-            mainTextPaint.color = color
-            canvas.drawText(symbol, symX, y, mainTextPaint)
-
-            // Draw Subscript
-            val symbolRightEdge = symX + (symbolWidth / 2f)
-            val subX = symbolRightEdge + (subWidth * 0.75f)
-            val subY = y + 8f
-
-            subTextPaint.color = color
-            // Halo
-            subTextPaint.style = Paint.Style.STROKE
-            subTextPaint.strokeWidth = 3f
-            subTextPaint.color = android.graphics.Color.BLACK
-            canvas.drawText(subscript, subX, subY, subTextPaint)
-
-            // Fill
-            subTextPaint.style = Paint.Style.FILL
-            subTextPaint.color = color
-            canvas.drawText(subscript, subX, subY, subTextPaint)
-        }
-
         drawIntoCanvas { canvas ->
-            // Draw Planets
-            for (planet in planets) {
-                val isInner = planet.name == "Mercury" || planet.name == "Venus"
-
-                // 1. Transit
-                if (!isInner) {
-                    drawPoints(
-                        points = planetTransits[planet.name]!!,
-                        pointMode = PointMode.Points,
-                        color = planet.color,
-                        strokeWidth = 4f
-                    )
-                    val label = bestLabels["${planet.name}_t"]!!
-                    if (label.found) {
-                        drawLabelWithSubscript(canvas.nativeCanvas, label.x, label.y, planet.symbol, "t", planet.color.toArgb())
-                    }
-                }
-
-                // 2. Rise & Set
-                val riseSetColor = if (isInner) planet.color else planet.color.copy(alpha = 0.35f)
-
-                drawPoints(
-                    points = planetRises[planet.name]!!,
-                    pointMode = PointMode.Points,
-                    color = riseSetColor,
-                    strokeWidth = 3f
-                )
-                val rLabel = bestLabels["${planet.name}_r"]!!
-                if (rLabel.found) {
-                    drawLabelWithSubscript(canvas.nativeCanvas, rLabel.x, rLabel.y, planet.symbol, "r", planet.color.toArgb())
-                }
-
-                drawPoints(
-                    points = planetSets[planet.name]!!,
-                    pointMode = PointMode.Points,
-                    color = riseSetColor,
-                    strokeWidth = 3f
-                )
-                val sLabel = bestLabels["${planet.name}_s"]!!
-                if (sLabel.found) {
-                    drawLabelWithSubscript(canvas.nativeCanvas, sLabel.x, sLabel.y, planet.symbol, "s", planet.color.toArgb())
-                }
-            }
-
-            val moonFillPaint = Paint().apply {
+            val timePaint = Paint().apply {
                 color = android.graphics.Color.WHITE
-                style = Paint.Style.FILL
-            }
-            val moonStrokePaint = Paint().apply {
-                color = android.graphics.Color.WHITE
-                style = Paint.Style.STROKE
-                strokeWidth = 2f
+                textSize = 30f
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+                typeface = Typeface.MONOSPACE
             }
 
-            // Draw Full Moons (Filled Circles)
-            for (pos in fullMoons) {
-                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonFillPaint)
+            // Draw Time Labels
+            for (k in -14..14) {
+                val xPos = centerX + (k * pixelsPerHour)
+                if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
+                    var hour = (k % 24)
+                    if (hour < 0) hour += 24
+                    canvas.nativeCanvas.drawText(hour.toString(), xPos.toFloat(), textY, timePaint)
+                }
             }
 
-            // Draw New Moons (Open Circles)
-            for (pos in newMoons) {
-                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
+            val mainTextPaint = Paint().apply {
+                textSize = 42f
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            }
+            val subTextPaint = Paint().apply {
+                textSize = 27f
+                textAlign = Paint.Align.LEFT
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             }
 
-            // Draw First Quarters (Half Filled)
+            fun drawLabelWithSubscript(canvas: android.graphics.Canvas, x: Float, y: Float, symbol: String, subscript: String, color: Int) {
+                val symbolWidth = mainTextPaint.measureText(symbol)
+                val subWidth = subTextPaint.measureText(subscript)
+                val symX = x + (1.0f * symbolWidth)
+                val subX = symX + (symbolWidth / 2f) + (subWidth * 0.75f)
+                val subY = y + 8f
+
+                mainTextPaint.color = color
+                mainTextPaint.style = Paint.Style.STROKE
+                mainTextPaint.strokeWidth = 4f
+                mainTextPaint.color = android.graphics.Color.BLACK
+                canvas.drawText(symbol, symX, y, mainTextPaint)
+
+                mainTextPaint.style = Paint.Style.FILL
+                mainTextPaint.color = color
+                canvas.drawText(symbol, symX, y, mainTextPaint)
+
+                subTextPaint.color = color
+                subTextPaint.style = Paint.Style.STROKE
+                subTextPaint.strokeWidth = 3f
+                subTextPaint.color = android.graphics.Color.BLACK
+                canvas.drawText(subscript, subX, subY, subTextPaint)
+
+                subTextPaint.style = Paint.Style.FILL
+                subTextPaint.color = color
+                canvas.drawText(subscript, subX, subY, subTextPaint)
+            }
+
+            for (p in planets) {
+                if (p.name != "Mercury" && p.name != "Venus") {
+                    val label = bestLabels["${p.name}_t"]!!
+                    if (label.found) drawLabelWithSubscript(canvas.nativeCanvas, label.x, label.y, p.symbol, "t", p.color.toArgb())
+                }
+                val rLabel = bestLabels["${p.name}_r"]!!
+                if (rLabel.found) drawLabelWithSubscript(canvas.nativeCanvas, rLabel.x, rLabel.y, p.symbol, "r", p.color.toArgb())
+                val sLabel = bestLabels["${p.name}_s"]!!
+                if (sLabel.found) drawLabelWithSubscript(canvas.nativeCanvas, sLabel.x, sLabel.y, p.symbol, "s", p.color.toArgb())
+            }
+
+            val moonFillPaint = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+            val moonStrokePaint = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 2f }
+
+            for (pos in fullMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonFillPaint)
+            for (pos in newMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
+
             val startAngleFirst = if (lat >= 0) -90f else 90f
             for (pos in firstQuarters) {
                 val rect = RectF(pos.x - 10f, pos.y - 10f, pos.x + 10f, pos.y + 10f)
@@ -587,7 +577,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
             }
 
-            // Draw Last Quarters (Half Filled)
             val startAngleLast = if (lat >= 0) 90f else -90f
             for (pos in lastQuarters) {
                 val rect = RectF(pos.x - 10f, pos.y - 10f, pos.x + 10f, pos.y + 10f)
@@ -615,7 +604,7 @@ fun calculateLST(instant: Instant, lon: Double): String {
     return "%02d:%02d".format(hours, minutes)
 }
 
-fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
+fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = -0.833): Pair<Double, Double> {
     val jd = 2440587.5 + epochDay + 0.5
     val n = jd - 2451545.0
     var L = 280.460 + 0.9856474 * n
@@ -632,7 +621,7 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     val epsilonRad = Math.toRadians(epsilon)
     val alpha = atan2(cos(epsilonRad) * sin(lambdaRad), cos(lambdaRad))
     val delta = asin(sin(epsilonRad) * sin(lambdaRad))
-    val altRad = Math.toRadians(-0.833)
+    val altRad = Math.toRadians(altitude)
     val latRad = Math.toRadians(lat)
     val cosH = (sin(altRad) - sin(latRad) * sin(delta)) / (cos(latRad) * cos(delta))
 
