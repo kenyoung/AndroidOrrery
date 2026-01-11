@@ -14,10 +14,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -326,7 +326,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
-                // Tries to read 'about.txt' from src/main/assets/
                 val inputStream = context.assets.open("about.txt")
                 val reader = BufferedReader(InputStreamReader(inputStream))
                 aboutText = reader.readText()
@@ -626,18 +625,34 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache) {
                 val validSunset = !xSunset.isNaN()
                 val validSunrise = !xSunrise.isNaN()
 
-                if (validSunset && !astroSetPrev.isNaN()) {
-                    val xAstroEnd = centerX + ((astroSetPrev - 24.0) * pixelsPerHour)
-                    twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), darkBlueArgb, blackArgb, Shader.TileMode.CLAMP)
-                    canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), twilightPaint)
+                // BUG FIX: Handle "Twilight All Night"
+                // If the sun sets (validSunset) but never gets fully dark (astroSet is NaN),
+                // we draw a continuous gradient from Sunset (Blue) to Midnight (Black) to Sunrise (Blue).
+                if (validSunset && validSunrise && (astroSetPrev.isNaN() || astroRiseCurr.isNaN())) {
+                    twilightPaint.shader = LinearGradient(
+                        xSunset.toFloat(), y.toFloat(),
+                        xSunrise.toFloat(), y.toFloat(),
+                        intArrayOf(darkBlueArgb, blackArgb, darkBlueArgb),
+                        floatArrayOf(0f, 0.5f, 1f),
+                        Shader.TileMode.CLAMP
+                    )
+                    canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
+                } else {
+                    // Normal behavior: Two separate twilight zones with black in between
+                    if (validSunset && !astroSetPrev.isNaN()) {
+                        val xAstroEnd = centerX + ((astroSetPrev - 24.0) * pixelsPerHour)
+                        twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), darkBlueArgb, blackArgb, Shader.TileMode.CLAMP)
+                        canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), twilightPaint)
+                    }
+                    if (validSunrise && !astroRiseCurr.isNaN()) {
+                        var diffAstro = astroRiseCurr - 24.0
+                        if (diffAstro < -12.0) diffAstro += 24.0 else if (diffAstro > 12.0) diffAstro -= 24.0
+                        val xAstroStart = centerX + (diffAstro * pixelsPerHour)
+                        twilightPaint.shader = LinearGradient(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), blackArgb, darkBlueArgb, Shader.TileMode.CLAMP)
+                        canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
+                    }
                 }
-                if (validSunrise && !astroRiseCurr.isNaN()) {
-                    var diffAstro = astroRiseCurr - 24.0
-                    if (diffAstro < -12.0) diffAstro += 24.0 else if (diffAstro > 12.0) diffAstro -= 24.0
-                    val xAstroStart = centerX + (diffAstro * pixelsPerHour)
-                    twilightPaint.shader = LinearGradient(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), blackArgb, darkBlueArgb, Shader.TileMode.CLAMP)
-                    canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
-                }
+
                 if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
                 if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 

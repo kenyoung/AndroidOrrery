@@ -1,1 +1,19 @@
-This is a test.
+About Orrery
+
+This program produces a display inspired by the "Sky Gazer's Almanac" published by Sky and Telescope (S&T) every January. It is significantly different than that almanac though because:
+
+1) It is customized to your location and time
+
+2) It is significantly simplified to accomodate the small space available on a cell phone display. Many items displayed on the S&T graphic are omitted.
+
+3) Time increases in the upward direction on the display, rather than downward as on the S&T graphic.
+
+4) The horizontal axis is standard time, not local solar time.
+
+5) Astronomical twilight is shown.
+
+6) Moon phases are shown to the right of the sunrise line, rather than within the plot.
+
+7) Labelling is done using planet symbols.
+
+
