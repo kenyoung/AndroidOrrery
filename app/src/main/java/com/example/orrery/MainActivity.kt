@@ -13,16 +13,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,17 +30,28 @@ import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -72,7 +81,7 @@ class MainActivity : ComponentActivity() {
                 val lat = location?.latitude ?: 0.0
                 val lon = location?.longitude ?: 0.0
                 setContent {
-                    OrreryApp(lat, lon)
+                    OrreryApp(initialGpsLat = lat, initialGpsLon = lon)
                 }
             }
         } catch (e: SecurityException) { }
@@ -84,115 +93,464 @@ data class PlanetElements(
     val name: String,
     val symbol: String,
     val color: Color,
-    val L_0: Double,   // Mean Longitude at Epoch
-    val L_rate: Double,// Rate (deg/day)
-    val a: Double,     // AU
-    val e: Double,     // Eccentricity
-    val i: Double,     // Inclination (deg)
-    val w_bar: Double, // Longitude of Perihelion (deg)
-    val N: Double      // Longitude of Ascending Node (deg)
+    val L_0: Double, val L_rate: Double,
+    val a: Double, val e: Double,
+    val i: Double, val w_bar: Double, val N: Double
 )
 
-data class PlanetEvents(
-    val rise: Double,
-    val transit: Double,
-    val set: Double
-)
+data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
+data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCenter: Float = Float.MAX_VALUE, var found: Boolean = false)
 
-data class LabelPosition(
-    var x: Float = 0f,
-    var y: Float = 0f,
-    var minDistToCenter: Float = Float.MAX_VALUE,
-    var found: Boolean = false
-)
+// --- CACHE CLASS ---
+class AstroCache(
+    val startEpochDay: Double,
+    val size: Int,
+    val sunRise: DoubleArray,
+    val sunSet: DoubleArray,
+    val astroRise: DoubleArray,
+    val astroSet: DoubleArray,
+    val planetMap: Map<String, Triple<DoubleArray, DoubleArray, DoubleArray>>
+) {
+    private fun interp(v1: Double, v2: Double, frac: Double): Double {
+        if (v1.isNaN() || v2.isNaN()) return Double.NaN
+        var t1 = v1
+        var t2 = v2
+        if (abs(t1 - t2) > 12.0) { if (t1 > t2) t2 += 24.0 else t1 += 24.0 }
+        var res = t1 + (t2 - t1) * frac
+        if (res >= 24.0) res -= 24.0
+        return res
+    }
+    fun getSunTimes(epochDay: Double, astro: Boolean): Pair<Double, Double> {
+        val offset = epochDay - startEpochDay
+        val idx = floor(offset).toInt()
+        val frac = offset - idx
+        if (idx < 0 || idx >= size - 1) return Pair(Double.NaN, Double.NaN)
+        val riseArr = if (astro) astroRise else sunRise
+        val setArr = if (astro) astroSet else sunSet
+        return Pair(interp(riseArr[idx], riseArr[idx+1], frac), interp(setArr[idx], setArr[idx+1], frac))
+    }
+    fun getPlanetEvents(epochDay: Double, name: String): PlanetEvents {
+        val arrays = planetMap[name] ?: return PlanetEvents(Double.NaN, Double.NaN, Double.NaN)
+        val offset = epochDay - startEpochDay
+        val idx = floor(offset).toInt()
+        val frac = offset - idx
+        if (idx < 0 || idx >= size - 1) return PlanetEvents(Double.NaN, Double.NaN, Double.NaN)
+        return PlanetEvents(interp(arrays.first[idx], arrays.first[idx+1], frac), interp(arrays.second[idx], arrays.second[idx+1], frac), interp(arrays.third[idx], arrays.third[idx+1], frac))
+    }
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrreryApp(lat: Double, lon: Double) {
-    var currentInstant by remember { mutableStateOf(Instant.now()) }
+fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
+    // --- LOCATION STATE ---
+    var usePhoneLocation by remember { mutableStateOf(true) }
+    var manualLat by remember { mutableStateOf(0.0) }
+    var manualLon by remember { mutableStateOf(0.0) }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            val now = Instant.now()
-            currentInstant = now
-            val currentMillis = now.toEpochMilli()
-            val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
-            delay(millisUntilNextMinute)
+    val effectiveLat = if (usePhoneLocation) initialGpsLat else manualLat
+    val effectiveLon = if (usePhoneLocation) initialGpsLon else manualLon
+
+    // --- TIME STATE ---
+    var usePhoneTime by remember { mutableStateOf(true) }
+    var manualDate by remember { mutableStateOf(LocalDate.now()) }
+
+    var currentInstant by remember { mutableStateOf(Instant.now()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Lifecycle Observer (Only updates if using phone time)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && usePhoneTime) {
+                currentInstant = Instant.now()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Time Loop
+    LaunchedEffect(usePhoneTime, manualDate) {
+        if (usePhoneTime) {
+            while (true) {
+                val now = Instant.now()
+                currentInstant = now
+                val currentMillis = now.toEpochMilli()
+                val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
+                delay(millisUntilNextMinute)
+            }
+        } else {
+            // Force 00:00 UT on the user's date
+            currentInstant = manualDate.atStartOfDay(ZoneOffset.UTC).toInstant()
+        }
+    }
+
+    // Calculation Loop
+    val zoneId = ZoneId.systemDefault()
+    val effectiveDate = currentInstant.atZone(zoneId).toLocalDate()
+    val timeKey = if (usePhoneTime) currentInstant.atZone(zoneId).hour else effectiveDate.toEpochDay().toInt()
+
+    val cache by produceState<AstroCache?>(initialValue = null, key1 = timeKey, key2 = effectiveLat, key3 = effectiveLon) {
+        value = withContext(Dispatchers.Default) {
+            calculateCache(effectiveDate, effectiveLat, effectiveLon, zoneId)
         }
     }
 
     val utFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("UTC"))
     val utString = utFormatter.format(currentInstant)
-    val lstString = calculateLST(currentInstant, lon)
+    val lstString = calculateLST(currentInstant, effectiveLon)
 
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topPadding = statusBarHeight + 10.dp
+    // UI State
+    var showMenu by remember { mutableStateOf(false) }
+    var showLocationDialog by remember { mutableStateOf(false) }
+    var showDateDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(top = statusBarHeight)
-    ) {
-        // --- APP TITLE ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Orrery",
-                style = TextStyle(
-                    color = Color.White,
-                    fontSize = 24.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
+    if (showLocationDialog) {
+        LocationDialog(
+            currentUsePhone = usePhoneLocation,
+            onDismiss = { showLocationDialog = false },
+            onConfirm = { usePhone, lat, lon ->
+                usePhoneLocation = usePhone
+                if (!usePhone) {
+                    manualLat = lat
+                    manualLon = lon
+                }
+                showLocationDialog = false
+            }
+        )
+    }
+
+    if (showDateDialog) {
+        DateDialog(
+            currentUsePhone = usePhoneTime,
+            onDismiss = { showDateDialog = false },
+            onConfirm = { usePhone, date ->
+                usePhoneTime = usePhone
+                if (!usePhone && date != null) {
+                    manualDate = date
+                }
+                showDateDialog = false
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        AboutDialog(
+            onDismiss = { showAboutDialog = false }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        if (!usePhoneTime) {
+                            Text(
+                                text = manualDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                                style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.align(Alignment.CenterStart)
+                            )
+                        }
+                        Text(
+                            text = "Orrery",
+                            style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(Icons.Default.MoreVert, "Options", tint = Color.White)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Location") },
+                            onClick = {
+                                showMenu = false
+                                showLocationDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Date") },
+                            onClick = {
+                                showMenu = false
+                                showDateDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("About") },
+                            onClick = {
+                                showMenu = false
+                                showAboutDialog = true
+                            }
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White)
+            )
+        },
+        containerColor = Color.Black
+    ) { innerPadding ->
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            // INFO LINE
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon),
+                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                 )
-            )
+                Text(
+                    text = "UT $utString  LST $lstString",
+                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                )
+            }
+            // GRAPHICS WINDOW
+            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+                if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!)
+            }
         }
+    }
+}
 
-        // --- INFO LINE ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "Lat %.3f Lon %.4f".format(lat, lon),
-                style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            )
-            Text(
-                text = "UT $utString  LST $lstString",
-                style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            )
+// --- DIALOGS ---
+
+@Composable
+fun AboutDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var aboutText by remember { mutableStateOf("Loading...") }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            try {
+                // Tries to read 'about.txt' from src/main/assets/
+                val inputStream = context.assets.open("about.txt")
+                val reader = BufferedReader(InputStreamReader(inputStream))
+                aboutText = reader.readText()
+                reader.close()
+            } catch (e: Exception) {
+                aboutText = "File 'about.txt' not found in assets.\n\nPlease add a file named 'about.txt' to your project's 'src/main/assets/' folder."
+            }
         }
+    }
 
-        // --- GRAPHICS WINDOW ---
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f)
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.DarkGray),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 600.dp)
         ) {
-            GraphicsWindow(lat, lon, currentInstant)
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("About", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Color.Black)
+                        .padding(8.dp)
+                ) {
+                    val scrollState = rememberScrollState()
+                    Text(
+                        text = aboutText,
+                        style = TextStyle(
+                            color = Color.LightGray,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                ) {
+                    Text("OK", color = Color.Black)
+                }
+            }
         }
     }
 }
 
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
+fun LocationDialog(
+    currentUsePhone: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean, Double, Double) -> Unit
+) {
+    var usePhone by remember { mutableStateOf(currentUsePhone) }
+    var latDeg by remember { mutableStateOf("") }
+    var latMin by remember { mutableStateOf("") }
+    var latSec by remember { mutableStateOf("") }
+    var lonDeg by remember { mutableStateOf("") }
+    var lonMin by remember { mutableStateOf("") }
+    var lonSec by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    fun validateAndSubmit() {
+        if (usePhone) {
+            onConfirm(true, 0.0, 0.0)
+            return
+        }
+        try {
+            val ld = latDeg.toIntOrNull(); val lm = latMin.toIntOrNull(); val ls = latSec.toDoubleOrNull()
+            val lod = lonDeg.toIntOrNull(); val lom = lonMin.toIntOrNull(); val los = lonSec.toDoubleOrNull()
+
+            if (ld == null || lm == null || ls == null || lod == null || lom == null || los == null) {
+                errorMsg = "Please enter all fields."
+                return
+            }
+            if (abs(ld) > 90) { errorMsg = "Latitude degrees must be -90 to 90"; return }
+            if (lm !in 0..59) { errorMsg = "Latitude minutes must be 0-59"; return }
+            if (ls < 0 || ls >= 60) { errorMsg = "Latitude seconds must be 0-59.9"; return }
+            if (abs(lod) > 180) { errorMsg = "Longitude degrees must be -180 to 180"; return }
+            if (lom !in 0..59) { errorMsg = "Longitude minutes must be 0-59"; return }
+            if (los < 0 || los >= 60) { errorMsg = "Longitude seconds must be 0-59.9"; return }
+
+            val latSign = if (ld < 0) -1.0 else 1.0
+            val finalLat = (abs(ld) + (lm / 60.0) + (ls / 3600.0)) * latSign
+            val lonSign = if (lod < 0) -1.0 else 1.0
+            val finalLon = (abs(lod) + (lom / 60.0) + (los / 3600.0)) * lonSign
+
+            if (abs(finalLat) > 90.0) { errorMsg = "Invalid Latitude."; return }
+            if (abs(finalLon) > 180.0) { errorMsg = "Invalid Longitude."; return }
+            onConfirm(false, finalLat, finalLon)
+        } catch (e: Exception) {
+            errorMsg = "Invalid number format."
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Enter Location", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = usePhone, onCheckedChange = { usePhone = it; errorMsg = null }, colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black))
+                    Text("Use phone location", color = Color.White)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (!usePhone) {
+                    Text("Latitude (D M S)", color = Color.LightGray, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        DmsInput(latDeg, { latDeg = it }, "Deg"); DmsInput(latMin, { latMin = it }, "Min"); DmsInput(latSec, { latSec = it }, "Sec")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Longitude (D M S)", color = Color.LightGray, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        DmsInput(lonDeg, { lonDeg = it }, "Deg"); DmsInput(lonMin, { lonMin = it }, "Min"); DmsInput(lonSec, { lonSec = it }, "Sec")
+                    }
+                }
+                if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
+                    Button(onClick = { validateAndSubmit() }, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) { Text("OK", color = Color.Black) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DateDialog(
+    currentUsePhone: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean, LocalDate?) -> Unit
+) {
+    var usePhone by remember { mutableStateOf(currentUsePhone) }
+    var dateString by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    fun validateAndSubmit() {
+        if (usePhone) {
+            onConfirm(true, null)
+            return
+        }
+        try {
+            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+            val parsedDate = LocalDate.parse(dateString, formatter)
+            onConfirm(false, parsedDate)
+        } catch (e: Exception) {
+            errorMsg = "Invalid Date. Use DD/MM/YYYY"
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Enter Date", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = usePhone, onCheckedChange = { usePhone = it; errorMsg = null }, colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black))
+                    Text("Use phone time", color = Color.White)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (!usePhone) {
+                    OutlinedTextField(
+                        value = dateString,
+                        onValueChange = { dateString = it },
+                        label = { Text("DD/MM/YYYY", color = Color.Gray) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, unfocusedBorderColor = Color.Gray, cursorColor = Color.White)
+                    )
+                    Text("Format DD/MM/YYYY", color = Color.LightGray, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
+                }
+                if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
+                    Button(onClick = { validateAndSubmit() }, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) { Text("OK", color = Color.Black) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, color = Color.Gray, fontSize = 10.sp) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.width(80.dp),
+        textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color.White,
+            unfocusedBorderColor = Color.Gray,
+            cursorColor = Color.White
+        )
+    )
+}
+
+// --- RENDERING ---
+@Composable
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
-
-        // --- 1. SETUP SCALE & MARGINS ---
         val paddingLeft = 35f
         val paddingRight = 42f
         val drawingWidth = w - paddingLeft - paddingRight
         val centerX = paddingLeft + (drawingWidth / 2f)
 
-        // Calculate Scale
         val zoneId = ZoneId.systemDefault()
         val standardOffset = zoneId.rules.getStandardOffset(now)
         val offsetHours = standardOffset.totalSeconds / 3600.0
@@ -205,7 +563,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
 
         val nMaxDuration = (solsticeRise + (24.0 - solsticeSet))
         val pixelsPerHour = drawingWidth / nMaxDuration
-
         val textHeight = 40f
         val textY = 30f
 
@@ -215,27 +572,21 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
 
         fun getYForDate(date: LocalDate): Float {
             val daysOffset = ChronoUnit.DAYS.between(nowDate, date)
-            val fraction = daysOffset / 365.25
-            return (h - (fraction * h)).toFloat()
+            return (h - ((daysOffset / 365.25) * h)).toFloat()
         }
-
         fun getYForEpochDay(targetEpochDay: Double): Float {
             val daysOffset = targetEpochDay - nowEpochDay
-            val fraction = daysOffset / 365.25
-            return (h - (fraction * h)).toFloat()
+            return (h - ((daysOffset / 365.25) * h)).toFloat()
         }
-
         fun getXSunsetForDate(date: LocalDate): Float {
             val epochDay = date.toEpochDay().toDouble()
-            val (_, setTimePrev) = calculateSunTimes(epochDay - 1.0, lat, lon, offsetHours)
-            val diff = setTimePrev - 24.0
-            return (centerX + (diff * pixelsPerHour)).toFloat()
+            val (_, setTimePrev) = cache.getSunTimes(epochDay - 1.0, false)
+            return (centerX + ((setTimePrev - 24.0) * pixelsPerHour)).toFloat()
         }
 
-        // --- 4. DEFINE PLANETS ---
         val blueGreen = Color(0xFF20B2AA)
         val orange = Color(0xFFFFA500)
-
+        val neptuneBlue = Color(0xFF6495ED)
         val planets = listOf(
             PlanetElements("Mercury", "☿", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
             PlanetElements("Venus",   "♀", Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
@@ -243,14 +594,13 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             PlanetElements("Jupiter", "♃", orange,        34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
             PlanetElements("Saturn",  "♄", Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
             PlanetElements("Uranus",  "⛢", blueGreen,    313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
-            PlanetElements("Neptune", "♆", Color.Blue,   304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+            PlanetElements("Neptune", "♆", neptuneBlue,  304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
         )
 
         val sunPoints = ArrayList<Offset>()
         val planetTransits = planets.associate { it.name to ArrayList<Offset>() }
         val planetRises = planets.associate { it.name to ArrayList<Offset>() }
         val planetSets = planets.associate { it.name to ArrayList<Offset>() }
-
         val bestLabels = HashMap<String, LabelPosition>()
         for (p in planets) {
             bestLabels["${p.name}_t"] = LabelPosition()
@@ -258,95 +608,57 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             bestLabels["${p.name}_s"] = LabelPosition()
         }
 
-        // --- LAYER 1: TWILIGHT (BACKGROUND) & CALCULATION LOOP ---
         val darkBlueArgb = 0xFF0000D1.toInt()
         val blackArgb = android.graphics.Color.BLACK
-        val twilightPaint = Paint().apply {
-            strokeWidth = 1f
-            style = Paint.Style.STROKE
-        }
+        val twilightPaint = Paint().apply { strokeWidth = 1f; style = Paint.Style.STROKE }
 
         drawIntoCanvas { canvas ->
             for (y in textHeight.toInt() until h.toInt()) {
                 val fraction = (h - y) / h
                 val daysOffset = fraction * 365.25
                 val targetEpochDay = nowEpochDay + daysOffset
-
-                val (_, setTimePrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours)
-                val (riseTimeCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours)
-                val (_, astroSetPrev) = calculateSunTimes(targetEpochDay - 1.0, lat, lon, offsetHours, -18.0)
-                val (astroRiseCurr, _) = calculateSunTimes(targetEpochDay, lat, lon, offsetHours, -18.0)
-
-                val xOffsetSunset = (setTimePrev - 24.0) * pixelsPerHour
-                val xSunset = centerX + xOffsetSunset
-                val xOffsetSunrise = riseTimeCurr * pixelsPerHour
-                val xSunrise = centerX + xOffsetSunrise
+                val (_, setTimePrev) = cache.getSunTimes(targetEpochDay - 1.0, false)
+                val (riseTimeCurr, _) = cache.getSunTimes(targetEpochDay, false)
+                val (_, astroSetPrev) = cache.getSunTimes(targetEpochDay - 1.0, true)
+                val (astroRiseCurr, _) = cache.getSunTimes(targetEpochDay, true)
+                val xSunset = centerX + ((setTimePrev - 24.0) * pixelsPerHour)
+                val xSunrise = centerX + (riseTimeCurr * pixelsPerHour)
                 val validSunset = !xSunset.isNaN()
                 val validSunrise = !xSunrise.isNaN()
 
                 if (validSunset && !astroSetPrev.isNaN()) {
-                    val xAstroEnd = centerX + (astroSetPrev - 24.0) * pixelsPerHour
-                    twilightPaint.shader = LinearGradient(
-                        xSunset.toFloat(), y.toFloat(),
-                        xAstroEnd.toFloat(), y.toFloat(),
-                        darkBlueArgb, blackArgb,
-                        Shader.TileMode.CLAMP
-                    )
+                    val xAstroEnd = centerX + ((astroSetPrev - 24.0) * pixelsPerHour)
+                    twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), darkBlueArgb, blackArgb, Shader.TileMode.CLAMP)
                     canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), twilightPaint)
                 }
-
                 if (validSunrise && !astroRiseCurr.isNaN()) {
                     var diffAstro = astroRiseCurr - 24.0
-                    if (diffAstro < -12.0) diffAstro += 24.0
-                    else if (diffAstro > 12.0) diffAstro -= 24.0
+                    if (diffAstro < -12.0) diffAstro += 24.0 else if (diffAstro > 12.0) diffAstro -= 24.0
                     val xAstroStart = centerX + (diffAstro * pixelsPerHour)
-
-                    twilightPaint.shader = LinearGradient(
-                        xAstroStart.toFloat(), y.toFloat(),
-                        xSunrise.toFloat(), y.toFloat(),
-                        blackArgb, darkBlueArgb,
-                        Shader.TileMode.CLAMP
-                    )
+                    twilightPaint.shader = LinearGradient(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), blackArgb, darkBlueArgb, Shader.TileMode.CLAMP)
                     canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
                 }
-
                 if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
                 if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 
                 if (validSunset && validSunrise) {
                     for (planet in planets) {
-                        val events = calculatePlanetEvents(targetEpochDay, lat, lon, offsetHours, planet)
-
-                        // Determine offset for label target based on planet name
-                        val targetHourOffset = when (planet.name) {
-                            "Mars" -> -2.0    // 22 hours
-                            "Jupiter" -> -1.0 // 23 hours
-                            "Saturn" -> 0.0   // 0 hours
-                            "Uranus" -> 1.0   // 1 hour
-                            "Neptune" -> 2.0  // 2 hours
-                            else -> 0.0       // Default center
-                        }
+                        val events = cache.getPlanetEvents(targetEpochDay, planet.name)
+                        val targetHourOffset = when (planet.name) { "Mars" -> -2.0; "Jupiter" -> -1.0; "Saturn" -> 0.0; "Uranus" -> 1.0; "Neptune" -> 2.0; else -> 0.0 }
                         val targetX = centerX + (targetHourOffset * pixelsPerHour)
-
                         fun processEvent(time: Double, list: ArrayList<Offset>, keySuffix: String) {
                             if (time.isNaN()) return
                             var diff = time - 24.0
-                            if (diff < -12.0) diff += 24.0
-                            else if (diff > 12.0) diff -= 24.0
+                            if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
                             val xPos = centerX + (diff * pixelsPerHour)
                             val yPos = y.toFloat()
-
                             if (xPos >= xSunset && xPos <= xSunrise) {
                                 list.add(Offset(xPos.toFloat(), yPos))
-
-                                // Calculate distance to the planet-specific target X
                                 val dist = abs(xPos - targetX)
                                 val labelTracker = bestLabels["${planet.name}_$keySuffix"]!!
                                 if (dist < labelTracker.minDistToCenter) {
                                     labelTracker.minDistToCenter = dist.toFloat()
-                                    labelTracker.x = xPos.toFloat()
-                                    labelTracker.y = yPos
-                                    labelTracker.found = true
+                                    labelTracker.x = xPos.toFloat(); labelTracker.y = yPos; labelTracker.found = true
                                 }
                             }
                         }
@@ -358,29 +670,11 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             }
         }
 
-        // --- LAYER 2: SUN CURVE ---
-        drawPoints(
-            points = sunPoints,
-            pointMode = PointMode.Points,
-            color = Color.White,
-            strokeWidth = 2f
-        )
+        drawPoints(points = sunPoints, pointMode = PointMode.Points, color = Color.White, strokeWidth = 2f)
 
-        // --- LAYER 3: GRID LINES & MONTH LABELS ---
         drawIntoCanvas { canvas ->
-            val monthPaint = Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 30f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.MONOSPACE
-            }
-            val gridPaint = Paint().apply {
-                color = 0xFF666666.toInt()
-                strokeWidth = 1f
-                style = Paint.Style.STROKE
-            }
-
+            val monthPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
+            val gridPaint = Paint().apply { color = 0xFF666666.toInt(); strokeWidth = 1f; style = Paint.Style.STROKE }
             val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
             val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
             var d = startDate
@@ -389,40 +683,26 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
                 val yStart = getYForDate(d)
                 val x1_grid = getXSunsetForDate(d)
                 val epochDayGrid = d.toEpochDay().toDouble()
-                val (riseGrid, _) = calculateSunTimes(epochDayGrid, lat, lon, offsetHours)
-
+                val (riseGrid, _) = cache.getSunTimes(epochDayGrid, false)
                 if (yStart >= textHeight && yStart <= h && !riseGrid.isNaN()) {
                     var diffGrid = riseGrid - 24.0
-                    if (diffGrid < -12.0) diffGrid += 24.0
-                    else if (diffGrid > 12.0) diffGrid -= 24.0
+                    if (diffGrid < -12.0) diffGrid += 24.0 else if (diffGrid > 12.0) diffGrid -= 24.0
                     val x2_grid = centerX + (diffGrid * pixelsPerHour)
                     canvas.nativeCanvas.drawLine(x1_grid, yStart, x2_grid.toFloat(), yStart, gridPaint)
                 }
-
                 var visibleDays = 0
                 var iterDate = d
-                while (iterDate.isBefore(nextMonth)) {
-                    val yDay = getYForDate(iterDate)
-                    if (yDay >= textHeight && yDay <= h) visibleDays++
-                    iterDate = iterDate.plusDays(1)
-                }
-
+                while (iterDate.isBefore(nextMonth)) { if (getYForDate(iterDate) in textHeight..h) visibleDays++; iterDate = iterDate.plusDays(1) }
                 if (visibleDays >= 15) {
                     val monthName = d.format(DateTimeFormatter.ofPattern("MMM"))
                     val yEnd = getYForDate(nextMonth)
                     val yMid = (yStart + yEnd) / 2f
                     val midMonthDate = d.withDayOfMonth(15)
                     val xSunsetMid = getXSunsetForDate(midMonthDate)
-                    val charHeight = monthPaint.textSize
-                    val targetX = xSunsetMid - charHeight
+                    val targetX = xSunsetMid - monthPaint.textSize
                     val finalX = max(25f, targetX)
-
-                    val x1 = getXSunsetForDate(d)
-                    val x2 = getXSunsetForDate(nextMonth)
-                    val dx = x2 - x1
-                    val dy = yEnd - yStart
-                    val angleDeg = Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
-
+                    val x1 = getXSunsetForDate(d); val x2 = getXSunsetForDate(nextMonth)
+                    val angleDeg = Math.toDegrees(atan2((yEnd - yStart).toDouble(), (x2 - x1).toDouble())).toFloat()
                     canvas.nativeCanvas.save()
                     canvas.nativeCanvas.rotate(angleDeg, finalX, yMid)
                     canvas.nativeCanvas.drawText(monthName, finalX, yMid, monthPaint)
@@ -432,328 +712,220 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant) {
             }
         }
 
-        // --- LAYER 4: PLANET TRACKS ---
-        for (planet in planets) {
-            val isInner = planet.name == "Mercury" || planet.name == "Venus"
-            val riseSetColor = if (isInner) planet.color else planet.color.copy(alpha = 0.35f)
-
-            if (!isInner) {
-                drawPoints(points = planetTransits[planet.name]!!, pointMode = PointMode.Points, color = planet.color, strokeWidth = 4f)
-            }
-            drawPoints(points = planetRises[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
-            drawPoints(points = planetSets[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
-        }
-
-        // --- LAYER 5: MOONS & LABELS ---
-        val fullMoons = ArrayList<Offset>()
-        val newMoons = ArrayList<Offset>()
-        val firstQuarters = ArrayList<Offset>()
-        val lastQuarters = ArrayList<Offset>()
-        val scanRange = 380
-        var prevElong = calculateMoonPhaseAngle(nowEpochDay - 1.0)
-
-        for (dIdx in 0..scanRange) {
-            val scanEpochDay = nowEpochDay + dIdx
-            val currElong = calculateMoonPhaseAngle(scanEpochDay)
-
-            fun norm(a: Double): Double {
-                var v = a % 360.0
-                if (v > 180) v -= 360
-                if (v <= -180) v += 360
-                return v
-            }
-
-            fun checkCrossing(targetAngle: Double, list: ArrayList<Offset>) {
-                val prevDiff = (prevElong - targetAngle)
-                val currDiff = (currElong - targetAngle)
-                val pNorm = norm(prevDiff)
-                val cNorm = norm(currDiff)
-
-                if (pNorm < 0 && cNorm >= 0) {
-                    val totalSpan = cNorm - pNorm
-                    val fractionOfDay = -pNorm / totalSpan
-                    val exactMoonDay = (scanEpochDay - 1.0) + fractionOfDay
-                    val refDay = scanEpochDay - 1.0
-                    val (riseTime, _) = calculateSunTimes(refDay, lat, lon, offsetHours)
-
-                    if (!riseTime.isNaN()) {
-                        val xSunrise = centerX + (riseTime * pixelsPerHour)
-                        val xMoon = xSunrise + 15f
-                        val yMoon = getYForEpochDay(exactMoonDay)
-                        if (yMoon >= textHeight && yMoon <= h) {
-                            list.add(Offset(xMoon.toFloat(), yMoon))
+        if (w > 1600f) {
+            drawIntoCanvas { canvas ->
+                val gridPaint = Paint().apply { color = 0xFF666666.toInt(); strokeWidth = 1f; style = Paint.Style.STROKE }
+                for (y in textHeight.toInt() until h.toInt()) {
+                    val targetEpochDay = nowEpochDay + ((h - y) / h * 365.25)
+                    val (_, setTimePrev) = cache.getSunTimes(targetEpochDay - 1.0, false)
+                    val (riseTimeCurr, _) = cache.getSunTimes(targetEpochDay, false)
+                    val xSunset = centerX + ((setTimePrev - 24.0) * pixelsPerHour)
+                    val xSunrise = centerX + (riseTimeCurr * pixelsPerHour)
+                    if (!xSunset.isNaN() && !xSunrise.isNaN()) {
+                        for (k in -14..14) {
+                            val xGrid = centerX + (k * pixelsPerHour)
+                            if (xGrid > xSunset && xGrid < xSunrise) canvas.nativeCanvas.drawPoint(xGrid.toFloat(), y.toFloat(), gridPaint)
                         }
                     }
                 }
             }
-            checkCrossing(0.0, newMoons)
-            checkCrossing(90.0, firstQuarters)
-            checkCrossing(180.0, fullMoons)
-            checkCrossing(270.0, lastQuarters)
+        }
+
+        for (planet in planets) {
+            val isInner = planet.name == "Mercury" || planet.name == "Venus"
+            val riseSetColor = if (isInner) planet.color else planet.color.copy(alpha = 0.35f)
+            if (!isInner) drawPoints(points = planetTransits[planet.name]!!, pointMode = PointMode.Points, color = planet.color, strokeWidth = 4f)
+            drawPoints(points = planetRises[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
+            drawPoints(points = planetSets[planet.name]!!, pointMode = PointMode.Points, color = riseSetColor, strokeWidth = 3f)
+        }
+
+        val fullMoons = ArrayList<Offset>(); val newMoons = ArrayList<Offset>(); val firstQuarters = ArrayList<Offset>(); val lastQuarters = ArrayList<Offset>()
+        var prevElong = calculateMoonPhaseAngle(nowEpochDay - 1.0)
+        for (dIdx in 0..380) {
+            val scanEpochDay = nowEpochDay + dIdx
+            val currElong = calculateMoonPhaseAngle(scanEpochDay)
+            fun norm(a: Double): Double { var v = a % 360.0; if (v > 180) v -= 360; if (v <= -180) v += 360; return v }
+            fun checkCrossing(targetAngle: Double, list: ArrayList<Offset>) {
+                val pNorm = norm(prevElong - targetAngle); val cNorm = norm(currElong - targetAngle)
+                if (pNorm < 0 && cNorm >= 0) {
+                    val exactMoonDay = (scanEpochDay - 1.0) + (-pNorm / (cNorm - pNorm))
+                    val (riseTime, _) = cache.getSunTimes(scanEpochDay - 1.0, false)
+                    if (!riseTime.isNaN()) {
+                        val xMoon = centerX + (riseTime * pixelsPerHour) + 15f
+                        val yMoon = getYForEpochDay(exactMoonDay)
+                        if (yMoon >= textHeight && yMoon <= h) list.add(Offset(xMoon.toFloat(), yMoon))
+                    }
+                }
+            }
+            checkCrossing(0.0, newMoons); checkCrossing(90.0, firstQuarters); checkCrossing(180.0, fullMoons); checkCrossing(270.0, lastQuarters)
             prevElong = currElong
         }
 
         drawIntoCanvas { canvas ->
-            val timePaint = Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 30f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.MONOSPACE
-            }
-
-            // Draw Time Labels
+            val timePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
             for (k in -14..14) {
                 val xPos = centerX + (k * pixelsPerHour)
                 if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
-                    var hour = (k % 24)
-                    if (hour < 0) hour += 24
+                    var hour = (k % 24); if (hour < 0) hour += 24
                     canvas.nativeCanvas.drawText(hour.toString(), xPos.toFloat(), textY, timePaint)
                 }
             }
-
-            val mainTextPaint = Paint().apply {
-                textSize = 42f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            val mainTextPaint = Paint().apply { textSize = 42f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) }
+            val subTextPaint = Paint().apply { textSize = 27f; textAlign = Paint.Align.LEFT; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
+            fun drawLabel(x: Float, y: Float, sym: String, sub: String, col: Int) {
+                val sw = mainTextPaint.measureText(sym); val subw = subTextPaint.measureText(sub)
+                val sx = x + sw; val subx = sx + (sw/2f) + (subw * (if (sub == "s") 0.375f else 0.75f))
+                mainTextPaint.style = Paint.Style.STROKE; mainTextPaint.strokeWidth = 4f; mainTextPaint.color = android.graphics.Color.BLACK
+                canvas.nativeCanvas.drawText(sym, sx, y, mainTextPaint)
+                mainTextPaint.style = Paint.Style.FILL; mainTextPaint.color = col
+                canvas.nativeCanvas.drawText(sym, sx, y, mainTextPaint)
+                subTextPaint.style = Paint.Style.STROKE; subTextPaint.strokeWidth = 3f; subTextPaint.color = android.graphics.Color.BLACK
+                canvas.nativeCanvas.drawText(sub, subx, y+8f, subTextPaint)
+                subTextPaint.style = Paint.Style.FILL; subTextPaint.color = col
+                canvas.nativeCanvas.drawText(sub, subx, y+8f, subTextPaint)
             }
-            val subTextPaint = Paint().apply {
-                textSize = 27f
-                textAlign = Paint.Align.LEFT
-                isAntiAlias = true
-                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-            }
-
-            fun drawLabelWithSubscript(canvas: android.graphics.Canvas, x: Float, y: Float, symbol: String, subscript: String, color: Int) {
-                val symbolWidth = mainTextPaint.measureText(symbol)
-                val subWidth = subTextPaint.measureText(subscript)
-                val symX = x + (1.0f * symbolWidth)
-                val subX = symX + (symbolWidth / 2f) + (subWidth * 0.75f)
-                val subY = y + 8f
-
-                mainTextPaint.color = color
-                mainTextPaint.style = Paint.Style.STROKE
-                mainTextPaint.strokeWidth = 4f
-                mainTextPaint.color = android.graphics.Color.BLACK
-                canvas.drawText(symbol, symX, y, mainTextPaint)
-
-                mainTextPaint.style = Paint.Style.FILL
-                mainTextPaint.color = color
-                canvas.drawText(symbol, symX, y, mainTextPaint)
-
-                subTextPaint.color = color
-                subTextPaint.style = Paint.Style.STROKE
-                subTextPaint.strokeWidth = 3f
-                subTextPaint.color = android.graphics.Color.BLACK
-                canvas.drawText(subscript, subX, subY, subTextPaint)
-
-                subTextPaint.style = Paint.Style.FILL
-                subTextPaint.color = color
-                canvas.drawText(subscript, subX, subY, subTextPaint)
-            }
-
             for (p in planets) {
-                if (p.name != "Mercury" && p.name != "Venus") {
-                    val label = bestLabels["${p.name}_t"]!!
-                    if (label.found) drawLabelWithSubscript(canvas.nativeCanvas, label.x, label.y, p.symbol, "t", p.color.toArgb())
-                }
-                val rLabel = bestLabels["${p.name}_r"]!!
-                if (rLabel.found) drawLabelWithSubscript(canvas.nativeCanvas, rLabel.x, rLabel.y, p.symbol, "r", p.color.toArgb())
-                val sLabel = bestLabels["${p.name}_s"]!!
-                if (sLabel.found) drawLabelWithSubscript(canvas.nativeCanvas, sLabel.x, sLabel.y, p.symbol, "s", p.color.toArgb())
+                if (p.name !in listOf("Mercury", "Venus")) bestLabels["${p.name}_t"]?.let { if(it.found) drawLabel(it.x, it.y, p.symbol, "t", p.color.toArgb()) }
+                bestLabels["${p.name}_r"]?.let { if(it.found) drawLabel(it.x, it.y, p.symbol, "r", p.color.toArgb()) }
+                bestLabels["${p.name}_s"]?.let { if(it.found) drawLabel(it.x, it.y, p.symbol, "s", p.color.toArgb()) }
             }
-
-            val moonFillPaint = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
-            val moonStrokePaint = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 2f }
-
-            for (pos in fullMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonFillPaint)
-            for (pos in newMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
-
+            val moonFill = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+            val moonStroke = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 2f }
+            for (pos in fullMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonFill)
+            for (pos in newMoons) canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStroke)
             val startAngleFirst = if (lat >= 0) -90f else 90f
             for (pos in firstQuarters) {
-                val rect = RectF(pos.x - 10f, pos.y - 10f, pos.x + 10f, pos.y + 10f)
-                canvas.nativeCanvas.drawArc(rect, startAngleFirst, 180f, true, moonFillPaint)
-                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
+                canvas.nativeCanvas.drawArc(RectF(pos.x-10f, pos.y-10f, pos.x+10f, pos.y+10f), startAngleFirst, 180f, true, moonFill)
+                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStroke)
             }
-
             val startAngleLast = if (lat >= 0) 90f else -90f
             for (pos in lastQuarters) {
-                val rect = RectF(pos.x - 10f, pos.y - 10f, pos.x + 10f, pos.y + 10f)
-                canvas.nativeCanvas.drawArc(rect, startAngleLast, 180f, true, moonFillPaint)
-                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStrokePaint)
+                canvas.nativeCanvas.drawArc(RectF(pos.x-10f, pos.y-10f, pos.x+10f, pos.y+10f), startAngleLast, 180f, true, moonFill)
+                canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStroke)
             }
         }
     }
 }
 
-// --- HELPER FUNCTIONS ---
+// --- MATH FUNCTIONS ---
+fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId): AstroCache {
+    val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
+    val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
+    val startEpochDay = startDate.toEpochDay().toDouble()
+    val daysCount = (endDate.toEpochDay() - startDate.toEpochDay()).toInt() + 2
+
+    val sunRise = DoubleArray(daysCount); val sunSet = DoubleArray(daysCount)
+    val astroRise = DoubleArray(daysCount); val astroSet = DoubleArray(daysCount)
+
+    val blueGreen = Color(0xFF20B2AA); val orange = Color(0xFFFFA500); val neptuneBlue = Color(0xFF6495ED)
+    val planets = listOf(
+        PlanetElements("Mercury", "☿", Color.Gray,   252.25, 4.09233, 0.38710, 0.20563, 7.005,  77.46, 48.33),
+        PlanetElements("Venus",   "♀", Color.White,  181.98, 1.60213, 0.72333, 0.00677, 3.390, 131.53, 76.68),
+        PlanetElements("Mars",    "♂", Color.Red,    355.45, 0.52403, 1.52368, 0.09340, 1.850, 336.04, 49.558),
+        PlanetElements("Jupiter", "♃", orange,        34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
+        PlanetElements("Saturn",  "♄", Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
+        PlanetElements("Uranus",  "⛢", blueGreen,    313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
+        PlanetElements("Neptune", "♆", neptuneBlue,  304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+    )
+    val planetMap = mutableMapOf<String, Triple<DoubleArray, DoubleArray, DoubleArray>>()
+    for (p in planets) planetMap[p.name] = Triple(DoubleArray(daysCount), DoubleArray(daysCount), DoubleArray(daysCount))
+
+    val standardOffset = zoneId.rules.getStandardOffset(nowDate.atStartOfDay(zoneId).toInstant())
+    val offsetHours = standardOffset.totalSeconds / 3600.0
+
+    for (i in 0 until daysCount) {
+        val currentEpochDay = startEpochDay + i
+        val (rise, set) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours)
+        sunRise[i] = rise; sunSet[i] = set
+        val (aRise, aSet) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours, -18.0)
+        astroRise[i] = aRise; astroSet[i] = aSet
+        for (p in planets) {
+            val ev = calculatePlanetEvents(currentEpochDay, lat, lon, offsetHours, p)
+            val arrays = planetMap[p.name]!!
+            arrays.first[i] = ev.rise; arrays.second[i] = ev.transit; arrays.third[i] = ev.set
+        }
+    }
+    return AstroCache(startEpochDay, daysCount, sunRise, sunSet, astroRise, astroSet, planetMap)
+}
 
 fun calculateLST(instant: Instant, lon: Double): String {
     val epochSeconds = instant.epochSecond
     val jd = epochSeconds / 86400.0 + 2440587.5
     val d = jd - 2451545.0
     var gmst = 18.697374558 + 24.06570982441908 * d
-    gmst %= 24.0
-    if (gmst < 0) gmst += 24.0
+    gmst %= 24.0; if (gmst < 0) gmst += 24.0
     var lst = gmst + (lon / 15.0)
-    lst %= 24.0
-    if (lst < 0) lst += 24.0
-    val hours = floor(lst).toInt()
-    val minutes = floor((lst - hours) * 60).toInt()
-    return "%02d:%02d".format(hours, minutes)
+    lst %= 24.0; if (lst < 0) lst += 24.0
+    return "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 }
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = -0.833): Pair<Double, Double> {
-    val jd = 2440587.5 + epochDay + 0.5
-    val n = jd - 2451545.0
-    var L = 280.460 + 0.9856474 * n
-    L %= 360.0
-    if (L < 0) L += 360.0
-    var g = 357.528 + 0.9856003 * n
-    g %= 360.0
-    if (g < 0) g += 360.0
-    val gRad = Math.toRadians(g)
-    val lRad = Math.toRadians(L)
-    val lambda = L + 1.915 * sin(gRad) + 0.020 * sin(2 * gRad)
-    val lambdaRad = Math.toRadians(lambda)
-    val epsilon = 23.439 - 0.0000004 * n
-    val epsilonRad = Math.toRadians(epsilon)
+    val n = (2440587.5 + epochDay + 0.5) - 2451545.0
+    var L = (280.460 + 0.9856474 * n) % 360.0; if (L < 0) L += 360.0
+    var g = (357.528 + 0.9856003 * n) % 360.0; if (g < 0) g += 360.0
+    val lambdaRad = Math.toRadians(L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(2 * Math.toRadians(g)))
+    val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
     val alpha = atan2(cos(epsilonRad) * sin(lambdaRad), cos(lambdaRad))
     val delta = asin(sin(epsilonRad) * sin(lambdaRad))
-    val altRad = Math.toRadians(altitude)
-    val latRad = Math.toRadians(lat)
-    val cosH = (sin(altRad) - sin(latRad) * sin(delta)) / (cos(latRad) * cos(delta))
-
-    if (cosH < -1.0) return Pair(Double.NaN, Double.NaN)
-    if (cosH > 1.0) return Pair(Double.NaN, Double.NaN)
-
-    val H = acos(cosH)
-    val H_hours = Math.toDegrees(H) / 15.0
+    val cosH = (sin(Math.toRadians(altitude)) - sin(Math.toRadians(lat)) * sin(delta)) / (cos(Math.toRadians(lat)) * cos(delta))
+    if (cosH < -1.0 || cosH > 1.0) return Pair(Double.NaN, Double.NaN)
+    val H_hours = Math.toDegrees(acos(cosH)) / 15.0
     val raHours = Math.toDegrees(alpha) / 15.0
-    var GMST0 = 6.697374558 + 0.06570982441908 * n
-    GMST0 %= 24.0
-    if (GMST0 < 0) GMST0 += 24.0
-
+    var GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0; if (GMST0 < 0) GMST0 += 24.0
     var transitUT = raHours - (lon / 15.0) - GMST0
-    while (transitUT < 0) transitUT += 24.0
-    while (transitUT >= 24) transitUT -= 24.0
-
+    while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
     val transitStandard = transitUT + timezoneOffset
-    var rise = transitStandard - H_hours
-    while (rise < 0) rise += 24.0
-    while (rise >= 24) rise -= 24.0
-
-    var set = transitStandard + H_hours
-    while (set < 0) set += 24.0
-    while (set >= 24) set -= 24.0
-
+    var rise = transitStandard - H_hours; while (rise < 0) rise += 24.0; while (rise >= 24) rise -= 24.0
+    var set = transitStandard + H_hours; while (set < 0) set += 24.0; while (set >= 24) set -= 24.0
     return Pair(rise, set)
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
-    val jd = 2440587.5 + epochDay + 0.5
-    val d = jd - 2451545.0
-
-    // Earth Elements
+    val d = (2440587.5 + epochDay + 0.5) - 2451545.0
     val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
-    val Le = Math.toRadians((280.466 + 0.98564736 * d) % 360.0)
-    val Ce = 1.915 * sin(Me) + 0.020 * sin(2 * Me)
-    val trueLongSun = Le + Math.toRadians(Ce)
+    val Le_earth = Math.toRadians((280.466 + 0.98564736 * d) % 360.0) + Math.toRadians(1.915 * sin(Me) + 0.020 * sin(2 * Me)) + Math.PI
     val Re = 1.00014 - 0.01671 * cos(Me) - 0.00014 * cos(2 * Me)
+    val xe = Re * cos(Le_earth); val ye = Re * sin(Le_earth); val ze = 0.0
 
-    val Le_earth = trueLongSun + Math.PI
-    val xe = Re * cos(Le_earth)
-    val ye = Re * sin(Le_earth)
-    val ze = 0.0
-
-    // Planet Elements
-    val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
-    val Np = Math.toRadians(p.N)
-    val ip = Math.toRadians(p.i)
-    val w_bar_p = Math.toRadians(p.w_bar)
-
-    var Mp = Lp - w_bar_p
-
-    var Ep = Mp + p.e * sin(Mp)
-    Ep = Mp + p.e * sin(Ep)
-    Ep = Mp + p.e * sin(Ep)
-
-    val xv = p.a * (cos(Ep) - p.e)
-    val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
+    val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0); val Np = Math.toRadians(p.N)
+    val ip = Math.toRadians(p.i); val w_bar_p = Math.toRadians(p.w_bar); var Mp = Lp - w_bar_p
+    var Ep = Mp + p.e * sin(Mp); Ep = Mp + p.e * sin(Ep); Ep = Mp + p.e * sin(Ep)
+    val xv = p.a * (cos(Ep) - p.e); val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
+    val v = atan2(yv, xv); val u = v + w_bar_p - Np
     val rp = sqrt(xv*xv + yv*yv)
-    val v = atan2(yv, xv)
-
-    val u = v + w_bar_p - Np
-
     val xh = rp * (cos(u) * cos(Np) - sin(u) * sin(Np) * cos(ip))
     val yh = rp * (cos(u) * sin(Np) + sin(u) * cos(Np) * cos(ip))
     val zh = rp * (sin(u) * sin(ip))
-
-    val xg = xh - xe
-    val yg = yh - ye
-    val zg = zh - ze
-
+    val xg = xh - xe; val yg = yh - ye; val zg = zh - ze
     val ecl = Math.toRadians(23.439 - 0.0000004 * d)
-    val xeq = xg
-    val yeq = yg * cos(ecl) - zg * sin(ecl)
-    val zeq = yg * sin(ecl) + zg * cos(ecl)
-
-    val raRad = atan2(yeq, xeq)
-    val raHours = Math.toDegrees(raRad) / 15.0
+    val xeq = xg; val yeq = yg * cos(ecl) - zg * sin(ecl); val zeq = yg * sin(ecl) + zg * cos(ecl)
+    val raHours = Math.toDegrees(atan2(yeq, xeq)) / 15.0
     val decRad = atan2(zeq, sqrt(xeq*xeq + yeq*yeq))
 
-    var GMST0 = 6.697374558 + 0.06570982441908 * d
-    GMST0 %= 24.0
-    if (GMST0 < 0) GMST0 += 24.0
-
-    var transitUT = raHours - (lon / 15.0) - GMST0
-    while (transitUT < 0) transitUT += 24.0
-    while (transitUT >= 24) transitUT -= 24.0
-
-    var transitStandard = transitUT + timezoneOffset
-    while (transitStandard < 0) transitStandard += 24.0
-    while (transitStandard >= 24) transitStandard -= 24.0
-
-    val altRad = Math.toRadians(-0.5667)
-    val latRad = Math.toRadians(lat)
-    val cosH = (sin(altRad) - sin(latRad) * sin(decRad)) / (cos(latRad) * cos(decRad))
-
-    var rise = Double.NaN
-    var set = Double.NaN
+    var GMST0 = (6.697374558 + 0.06570982441908 * d) % 24.0; if (GMST0 < 0) GMST0 += 24.0
+    var transitUT = raHours - (lon / 15.0) - GMST0; while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
+    val transitStandard = transitUT + timezoneOffset
+    val cosH = (sin(Math.toRadians(-0.5667)) - sin(Math.toRadians(lat)) * sin(decRad)) / (cos(Math.toRadians(lat)) * cos(decRad))
 
     if (cosH >= -1.0 && cosH <= 1.0) {
-        val H = acos(cosH)
-        val H_hours = Math.toDegrees(H) / 15.0
-
-        rise = transitStandard - H_hours
-        set = transitStandard + H_hours
-
-        while (rise < 0) rise += 24.0
-        while (rise >= 24) rise -= 24.0
-        while (set < 0) set += 24.0
-        while (set >= 24) set -= 24.0
+        val H_hours = Math.toDegrees(acos(cosH)) / 15.0
+        var rise = transitStandard - H_hours; var set = transitStandard + H_hours
+        while (rise < 0) rise += 24.0; while (rise >= 24) rise -= 24.0
+        while (set < 0) set += 24.0; while (set >= 24) set -= 24.0
+        var tr = transitStandard; while(tr < 0) tr+=24.0; while(tr>=24.0) tr-=24.0
+        return PlanetEvents(rise, tr, set)
     }
-
-    return PlanetEvents(rise, transitStandard, set)
+    return PlanetEvents(Double.NaN, Double.NaN, Double.NaN)
 }
 
-// --- MOON FUNCTIONS ---
-
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
-    val d = epochDay - 2451545.0
-
+    val d = (2440587.5 + epochDay) - 2451545.0
     val Ms = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
     val Ls = Math.toRadians((280.466 + 0.98564736 * d) % 360.0)
-    val Cs = 1.915 * sin(Ms) + 0.020 * sin(2 * Ms)
-    val trueLongSun = Math.toDegrees(Ls) + Cs
-
+    val trueLongSun = Math.toDegrees(Ls) + (1.915 * sin(Ms) + 0.020 * sin(2 * Ms))
     val L = (218.316 + 13.176396 * d) % 360.0
     val M = Math.toRadians((134.963 + 13.064993 * d) % 360.0)
-
     val lambda = L + 6.289 * sin(M)
-
-    var diff = (lambda - trueLongSun) % 360.0
-    if (diff < 0) diff += 360.0
+    var diff = (lambda - trueLongSun) % 360.0; if (diff < 0) diff += 360.0
     return diff
 }
