@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource // Added Import
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -186,7 +187,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         val localTime = LocalTime.ofNanoOfDay(nanos)
 
         // Find Standard Offset (ignoring DST)
-        // We use a reference UTC instant to look up the rule, then get the standard offset
         val refInstant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant()
         val standardOffset = zoneId.rules.getStandardOffset(refInstant)
 
@@ -719,41 +719,39 @@ fun getOrreryPlanets(): List<PlanetElements> {
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var aboutText by remember { mutableStateOf("Loading...") }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            try {
-                val inputStream = context.assets.open("about.txt")
-                val reader = BufferedReader(InputStreamReader(inputStream))
-                aboutText = reader.readText()
-                reader.close()
-            } catch (e: Exception) {
-                aboutText = "File 'about.txt' not found in assets.\n\nPlease add a file named 'about.txt' to your project's 'src/main/assets/' folder."
-            }
-        }
-    }
+    val versionName = try {
+        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        pInfo.versionName
+    } catch (e: Exception) { "1.0" }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.DarkGray),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 600.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp, max = 700.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("About", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                Text("Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold))
+                Text("Version $versionName", style = TextStyle(color = Color.LightGray, fontSize = 14.sp))
+
                 Spacer(modifier = Modifier.height(16.dp))
-                Box(modifier = Modifier.weight(1f).background(Color.Black).padding(8.dp)) {
-                    val scrollState = rememberScrollState()
-                    Text(
-                        text = aboutText,
-                        style = TextStyle(color = Color.LightGray, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                        modifier = Modifier.fillMaxSize().verticalScroll(scrollState)
-                    )
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .background(Color(0xFF121212), shape = RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    AboutSection(stringResource(R.string.about_transits_title), stringResource(R.string.about_transits_desc))
+                    AboutSection(stringResource(R.string.about_schematic_title), stringResource(R.string.about_schematic_desc))
+                    AboutSection(stringResource(R.string.about_scale_title), stringResource(R.string.about_scale_desc))
+                    AboutSection(stringResource(R.string.about_controls_title), stringResource(R.string.about_controls_desc))
                 }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
                     Text("OK", color = Color.Black)
@@ -761,6 +759,14 @@ fun AboutDialog(onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun AboutSection(title: String, body: String) {
+    Text(title, style = TextStyle(color = Color(0xFF87CEFA), fontSize = 16.sp, fontWeight = FontWeight.Bold))
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(body, style = TextStyle(color = Color.LightGray, fontSize = 13.sp))
+    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @Composable

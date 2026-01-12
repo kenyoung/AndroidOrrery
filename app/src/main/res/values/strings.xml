@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">Orrery</string>
+
+    <string name="about_transits_title">Planet Transits</string>
+    <string name="about_transits_desc">This display shows information about the night sky for the next year. It is inspired by, but significantly different than, the "Skygazer's Almanac" published yearly by Sky and Telescope magazine.The display has two different time axes: The vertical axis shows time increasing upwards, starting from the current time at the display\'s bottom, and ending one year from now at the display\'s top.The horizontal axis shows standard timezone time (Daylight Savings Time is ignored) and the time ranges from the time of the year\'s earliest sunset (left side) through the latest sunrise (right side).Midnight is at the center. The boarder of the display shows the sunset and sunrise times. Twilight is shown as blue shading. Lines are drawn showing the rise, transit and setting times for the planets. The Moon phase is shown right of the sunrise line.\n\nFeatures:\n\u2022 Sun &amp; Planet Rise, Transit, and Set times.\n\u2022 Civil, Nautical, and Astronomical twilight gradients.\n\u2022 Moon phases (New, Full, Quarters) displayed at their exact times.</string>
+
+    <string name="about_schematic_title">Schematic Orrery</string>
+    <string name="about_schematic_desc">A conceptual view of the solar system looking down from the North Ecliptic Pole.\n\n\u2022 Planets orbit counter-clockwise.\n\u2022 Orbits are equally spaced circles (not ellipses) for clarity.\n\u2022 Includes a schematic representation of the Moon\'s position relative to Earth.</string>
+
+    <string name="about_scale_title">To-Scale Orrery</string>
+    <string name="about_scale_desc">A physically accurate visualization using Keplerian elements.\n\n\u2022 Orbits are drawn as true ellipses.\n\u2022 Pinch-to-zoom to explore the inner solar system or zoom out to Neptune.</string>
+
+    <string name="about_controls_title">Controls</string>
+    <string name="about_controls_desc">\u2022 Tap \'Options\' (three dots) to switch views or change Location/Date.\n\u2022 Use the bottom bar to animate time forward (+1, +10, +100 years).\n\u2022 \'Reset\' returns to live phone time.</string>
 </resources>
