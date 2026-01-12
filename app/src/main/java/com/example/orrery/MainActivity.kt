@@ -36,7 +36,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.res.stringResource // Added Import
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -750,6 +750,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     AboutSection(stringResource(R.string.about_schematic_title), stringResource(R.string.about_schematic_desc))
                     AboutSection(stringResource(R.string.about_scale_title), stringResource(R.string.about_scale_desc))
                     AboutSection(stringResource(R.string.about_controls_title), stringResource(R.string.about_controls_desc))
+                    AboutSection(stringResource(R.string.about_bugs_title), stringResource(R.string.about_bugs_desc))
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -827,17 +828,19 @@ fun LocationDialog(
                     Text("Use phone location", color = Color.White)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                if (!usePhone) {
-                    Text("Latitude (D M S)", color = Color.LightGray, fontSize = 12.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        DmsInput(latDeg, { latDeg = it }, "Deg"); DmsInput(latMin, { latMin = it }, "Min"); DmsInput(latSec, { latSec = it }, "Sec")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Longitude (D M S)", color = Color.LightGray, fontSize = 12.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        DmsInput(lonDeg, { lonDeg = it }, "Deg"); DmsInput(lonMin, { lonMin = it }, "Min"); DmsInput(lonSec, { lonSec = it }, "Sec")
-                    }
+
+                val contentAlpha = if (usePhone) 0.38f else 1f
+
+                Text("Latitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    DmsInput(latDeg, { latDeg = it }, "Deg", !usePhone); DmsInput(latMin, { latMin = it }, "Min", !usePhone); DmsInput(latSec, { latSec = it }, "Sec", !usePhone)
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Longitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    DmsInput(lonDeg, { lonDeg = it }, "Deg", !usePhone); DmsInput(lonMin, { lonMin = it }, "Min", !usePhone); DmsInput(lonSec, { lonSec = it }, "Sec", !usePhone)
+                }
+
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -865,11 +868,11 @@ fun DateDialog(
             return
         }
         try {
-            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+            val formatter = DateTimeFormatter.ofPattern("d/M/yyyy")
             val parsedDate = LocalDate.parse(dateString, formatter)
             onConfirm(false, parsedDate)
         } catch (e: Exception) {
-            errorMsg = "Invalid Date. Use DD/MM/YYYY"
+            errorMsg = "Invalid Date. Use D/M/YYYY"
         }
     }
 
@@ -883,19 +886,19 @@ fun DateDialog(
                     Text("Use phone time", color = Color.White)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                if (!usePhone) {
-                    OutlinedTextField(
-                        value = dateString,
-                        onValueChange = { dateString = it },
-                        label = { Text("DD/MM/YYYY", color = Color.Gray) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, unfocusedBorderColor = Color.Gray, cursorColor = Color.White)
-                    )
-                    Text("Format DD/MM/YYYY", color = Color.LightGray, fontSize = 12.sp, modifier = Modifier.align(Alignment.Start))
-                }
+
+                OutlinedTextField(
+                    value = dateString,
+                    onValueChange = { dateString = it },
+                    label = { Text("D/M/YYYY", color = Color.Gray) },
+                    singleLine = true,
+                    enabled = !usePhone,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, unfocusedBorderColor = Color.Gray, cursorColor = Color.White)
+                )
+
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -908,12 +911,13 @@ fun DateDialog(
 }
 
 @Composable
-fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String) {
+fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String, enabled: Boolean) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label, color = Color.Gray, fontSize = 10.sp) },
         singleLine = true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.width(80.dp),
         textStyle = TextStyle(color = Color.White, fontSize = 14.sp),

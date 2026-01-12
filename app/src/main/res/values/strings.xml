@@ -11,5 +11,6 @@
     <string name="about_scale_desc">A physically accurate visualization using Keplerian elements.\n\n\u2022 Orbits are drawn as true ellipses.\n\u2022 Pinch-to-zoom to explore the inner solar system or zoom out to Neptune.</string>
 
     <string name="about_controls_title">Controls</string>
-    <string name="about_controls_desc">\u2022 Tap \'Options\' (three dots) to switch views or change Location/Date.\n\u2022 Use the bottom bar to animate time forward (+1, +10, +100 years).\n\u2022 \'Reset\' returns to live phone time.</string>
-</resources>
+    <string name="about_controls_desc">\u2022 Tap \'Options\' (three dots) to switch views or change Location/Date.\n\u2022 Use the bottom bar buttons to animate time forward (+1, +10, +100 years).\n\u2022 \'Reset\' returns to live phone time.</string>
+    <string name="about_bugs_title">Report Bugs Etc.</string>
+    <string name="about_bugs_desc">Send bug reports, suggestions for improvements and in-app disappointments to orrery.app.help\@gmail.com .</string></resources>
