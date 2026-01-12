@@ -422,6 +422,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 fun ScaleOrrery(epochDay: Double) {
     val planetList = remember { getOrreryPlanets() }
     var scale by remember { mutableStateOf(1f) }
+    var hasZoomed by remember { mutableStateOf(false) }
 
     val baseFitAU = 31.25f
     val maxScale = baseFitAU / 0.47f
@@ -429,7 +430,7 @@ fun ScaleOrrery(epochDay: Double) {
 
     val textPaint = remember {
         Paint().apply {
-            color = android.graphics.Color.WHITE
+            color = android.graphics.Color.BLACK
             textSize = 30f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
@@ -452,6 +453,7 @@ fun ScaleOrrery(epochDay: Double) {
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->
                     scale = (scale * zoom).coerceIn(minScale, maxScale)
+                    if (zoom != 1f) hasZoomed = true
                 }
             }
     ) {
@@ -519,21 +521,11 @@ fun ScaleOrrery(epochDay: Double) {
                 val px = cx + (x_pos * currentPixelsPerAU).toFloat()
                 val py = cy - (y_pos * currentPixelsPerAU).toFloat()
 
-                drawCircle(color = p.color, radius = 12f, center = Offset(px, py))
+                drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
 
-                val dist = sqrt(x_pos*x_pos + y_pos*y_pos)
-                if (dist > 0) {
-                    val unitX = x_pos / dist
-                    val unitY = y_pos / dist
-                    val symbolOffset = 45f * 0.6f
-                    val tx = px - (unitX * symbolOffset).toFloat()
-                    val ty = py + (unitY * symbolOffset).toFloat()
-
-                    val textY = ty - ((textPaint.descent() + textPaint.ascent()) / 2)
-                    textPaint.color = p.color.toArgb()
-                    drawIntoCanvas { canvas ->
-                        canvas.nativeCanvas.drawText(p.symbol, tx, textY, textPaint)
-                    }
+                val textOffset = (textPaint.descent() + textPaint.ascent()) / 2
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint)
                 }
             }
 
@@ -554,6 +546,17 @@ fun ScaleOrrery(epochDay: Double) {
                 canvas.nativeCanvas.drawText("To Vernal Equinox", cx, arrowTipY - 10f, labelPaint)
             }
         }
+
+        if (!hasZoomed) {
+            Text(
+                text = "Pinch to zoom",
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
+                style = TextStyle(fontSize = 14.sp)
+            )
+        }
     }
 }
 
@@ -564,7 +567,7 @@ fun SchematicOrrery(epochDay: Double) {
 
     val textPaint = remember {
         Paint().apply {
-            color = android.graphics.Color.WHITE
+            color = android.graphics.Color.BLACK
             textSize = 30f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
@@ -590,7 +593,7 @@ fun SchematicOrrery(epochDay: Double) {
 
         val topPadding = 60f
         val maxRadius = (minDim / 2f) - topPadding
-        val orbitStep = maxRadius / 8f
+        val orbitStep = (maxRadius / 8f) * 1.063f
 
         drawCircle(color = Color.Yellow, radius = 12f, center = Offset(cx, cy))
 
@@ -621,13 +624,14 @@ fun SchematicOrrery(epochDay: Double) {
             val px = cx - (radius * sin(helioLong)).toFloat()
             val py = cy - (radius * cos(helioLong)).toFloat()
 
-            if (p.name == "Earth") {
-                val earthTextY = py - ((textPaint.descent() + textPaint.ascent()) / 2)
-                textPaint.color = p.color.toArgb()
-                drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawText(p.symbol, px, earthTextY, textPaint)
-                }
+            drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
 
+            val textOffset = (textPaint.descent() + textPaint.ascent()) / 2
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint)
+            }
+
+            if (p.name == "Earth") {
                 val moonOrbitRadius = orbitStep / 2f
                 drawCircle(color = Color.Gray, radius = moonOrbitRadius, center = Offset(px, py), style = Stroke(width = 1f))
 
@@ -641,20 +645,8 @@ fun SchematicOrrery(epochDay: Double) {
                 val mx = px + (moonOrbitRadius * cos(moonAngleStandard)).toFloat()
                 val my = py - (moonOrbitRadius * sin(moonAngleStandard)).toFloat()
 
-                drawCircle(color = Color.Gray, radius = 5f, center = Offset(mx, my))
-
-            } else {
-                drawCircle(color = p.color, radius = 12f, center = Offset(px, py))
-
-                val textRadius = radius - 25f
-                val tx = cx - (textRadius * sin(helioLong)).toFloat() // Also CCW
-                val ty = cy - (textRadius * cos(helioLong)).toFloat()
-                val textY = ty - ((textPaint.descent() + textPaint.ascent()) / 2)
-
-                textPaint.color = p.color.toArgb()
-                drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawText(p.symbol, tx, textY, textPaint)
-                }
+                // Changed Moon color to White (twice as bright as Gray) and radius to 6.25f (25% larger than 5f)
+                drawCircle(color = Color.White, radius = 6.25f, center = Offset(mx, my))
             }
         }
 
