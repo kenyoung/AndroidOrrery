@@ -54,6 +54,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -172,16 +174,45 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var animationTargetEpoch by remember { mutableStateOf(0.0) }
     var animationStep by remember { mutableStateOf(0.0) }
 
+    // Use System Zone for everything
+    val zoneId = ZoneId.systemDefault()
+
+    // Helper to calculate Instant from Manual Epoch (Local Standard Time)
+    fun getInstantFromManual(epochDay: Double): Instant {
+        val days = epochDay.toLong()
+        val frac = epochDay - days
+        val nanos = (frac * 86_400_000_000_000L).toLong()
+        val localDate = LocalDate.ofEpochDay(days)
+        val localTime = LocalTime.ofNanoOfDay(nanos)
+
+        // Find Standard Offset (ignoring DST)
+        // We use a reference UTC instant to look up the rule, then get the standard offset
+        val refInstant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant()
+        val standardOffset = zoneId.rules.getStandardOffset(refInstant)
+
+        return LocalDateTime.of(localDate, localTime).toInstant(standardOffset)
+    }
+
+    // Helper to calculate Manual Epoch from Instant (Local Standard Time)
+    fun getManualFromInstant(inst: Instant): Double {
+        val standardOffset = zoneId.rules.getStandardOffset(inst)
+        val localDateTime = inst.atOffset(standardOffset).toLocalDateTime()
+        val days = localDateTime.toLocalDate().toEpochDay()
+        val sec = localDateTime.toLocalTime().toSecondOfDay()
+        val nano = localDateTime.toLocalTime().nano
+        return days + ((sec + (nano / 1_000_000_000.0)) / 86400.0)
+    }
+
     // Animation Loop
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             while (abs(manualEpochDay - animationTargetEpoch) > animationStep) {
                 manualEpochDay += animationStep
-                currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
+                currentInstant = getInstantFromManual(manualEpochDay)
                 delay(12L) // ~80 frames per second
             }
             manualEpochDay = animationTargetEpoch
-            currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
+            currentInstant = getInstantFromManual(manualEpochDay)
             isAnimating = false
         }
     }
@@ -208,12 +239,11 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 delay(millisUntilNextMinute)
             }
         } else if (!usePhoneTime && !isAnimating) {
-            currentInstant = Instant.ofEpochSecond((manualEpochDay * 86400).toLong())
+            currentInstant = getInstantFromManual(manualEpochDay)
         }
     }
 
     // Calculation Loop
-    val zoneId = ZoneId.systemDefault()
     val effectiveDate = currentInstant.atZone(zoneId).toLocalDate()
 
     val cache by produceState<AstroCache?>(initialValue = null, key1 = currentScreen, key2 = effectiveDate.toEpochDay()) {
@@ -267,11 +297,11 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     fun startAnimation(years: Int, step: Double) {
         usePhoneTime = false
         if (!isAnimating) {
-            manualEpochDay = currentInstant.atZone(ZoneId.of("UTC")).toLocalDate().toEpochDay().toDouble()
+            manualEpochDay = getManualFromInstant(currentInstant)
         }
         val currentLD = LocalDate.ofEpochDay(manualEpochDay.toLong())
         val targetLD = currentLD.plusYears(years.toLong())
-        animationTargetEpoch = targetLD.toEpochDay().toDouble()
+        animationTargetEpoch = targetLD.toEpochDay().toDouble() + (manualEpochDay - manualEpochDay.toLong())
         animationStep = step
         isAnimating = true
     }
@@ -403,7 +433,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 
                 when (currentScreen) {
                     Screen.TRANSITS -> {
-                        if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!)
+                        if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId)
                     }
                     Screen.SCHEMATIC -> {
                         SchematicOrrery(displayEpoch)
@@ -491,8 +521,9 @@ fun ScaleOrrery(epochDay: Double) {
                     val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
                     val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
 
-                    val px = cx + (x_ecl * currentPixelsPerAU).toFloat()
-                    val py = cy - (y_ecl * currentPixelsPerAU).toFloat()
+                    // ROTATED 90 DEG: Map (x, y) -> (-y, x) for screen coordinates
+                    val px = cx - (y_ecl * currentPixelsPerAU).toFloat()
+                    val py = cy - (x_ecl * currentPixelsPerAU).toFloat()
 
                     if (angleIdx == 0) orbitPath.moveTo(px, py) else orbitPath.lineTo(px, py)
                 }
@@ -518,8 +549,9 @@ fun ScaleOrrery(epochDay: Double) {
                 val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
                 val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
 
-                val px = cx + (x_pos * currentPixelsPerAU).toFloat()
-                val py = cy - (y_pos * currentPixelsPerAU).toFloat()
+                // ROTATED 90 DEG: Map (x, y) -> (-y, x) for screen coordinates
+                val px = cx - (y_pos * currentPixelsPerAU).toFloat()
+                val py = cy - (x_pos * currentPixelsPerAU).toFloat()
 
                 drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
 
@@ -645,7 +677,6 @@ fun SchematicOrrery(epochDay: Double) {
                 val mx = px + (moonOrbitRadius * cos(moonAngleStandard)).toFloat()
                 val my = py - (moonOrbitRadius * sin(moonAngleStandard)).toFloat()
 
-                // Changed Moon color to White (twice as bright as Gray) and radius to 6.25f (25% larger than 5f)
                 drawCircle(color = Color.White, radius = 6.25f, center = Offset(mx, my))
             }
         }
@@ -890,7 +921,7 @@ fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String) {
 
 // --- RENDERING ---
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache) {
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zoneId: ZoneId) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
@@ -899,7 +930,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache) {
         val drawingWidth = w - paddingLeft - paddingRight
         val centerX = paddingLeft + (drawingWidth / 2f)
 
-        val zoneId = ZoneId.systemDefault()
         val standardOffset = zoneId.rules.getStandardOffset(now)
         val offsetHours = standardOffset.totalSeconds / 3600.0
 
