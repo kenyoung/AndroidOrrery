@@ -246,7 +246,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     // Calculation Loop
     val effectiveDate = currentInstant.atZone(zoneId).toLocalDate()
 
-    val cache by produceState<AstroCache?>(initialValue = null, key1 = currentScreen, key2 = effectiveDate.toEpochDay()) {
+    val cache by produceState<AstroCache?>(initialValue = null, currentScreen, effectiveDate.toEpochDay(), effectiveLat, effectiveLon) {
         if (currentScreen == Screen.TRANSITS) {
             value = withContext(Dispatchers.Default) {
                 calculateCache(effectiveDate, effectiveLat, effectiveLon, zoneId)
@@ -330,9 +330,30 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                         Icon(Icons.Default.MoreVert, "Options", tint = Color.White)
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(text = { Text("Planet Transits") }, onClick = { currentScreen = Screen.TRANSITS; showMenu = false })
-                        DropdownMenuItem(text = { Text("Schematic Orrery") }, onClick = { currentScreen = Screen.SCHEMATIC; showMenu = false })
-                        DropdownMenuItem(text = { Text("To-scale Orrery") }, onClick = { currentScreen = Screen.SCALE; showMenu = false })
+                        DropdownMenuItem(
+                            text = { Text("Planet Transits") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.TRANSITS
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Schematic Orrery") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.SCHEMATIC
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("To-scale Orrery") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.SCALE
+                                showMenu = false
+                            }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
                         DropdownMenuItem(text = { Text("Date") }, onClick = { showMenu = false; showDateDialog = true })
@@ -433,7 +454,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 
                 when (currentScreen) {
                     Screen.TRANSITS -> {
-                        if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId)
+                        if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId, usePhoneLocation && usePhoneTime)
                     }
                     Screen.SCHEMATIC -> {
                         SchematicOrrery(displayEpoch)
@@ -470,7 +491,7 @@ fun ScaleOrrery(epochDay: Double) {
     val labelPaint = remember {
         Paint().apply {
             color = android.graphics.Color.WHITE
-            textSize = 24f
+            textSize = 40f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
@@ -497,24 +518,27 @@ fun ScaleOrrery(epochDay: Double) {
             val pixelsPerAU = (minDim / 2f) / baseFitAU
             val currentPixelsPerAU = pixelsPerAU * scale
 
-            drawCircle(color = Color.Yellow, radius = 12f, center = Offset(cx, cy))
+            // Draw Sun
+            drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
+            val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
+            }
 
             val d = (2440587.5 + epochDay) - 2451545.0
 
             for (p in planetList) {
+                // Draw Orbit Path
                 val orbitPath = androidx.compose.ui.graphics.Path()
                 for (angleIdx in 0..100) {
                     val M_sim = (angleIdx / 100.0) * 2.0 * Math.PI
-                    var E = M_sim + p.e * sin(M_sim)
-                    for (k in 0..5) { E += (M_sim - (E - p.e * sin(E))) / (1 - p.e * cos(E)) }
+                    val E = solveKepler(M_sim, p.e)
 
                     val xv = p.a * (cos(E) - p.e)
                     val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
                     val v = atan2(yv, xv)
 
-                    val w_bar = Math.toRadians(p.w_bar)
-                    val N = Math.toRadians(p.N)
-                    val i_rad = Math.toRadians(p.i)
+                    val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
                     val u = v + w_bar - N
                     val r = p.a * (1 - p.e * cos(E))
 
@@ -530,26 +554,23 @@ fun ScaleOrrery(epochDay: Double) {
                 orbitPath.close()
                 drawPath(orbitPath, color = Color.Gray, style = Stroke(width = 2f))
 
+                // Draw Planet
                 val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
                 val w_bar_curr = Math.toRadians(p.w_bar)
                 val M_curr = Lp - w_bar_curr
-
-                var E_curr = M_curr + p.e * sin(M_curr)
-                for (k in 0..5) { E_curr += (M_curr - (E_curr - p.e * sin(E_curr))) / (1 - p.e * cos(E_curr)) }
+                val E_curr = solveKepler(M_curr, p.e)
 
                 val xv_curr = p.a * (cos(E_curr) - p.e)
                 val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
                 val v_curr = atan2(yv_curr, xv_curr)
 
-                val N_curr = Math.toRadians(p.N)
-                val i_curr = Math.toRadians(p.i)
+                val N_curr = Math.toRadians(p.N); val i_curr = Math.toRadians(p.i)
                 val u_curr = v_curr + w_bar_curr - N_curr
                 val r_curr = p.a * (1 - p.e * cos(E_curr))
 
                 val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
                 val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
 
-                // ROTATED 90 DEG: Map (x, y) -> (-y, x) for screen coordinates
                 val px = cx - (y_pos * currentPixelsPerAU).toFloat()
                 val py = cy - (x_pos * currentPixelsPerAU).toFloat()
 
@@ -561,21 +582,38 @@ fun ScaleOrrery(epochDay: Double) {
                 }
             }
 
-            val arrowDist = 32.0
-            val ay = cy - (arrowDist * currentPixelsPerAU).toFloat()
-            val arrowTipY = ay - 40f
+            // Arrow at 1:30 position (45 degrees, top-right)
+            val arrowDistAU = 36.0
+            val distPx = arrowDistAU * currentPixelsPerAU
+            val angle = Math.toRadians(45.0)
+            val ax = cx + (distPx * sin(angle)).toFloat()
+            // Shift down 1.5 * diameter (36f) = 54f
+            val ay = cy - (distPx * cos(angle)).toFloat() + 54f
 
-            drawLine(color = Color.White, start = Offset(cx, ay), end = Offset(cx, arrowTipY), strokeWidth = 2f)
+            // Arrow points straight up
+            val arrowTipY = ay - 80f
+
+            val labelLine1 = "To Vernal"
+            val labelLine2 = "Equinox"
+            val w1 = labelPaint.measureText(labelLine1)
+            val w2 = labelPaint.measureText(labelLine2)
+            val maxHalfWidth = max(w1, w2) / 2f
+
+            // Clamp to right edge padding 10f
+            val textX = if (ax + maxHalfWidth > w - 10f) { w - 10f - maxHalfWidth } else { ax }
+
+            drawLine(color = Color.White, start = Offset(ax, ay), end = Offset(ax, arrowTipY), strokeWidth = 4f)
             val arrowHeadPath = Path().apply {
-                moveTo(cx, arrowTipY - 5f)
-                lineTo(cx - 5f, arrowTipY + 5f)
-                lineTo(cx + 5f, arrowTipY + 5f)
+                moveTo(ax, arrowTipY - 10f)
+                lineTo(ax - 10f, arrowTipY + 10f)
+                lineTo(ax + 10f, arrowTipY + 10f)
                 close()
             }
             val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-                canvas.nativeCanvas.drawText("To Vernal Equinox", cx, arrowTipY - 10f, labelPaint)
+                canvas.nativeCanvas.drawText(labelLine2, textX, arrowTipY - 20f, labelPaint)
+                canvas.nativeCanvas.drawText(labelLine1, textX, arrowTipY - 65f, labelPaint)
             }
         }
 
@@ -609,7 +647,7 @@ fun SchematicOrrery(epochDay: Double) {
     val labelPaint = remember {
         Paint().apply {
             color = android.graphics.Color.WHITE
-            textSize = 24f
+            textSize = 40f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
@@ -627,7 +665,11 @@ fun SchematicOrrery(epochDay: Double) {
         val maxRadius = (minDim / 2f) - topPadding
         val orbitStep = (maxRadius / 8f) * 1.063f
 
-        drawCircle(color = Color.Yellow, radius = 12f, center = Offset(cx, cy))
+        drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
+        val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
+        drawIntoCanvas { canvas ->
+            canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
+        }
 
         val d = (2440587.5 + epochDay) - 2451545.0
 
@@ -640,12 +682,7 @@ fun SchematicOrrery(epochDay: Double) {
             val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
             val w_bar = Math.toRadians(p.w_bar)
             val M = Lp - w_bar
-
-            var E = M + p.e * sin(M)
-            for (k in 0..5) {
-                val dE = (M - (E - p.e * sin(E))) / (1 - p.e * cos(E))
-                E += dE
-            }
+            val E = solveKepler(M, p.e) // Use Helper
 
             val xv = p.a * (cos(E) - p.e)
             val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
@@ -681,21 +718,37 @@ fun SchematicOrrery(epochDay: Double) {
             }
         }
 
+        // Arrow at 1:30 position (45 degrees, top-right)
         val outerRadius = orbitStep * 8f
-        val arrowBaseY = cy - outerRadius - 15f
-        val arrowTipY = arrowBaseY - 40f
+        val dist = outerRadius + 60f
+        val angle = Math.toRadians(45.0)
+        val ax = cx + (dist * sin(angle)).toFloat()
+        val ay = cy - (dist * cos(angle)).toFloat()
 
-        drawLine(color = Color.White, start = Offset(cx, arrowBaseY), end = Offset(cx, arrowTipY), strokeWidth = 2f)
+        // Arrow points straight up
+        val arrowTipY = ay - 80f
+
+        val labelLine1 = "To Vernal"
+        val labelLine2 = "Equinox"
+        val w1 = labelPaint.measureText(labelLine1)
+        val w2 = labelPaint.measureText(labelLine2)
+        val maxHalfWidth = max(w1, w2) / 2f
+
+        // Clamp to right edge padding 10f
+        val textX = if (ax + maxHalfWidth > w - 10f) { w - 10f - maxHalfWidth } else { ax }
+
+        drawLine(color = Color.White, start = Offset(ax, ay), end = Offset(ax, arrowTipY), strokeWidth = 4f)
         val arrowHeadPath = Path().apply {
-            moveTo(cx, arrowTipY - 5f)
-            lineTo(cx - 5f, arrowTipY + 5f)
-            lineTo(cx + 5f, arrowTipY + 5f)
+            moveTo(ax, arrowTipY - 10f)
+            lineTo(ax - 10f, arrowTipY + 10f)
+            lineTo(ax + 10f, arrowTipY + 10f)
             close()
         }
         val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
         drawIntoCanvas { canvas ->
             canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-            canvas.nativeCanvas.drawText("To Vernal Equinox", cx, arrowTipY - 10f, labelPaint)
+            canvas.nativeCanvas.drawText(labelLine2, textX, arrowTipY - 20f, labelPaint)
+            canvas.nativeCanvas.drawText(labelLine1, textX, arrowTipY - 65f, labelPaint)
         }
     }
 }
@@ -830,15 +883,16 @@ fun LocationDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val contentAlpha = if (usePhone) 0.38f else 1f
+                val inputColor = if (usePhone) Color.Gray else Color.Green
 
                 Text("Latitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DmsInput(latDeg, { latDeg = it }, "Deg", !usePhone); DmsInput(latMin, { latMin = it }, "Min", !usePhone); DmsInput(latSec, { latSec = it }, "Sec", !usePhone)
+                    DmsInput(latDeg, { latDeg = it }, "Deg", !usePhone, inputColor); DmsInput(latMin, { latMin = it }, "Min", !usePhone, inputColor); DmsInput(latSec, { latSec = it }, "Sec", !usePhone, inputColor)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Longitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DmsInput(lonDeg, { lonDeg = it }, "Deg", !usePhone); DmsInput(lonMin, { lonMin = it }, "Min", !usePhone); DmsInput(lonSec, { lonSec = it }, "Sec", !usePhone)
+                    DmsInput(lonDeg, { lonDeg = it }, "Deg", !usePhone, inputColor); DmsInput(lonMin, { lonMin = it }, "Min", !usePhone, inputColor); DmsInput(lonSec, { lonSec = it }, "Sec", !usePhone, inputColor)
                 }
 
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
@@ -887,15 +941,17 @@ fun DateDialog(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val inputColor = if (usePhone) Color.Gray else Color.Green
+
                 OutlinedTextField(
                     value = dateString,
                     onValueChange = { dateString = it },
-                    label = { Text("D/M/YYYY", color = Color.Gray) },
+                    label = { Text("D/M/YYYY", color = inputColor) },
                     singleLine = true,
                     enabled = !usePhone,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                    textStyle = TextStyle(color = inputColor, fontSize = 16.sp),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, unfocusedBorderColor = Color.Gray, cursorColor = Color.White)
                 )
 
@@ -911,16 +967,16 @@ fun DateDialog(
 }
 
 @Composable
-fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String, enabled: Boolean) {
+fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String, enabled: Boolean, textColor: Color) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = Color.Gray, fontSize = 10.sp) },
+        label = { Text(label, color = textColor, fontSize = 10.sp) },
         singleLine = true,
         enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.width(80.dp),
-        textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+        textStyle = TextStyle(color = textColor, fontSize = 14.sp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color.White,
             unfocusedBorderColor = Color.Gray,
@@ -931,7 +987,7 @@ fun DmsInput(value: String, onValueChange: (String) -> Unit, label: String, enab
 
 // --- RENDERING ---
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zoneId: ZoneId) {
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zoneId: ZoneId, isLive: Boolean) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
@@ -949,7 +1005,13 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
         val solsticeDate = ZonedDateTime.of(year, solsticeMonth, solsticeDay, 12, 0, 0, 0, zoneId)
         val (solsticeRise, solsticeSet) = calculateSunTimes(solsticeDate.toLocalDate().toEpochDay().toDouble(), lat, lon, offsetHours)
 
-        val nMaxDuration = (solsticeRise + (24.0 - solsticeSet))
+        // FIX: Handle Arctic latitudes where solstice times are NaN (Sun never rises)
+        val nMaxDuration = if (solsticeRise.isNaN() || solsticeSet.isNaN()) {
+            24.0
+        } else {
+            (solsticeRise + (24.0 - solsticeSet))
+        }
+
         val pixelsPerHour = drawingWidth / nMaxDuration
         val textHeight = 40f
         val textY = 30f
@@ -970,6 +1032,13 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val epochDay = date.toEpochDay().toDouble()
             val (_, setTimePrev) = cache.getSunTimes(epochDay - 1.0, false)
             return (centerX + ((setTimePrev - 24.0) * pixelsPerHour)).toFloat()
+        }
+
+        // Helper to normalize time to [-12, +12] relative to midnight
+        fun normalizeGraphTime(time: Double): Double {
+            var diff = time - 24.0
+            if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
+            return diff
         }
 
         val blueGreen = Color(0xFF20B2AA)
@@ -999,6 +1068,24 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
         val darkBlueArgb = 0xFF0000D1.toInt()
         val blackArgb = android.graphics.Color.BLACK
         val twilightPaint = Paint().apply { strokeWidth = 1f; style = Paint.Style.STROKE }
+        val greyPaint = Paint().apply { color = android.graphics.Color.GRAY; strokeWidth = 1f; style = Paint.Style.FILL }
+
+        // Prep calculation for current time line
+        val localTime = nowZoned.toLocalTime()
+        val currentHour = localTime.hour + (localTime.minute / 60.0) + (localTime.second / 3600.0)
+        val xNow = centerX + (normalizeGraphTime(currentHour) * pixelsPerHour)
+
+        // Determine if it is currently night
+        val (todayRise, todaySet) = cache.getSunTimes(nowEpochDay, false)
+        var isNightNow = false
+        if (!todayRise.isNaN() && !todaySet.isNaN()) {
+            isNightNow = !(currentHour > todayRise && currentHour < todaySet)
+        } else {
+            // Handle Polar Night/Midnight Sun check
+            val sunDec = calculateSunDeclination(nowEpochDay)
+            val altNoon = 90.0 - abs(lat - Math.toDegrees(sunDec))
+            isNightNow = altNoon < -0.833
+        }
 
         drawIntoCanvas { canvas ->
             for (y in textHeight.toInt() until h.toInt()) {
@@ -1009,44 +1096,76 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 val (riseTimeCurr, _) = cache.getSunTimes(targetEpochDay, false)
                 val (_, astroSetPrev) = cache.getSunTimes(targetEpochDay - 1.0, true)
                 val (astroRiseCurr, _) = cache.getSunTimes(targetEpochDay, true)
-                val xSunset = centerX + ((setTimePrev - 24.0) * pixelsPerHour)
-                val xSunrise = centerX + (riseTimeCurr * pixelsPerHour)
-                val validSunset = !xSunset.isNaN()
-                val validSunrise = !xSunrise.isNaN()
+                val xSunset = centerX + (normalizeGraphTime(setTimePrev) * pixelsPerHour)
+                val xSunrise = centerX + (normalizeGraphTime(riseTimeCurr) * pixelsPerHour)
+                var validSunset = !xSunset.isNaN()
+                var validSunrise = !xSunrise.isNaN()
 
-                if (validSunset && validSunrise && (astroSetPrev.isNaN() || astroRiseCurr.isNaN())) {
-                    twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), intArrayOf(darkBlueArgb, blackArgb, darkBlueArgb), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-                    canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
-                } else {
-                    if (validSunset && !astroSetPrev.isNaN()) {
-                        val xAstroEnd = centerX + ((astroSetPrev - 24.0) * pixelsPerHour)
+                var drawPlanets = false
+                var effectiveXSunset = xSunset
+                var effectiveXSunrise = xSunrise
+
+                // Check for Polar Night (24-hour darkness)
+                val sunDec = calculateSunDeclination(targetEpochDay)
+                val altNoon = 90.0 - abs(lat - Math.toDegrees(sunDec))
+
+                if (altNoon < -0.833) {
+                    // Polar Night: Sun never rises
+                    drawPlanets = true
+                    effectiveXSunset = 0.0
+                    effectiveXSunrise = w.toDouble()
+                    // Draw full darkness background
+                    twilightPaint.shader = null
+                    twilightPaint.color = blackArgb
+                    canvas.nativeCanvas.drawLine(0f, y.toFloat(), w, y.toFloat(), twilightPaint)
+                } else if (validSunset && validSunrise) {
+                    // Standard Day
+                    drawPlanets = true
+
+                    // Evening Twilight Gradient (Sunset -> AstroEnd)
+                    val xAstroEnd = if (!astroSetPrev.isNaN()) centerX + (normalizeGraphTime(astroSetPrev) * pixelsPerHour) else null
+                    if (xAstroEnd != null) {
                         twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), darkBlueArgb, blackArgb, Shader.TileMode.CLAMP)
                         canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xAstroEnd.toFloat(), y.toFloat(), twilightPaint)
+                    } else {
+                        // Twilight doesn't end (Merged), draw full line Sunset -> Sunrise
+                        twilightPaint.shader = LinearGradient(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), intArrayOf(darkBlueArgb, blackArgb, darkBlueArgb), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+                        canvas.nativeCanvas.drawLine(xSunset.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
                     }
-                    if (validSunrise && !astroRiseCurr.isNaN()) {
-                        var diffAstro = astroRiseCurr - 24.0
-                        if (diffAstro < -12.0) diffAstro += 24.0 else if (diffAstro > 12.0) diffAstro -= 24.0
-                        val xAstroStart = centerX + (diffAstro * pixelsPerHour)
-                        twilightPaint.shader = LinearGradient(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), blackArgb, darkBlueArgb, Shader.TileMode.CLAMP)
-                        canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
+
+                    // Morning Twilight Gradient (AstroStart -> Sunrise)
+                    // Only need to draw this if not merged (xAstroEnd != null)
+                    if (xAstroEnd != null) {
+                        val xAstroStart = if (!astroRiseCurr.isNaN()) centerX + (normalizeGraphTime(astroRiseCurr) * pixelsPerHour) else null
+
+                        if (xAstroStart != null) {
+                            twilightPaint.shader = LinearGradient(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), blackArgb, darkBlueArgb, Shader.TileMode.CLAMP)
+                            canvas.nativeCanvas.drawLine(xAstroStart.toFloat(), y.toFloat(), xSunrise.toFloat(), y.toFloat(), twilightPaint)
+                        }
                     }
                 }
 
                 if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
                 if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 
-                if (validSunset && validSunrise) {
+                // Current Time Line (Grey Pixel)
+                if (isLive && isNightNow && drawPlanets) {
+                    if (xNow >= effectiveXSunset && xNow <= effectiveXSunrise) {
+                        canvas.nativeCanvas.drawPoint(xNow.toFloat(), y.toFloat(), greyPaint)
+                    }
+                }
+
+                if (drawPlanets) {
                     for (planet in planets) {
                         val events = cache.getPlanetEvents(targetEpochDay, planet.name)
                         val targetHourOffset = when (planet.name) { "Mars" -> -2.0; "Jupiter" -> -1.0; "Saturn" -> 0.0; "Uranus" -> 1.0; "Neptune" -> 2.0; else -> 0.0 }
                         val targetX = centerX + (targetHourOffset * pixelsPerHour)
                         fun processEvent(time: Double, list: ArrayList<Offset>, keySuffix: String) {
                             if (time.isNaN()) return
-                            var diff = time - 24.0
-                            if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
-                            val xPos = centerX + (diff * pixelsPerHour)
+                            val xPos = centerX + (normalizeGraphTime(time) * pixelsPerHour)
                             val yPos = y.toFloat()
-                            if (xPos >= xSunset && xPos <= xSunrise) {
+                            // Use effective boundaries
+                            if (xPos >= effectiveXSunset && xPos <= effectiveXSunrise) {
                                 list.add(Offset(xPos.toFloat(), yPos))
                                 val dist = abs(xPos - targetX)
                                 val labelTracker = bestLabels["${planet.name}_$keySuffix"]!!
@@ -1079,9 +1198,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 val epochDayGrid = d.toEpochDay().toDouble()
                 val (riseGrid, _) = cache.getSunTimes(epochDayGrid, false)
                 if (yStart >= textHeight && yStart <= h && !riseGrid.isNaN()) {
-                    var diffGrid = riseGrid - 24.0
-                    if (diffGrid < -12.0) diffGrid += 24.0 else if (diffGrid > 12.0) diffGrid -= 24.0
-                    val x2_grid = centerX + (diffGrid * pixelsPerHour)
+                    val x2_grid = centerX + (normalizeGraphTime(riseGrid) * pixelsPerHour)
                     canvas.nativeCanvas.drawLine(x1_grid, yStart, x2_grid.toFloat(), yStart, gridPaint)
                 }
                 var visibleDays = 0
@@ -1113,8 +1230,8 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     val targetEpochDay = nowEpochDay + ((h - y) / h * 365.25)
                     val (_, setTimePrev) = cache.getSunTimes(targetEpochDay - 1.0, false)
                     val (riseTimeCurr, _) = cache.getSunTimes(targetEpochDay, false)
-                    val xSunset = centerX + ((setTimePrev - 24.0) * pixelsPerHour)
-                    val xSunrise = centerX + (riseTimeCurr * pixelsPerHour)
+                    val xSunset = centerX + (normalizeGraphTime(setTimePrev) * pixelsPerHour)
+                    val xSunrise = centerX + (normalizeGraphTime(riseTimeCurr) * pixelsPerHour)
                     if (!xSunset.isNaN() && !xSunrise.isNaN()) {
                         for (k in -14..14) {
                             val xGrid = centerX + (k * pixelsPerHour)
@@ -1145,7 +1262,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     val exactMoonDay = (scanEpochDay - 1.0) + (-pNorm / (cNorm - pNorm))
                     val (riseTime, _) = cache.getSunTimes(scanEpochDay - 1.0, false)
                     if (!riseTime.isNaN()) {
-                        val xMoon = centerX + (riseTime * pixelsPerHour) + 15f
+                        val xMoon = centerX + (normalizeGraphTime(riseTime) * pixelsPerHour) + 15f
                         val yMoon = getYForEpochDay(exactMoonDay)
                         if (yMoon >= textHeight && yMoon <= h) list.add(Offset(xMoon.toFloat(), yMoon))
                     }
@@ -1274,6 +1391,16 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     return Pair(rise, set)
 }
 
+fun calculateSunDeclination(epochDay: Double): Double {
+    val n = (2440587.5 + epochDay + 0.5) - 2451545.0
+    var L = (280.460 + 0.9856474 * n) % 360.0; if (L < 0) L += 360.0
+    var g = (357.528 + 0.9856003 * n) % 360.0; if (g < 0) g += 360.0
+    val lambdaRad = Math.toRadians(L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(2 * Math.toRadians(g)))
+    val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
+    val delta = asin(sin(epsilonRad) * sin(lambdaRad))
+    return delta
+}
+
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
     val d = (2440587.5 + epochDay + 0.5) - 2451545.0
     val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
@@ -1283,7 +1410,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
 
     val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0); val Np = Math.toRadians(p.N)
     val ip = Math.toRadians(p.i); val w_bar_p = Math.toRadians(p.w_bar); var Mp = Lp - w_bar_p
-    var Ep = Mp + p.e * sin(Mp); Ep = Mp + p.e * sin(Ep); Ep = Mp + p.e * sin(Ep)
+    val Ep = solveKepler(Mp, p.e)
     val xv = p.a * (cos(Ep) - p.e); val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
     val v = atan2(yv, xv); val u = v + w_bar_p - Np
     val rp = sqrt(xv*xv + yv*yv)
@@ -1322,4 +1449,13 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     val lambda = L + 6.289 * sin(M)
     var diff = (lambda - trueLongSun) % 360.0; if (diff < 0) diff += 360.0
     return diff
+}
+
+fun solveKepler(M: Double, e: Double): Double {
+    var E = M + e * sin(M)
+    for (k in 0..5) {
+        val dE = (M - (E - e * sin(E))) / (1 - e * cos(E))
+        E += dE
+    }
+    return E
 }
