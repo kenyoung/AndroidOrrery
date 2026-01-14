@@ -1,6 +1,7 @@
 package com.example.orrery
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -8,6 +9,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -152,6 +154,8 @@ class AstroCache(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
+    val context = LocalContext.current
+
     // --- NAVIGATION STATE ---
     var currentScreen by remember { mutableStateOf(Screen.TRANSITS) }
 
@@ -263,7 +267,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var showMenu by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
-    var showAboutDialog by remember { mutableStateOf(false) }
 
     // Dialogs
     if (showLocationDialog) {
@@ -289,9 +292,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 showDateDialog = false
             }
         )
-    }
-    if (showAboutDialog) {
-        AboutDialog(onDismiss = { showAboutDialog = false })
     }
 
     fun startAnimation(years: Int, step: Double) {
@@ -357,7 +357,14 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
                         DropdownMenuItem(text = { Text("Date") }, onClick = { showMenu = false; showDateDialog = true })
-                        DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; showAboutDialog = true })
+                        DropdownMenuItem(
+                            text = { Text("About") },
+                            onClick = {
+                                showMenu = false
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://kenyoung.github.io/AndroidOrrery/"))
+                                context.startActivity(intent)
+                            }
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White)
@@ -518,8 +525,9 @@ fun ScaleOrrery(epochDay: Double) {
             val pixelsPerAU = (minDim / 2f) / baseFitAU
             val currentPixelsPerAU = pixelsPerAU * scale
 
-            // Draw Sun
+            // Draw Sun (Yellow circle radius 18f with Black Symbol)
             drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
+
             val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
@@ -665,7 +673,9 @@ fun SchematicOrrery(epochDay: Double) {
         val maxRadius = (minDim / 2f) - topPadding
         val orbitStep = (maxRadius / 8f) * 1.063f
 
+        // Draw Sun (Yellow circle radius 18f with Black Symbol)
         drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
+
         val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
         drawIntoCanvas { canvas ->
             canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
@@ -768,60 +778,6 @@ fun getOrreryPlanets(): List<PlanetElements> {
 }
 
 // --- DIALOGS ---
-
-@Composable
-fun AboutDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val versionName = try {
-        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        pInfo.versionName
-    } catch (e: Exception) { "1.0" }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.DarkGray),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp, max = 700.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold))
-                Text("Version $versionName", style = TextStyle(color = Color.LightGray, fontSize = 14.sp))
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .background(Color(0xFF121212), shape = RoundedCornerShape(8.dp))
-                        .padding(12.dp)
-                ) {
-                    AboutSection(stringResource(R.string.about_transits_title), stringResource(R.string.about_transits_desc))
-                    AboutSection(stringResource(R.string.about_schematic_title), stringResource(R.string.about_schematic_desc))
-                    AboutSection(stringResource(R.string.about_scale_title), stringResource(R.string.about_scale_desc))
-                    AboutSection(stringResource(R.string.about_controls_title), stringResource(R.string.about_controls_desc))
-                    AboutSection(stringResource(R.string.about_bugs_title), stringResource(R.string.about_bugs_desc))
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
-                    Text("OK", color = Color.Black)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AboutSection(title: String, body: String) {
-    Text(title, style = TextStyle(color = Color(0xFF87CEFA), fontSize = 16.sp, fontWeight = FontWeight.Bold))
-    Spacer(modifier = Modifier.height(4.dp))
-    Text(body, style = TextStyle(color = Color.LightGray, fontSize = 13.sp))
-    Spacer(modifier = Modifier.height(12.dp))
-}
 
 @Composable
 fun LocationDialog(
