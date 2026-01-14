@@ -1,4 +1,82 @@
-package com.example.orrery
+Orrery App Context Summary
+
+1. Project Overview
+
+    Name: Orrery (com.example.orrery)
+
+    Platform: Android (Kotlin + Jetpack Compose).
+
+    Architecture: Single Activity (MainActivity.kt) containing all logic, math, and UI. No separate ViewModels; state is handled via remember and mutableStateOf.
+
+    Permissions: ACCESS_FINE_LOCATION for GPS.
+
+2. Core Architecture & State
+
+    Time: Uses Instant.now() for "Live" mode. Allows manual date entry or animation (+1, +10, +100 years).
+
+    Location: Toggles between FusedLocationProvider (GPS) and Manual DMS entry.
+
+    Math (Refactored):
+
+        solveKepler(M, e): A helper function is now used to solve Kepler's equation iteratively (Newton-Raphson method, 5 iterations) for elliptical orbits.
+
+        normalizeGraphTime(time): Helper to map 0..24h time to a -12..+12 range centered on midnight.
+
+        calculateSunDeclination: Used for Polar Night detection.
+
+    Caching: AstroCache pre-calculates Ephemeris data (Sun/Moon/Planet Rise/Transit/Set) for the displayed year to optimize rendering performance.
+
+3. Visualizations (Screens)
+
+    A. Planet Transits (Screen.TRANSITS):
+
+        Layout: Vertical scrolling (Y = Date), Horizontal (X = Time centered on Midnight).
+
+        Logic:
+
+            Plots Sun/Planet Rise, Transit, and Set curves.
+
+            Arctic Circle Support: Handles NaN rise/set times. If Polar Night (Sun < -0.833° all day), the row is drawn as full darkness.
+
+            Twilight: Draws gradients for Evening (Sunset->AstroEnd) and Morning (AstroStart->Sunrise) independently to handle gaps (full night) or merged twilight.
+
+            Live Indicator: If using phone time/location and it is currently night, a grey pixel is drawn at the current time on the specific row.
+
+        Moon: Plots Moon Rise, Transit, Set, and phase calculation.
+
+    B. Schematic Orrery (Screen.SCHEMATIC):
+
+        View: Top-down (North Ecliptic Pole).
+
+        Sun: Yellow circle (radius 18f) with Black "☉" symbol.
+
+        Planets: Concentric, equally spaced circles (non-physical). Planets are filled circles (radius 18f) with symbols.
+
+        Arrow: Large White Arrow pointing "Up" (Vertical), located at the 1:30 clock position (45° Top-Right). Label is split ("To Vernal" / "Equinox").
+
+    C. To-Scale Orrery (Screen.SCALE):
+
+        View: True Keplerian ellipses. Rotated 90° so Vernal Equinox is Up.
+
+        Sun: Matches Schematic style (Yellow circle, 18f, Black symbol).
+
+        Controls: Pinch-to-zoom enabled.
+
+        Arrow: Same style/position as Schematic, but offset by fixed AU distance (36 AU) to stay clear of Neptune.
+
+4. Recent Changes & Refactoring
+
+    Navigation: Switching screens via the Dropdown Menu now explicitly stops any running animation (isAnimating = false).
+
+    Help/About: The "About" dialog has been removed. The menu option now fires an Android Intent to open an external website (URL is hardcoded in the onClick handler).
+
+    Code Cleanup: Kepler math and Time normalization logic have been extracted to standalone functions to reduce code duplication in GraphicsWindow and ScaleOrrery.
+
+5. Files to be Provided
+
+    MainActivity.kt (Current version with custom URL).
+
+    strings.xml (UI strings).package com.example.orrery
 
 import android.Manifest
 import android.content.Intent
