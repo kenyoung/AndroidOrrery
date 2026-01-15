@@ -89,8 +89,8 @@ data class PlanetElements(
 data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
 data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCenter: Float = Float.MAX_VALUE, var found: Boolean = false)
 
-// Navigation Enum
-enum class Screen { TRANSITS, SCHEMATIC, SCALE }
+// Navigation Enum (UPDATED)
+enum class Screen { TRANSITS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
 
 // --- CACHE CLASS ---
 class AstroCache(
@@ -211,15 +211,22 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Standard Time Loop
-    LaunchedEffect(usePhoneTime, isAnimating) {
+    // Standard Time Loop (Modified for 10Hz updates on Times screen)
+    LaunchedEffect(usePhoneTime, isAnimating, currentScreen) {
         if (usePhoneTime && !isAnimating) {
             while (true) {
                 val now = Instant.now()
                 currentInstant = now
-                val currentMillis = now.toEpochMilli()
-                val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
-                delay(millisUntilNextMinute)
+
+                if (currentScreen == Screen.TIMES) {
+                    // Update at 10Hz
+                    delay(100L)
+                } else {
+                    // Update once per minute (Analemma fits here)
+                    val currentMillis = now.toEpochMilli()
+                    val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
+                    delay(millisUntilNextMinute)
+                }
             }
         } else if (!usePhoneTime && !isAnimating) {
             currentInstant = getInstantFromManual(manualEpochDay)
@@ -333,6 +340,22 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                                 showMenu = false
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Astronomical Times") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.TIMES
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Analemma") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.ANALEMMA
+                                showMenu = false
+                            }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
                         DropdownMenuItem(text = { Text("Date") }, onClick = { showMenu = false; showDateDialog = true })
@@ -350,7 +373,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             )
         },
         bottomBar = {
-            if (currentScreen != Screen.TRANSITS) {
+            // Hide bottom bar for Times and Analemma
+            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA) {
                 BottomAppBar(
                     containerColor = Color.Black,
                     contentColor = Color.White
@@ -419,18 +443,20 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // INFO LINE
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                if (currentScreen == Screen.TRANSITS) {
-                    Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                } else {
-                    Text(text = "Date: $dateString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    Text(text = "UT $utString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+            // INFO LINE (Hidden on Times and Analemma Screens)
+            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    if (currentScreen == Screen.TRANSITS) {
+                        Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    } else {
+                        Text(text = "Date: $dateString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "UT $utString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    }
                 }
             }
 
@@ -447,6 +473,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     }
                     Screen.SCALE -> {
                         ScaleOrrery(displayEpoch)
+                    }
+                    Screen.TIMES -> {
+                        TimesScreen(currentInstant, effectiveLat, effectiveLon)
+                    }
+                    Screen.ANALEMMA -> {
+                        AnalemmaScreen(currentInstant, effectiveLat)
                     }
                 }
             }
@@ -713,6 +745,26 @@ fun calculateSunDeclination(epochDay: Double): Double {
     val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
     val delta = asin(sin(epsilonRad) * sin(lambdaRad))
     return delta
+}
+
+// NEW SHARED FUNCTION
+fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
+    val jd = epochDay + 2440587.5
+    val n = jd - 2451545.0
+    var L = (280.460 + 0.9856474 * n) % 360.0
+    if (L < 0) L += 360.0
+    var g = (357.528 + 0.9856003 * n) % 360.0
+    if (g < 0) g += 360.0
+    val lambda = L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(Math.toRadians(2 * g))
+    val epsilon = 23.439 - 0.0000004 * n
+    val alphaRad = atan2(cos(Math.toRadians(epsilon)) * sin(Math.toRadians(lambda)), cos(Math.toRadians(lambda)))
+    var alphaDeg = Math.toDegrees(alphaRad)
+    if (alphaDeg < 0) alphaDeg += 360.0
+    var E_deg = L - alphaDeg
+    while (E_deg > 180) E_deg -= 360.0
+    while (E_deg <= -180) E_deg += 360.0
+    // Convert degrees to minutes of time: degrees / 15 * 60 = degrees * 4
+    return E_deg * 4.0
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
