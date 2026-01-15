@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.orrery"
+    namespace = "com.kenyoung.orrery"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.orrery"
+        applicationId = "com.kenyoung.orrery"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
