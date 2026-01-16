@@ -89,7 +89,7 @@ data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCent
 data class RaDec(val ra: Double, val dec: Double)
 
 // Navigation Enum
-enum class Screen { TRANSITS, ELEVATIONS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
+enum class Screen { TRANSITS, ELEVATIONS, COMPASS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
 
 // --- CACHE CLASS ---
 class AstroCache(
@@ -221,7 +221,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     // Update at 10Hz
                     delay(100L)
                 } else {
-                    // Update once per minute (Analemma fits here)
+                    // Update once per minute (Analemma and Compass fit here)
                     val currentMillis = now.toEpochMilli()
                     val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
                     delay(millisUntilNextMinute)
@@ -332,6 +332,14 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Planet Compass") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.COMPASS
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Schematic Orrery") },
                             onClick = {
                                 isAnimating = false
@@ -380,8 +388,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             )
         },
         bottomBar = {
-            // Hide bottom bar for Times, Analemma, and Elevations
-            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS) {
+            // Hide bottom bar for Times, Analemma, Elevations, and Compass
+            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS) {
                 BottomAppBar(
                     containerColor = Color.Black,
                     contentColor = Color.White
@@ -450,8 +458,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // INFO LINE (Hidden on Times, Analemma, and Elevations)
-            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS) {
+            // INFO LINE (Hidden on Times, Analemma, Elevations, and Compass)
+            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.Top,
@@ -477,6 +485,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     }
                     Screen.ELEVATIONS -> {
                         PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
+                    }
+                    Screen.COMPASS -> {
+                        PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
                     }
                     Screen.SCHEMATIC -> {
                         SchematicOrrery(displayEpoch)

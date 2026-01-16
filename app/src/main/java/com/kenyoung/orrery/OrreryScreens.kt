@@ -43,6 +43,17 @@ fun ScaleOrrery(epochDay: Double) {
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
     }
+    // Specific paint for Halley's symbol (White) to contrast with Purple
+    val cometTextPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 30f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
+    }
+
     val labelPaint = remember {
         Paint().apply {
             color = android.graphics.Color.WHITE
@@ -51,6 +62,16 @@ fun ScaleOrrery(epochDay: Double) {
             isAntiAlias = true
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         }
+    }
+
+    // Halley's Comet Data (J2000 approx)
+    val halley = remember {
+        PlanetElements(
+            "Halley", "☄", Color(0xFF800080), // Purple
+            236.35, 0.013126,
+            17.834, 0.96714,
+            162.26, 169.75, 58.42
+        )
     }
 
     Box(
@@ -83,6 +104,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             val d = (2440587.5 + epochDay) - 2451545.0
 
+            // --- STANDARD PLANETS ---
             for (p in planetList) {
                 // Draw Orbit Path
                 val orbitPath = androidx.compose.ui.graphics.Path()
@@ -92,10 +114,9 @@ fun ScaleOrrery(epochDay: Double) {
 
                     val xv = p.a * (cos(E) - p.e)
                     val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
-                    // val v = atan2(yv, xv) // Unused in path calc simplified
 
                     val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
-                    val u = atan2(yv, xv) + w_bar - N // v + w_bar - N
+                    val u = atan2(yv, xv) + w_bar - N
                     val r = p.a * (1 - p.e * cos(E))
 
                     val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
@@ -110,7 +131,7 @@ fun ScaleOrrery(epochDay: Double) {
                 orbitPath.close()
                 drawPath(orbitPath, color = Color.Gray, style = Stroke(width = 2f))
 
-                // Draw Planet
+                // Draw Planet Position
                 val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
                 val w_bar_curr = Math.toRadians(p.w_bar)
                 val M_curr = Lp - w_bar_curr
@@ -136,6 +157,66 @@ fun ScaleOrrery(epochDay: Double) {
                 drawIntoCanvas { canvas ->
                     canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint)
                 }
+            }
+
+            // --- HALLEY'S COMET ---
+            val p = halley
+            // 1. Draw Orbit Path (Using Eccentric Anomaly Steps for fidelity near Perihelion)
+            val halleyPath = androidx.compose.ui.graphics.Path()
+            val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
+
+            // Step E from 0 to 360. Uniform E steps provide natural clustering near perihelion
+            for (deg in 0..360) {
+                val E_rad = Math.toRadians(deg.toDouble())
+
+                // Position in Orbital Plane
+                val xv = p.a * (cos(E_rad) - p.e)
+                val yv = p.a * sqrt(1 - p.e*p.e) * sin(E_rad)
+
+                // Calculate True Anomaly v directly from coordinates
+                val v = atan2(yv, xv)
+
+                // Heliocentric coordinates
+                val u = v + w_bar - N
+                val r = sqrt(xv*xv + yv*yv)
+
+                val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
+                val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
+
+                val px = cx - (y_ecl * currentPixelsPerAU).toFloat()
+                val py = cy - (x_ecl * currentPixelsPerAU).toFloat()
+
+                if (deg == 0) halleyPath.moveTo(px, py) else halleyPath.lineTo(px, py)
+            }
+            halleyPath.close()
+            // UPDATED: Use Gray for orbit path, same as planets
+            drawPath(halleyPath, color = Color.Gray, style = Stroke(width = 2f))
+
+            // 2. Draw Current Position
+            val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
+            val w_bar_curr = Math.toRadians(p.w_bar)
+            val M_curr = Lp - w_bar_curr
+            val E_curr = solveKepler(M_curr, p.e)
+
+            val xv_curr = p.a * (cos(E_curr) - p.e)
+            val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
+            val v_curr = atan2(yv_curr, xv_curr)
+
+            val N_curr = Math.toRadians(p.N); val i_curr = Math.toRadians(p.i)
+            val u_curr = v_curr + w_bar_curr - N_curr
+            val r_curr = p.a * (1 - p.e * cos(E_curr))
+
+            val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
+            val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
+
+            val pxHalley = cx - (y_pos * currentPixelsPerAU).toFloat()
+            val pyHalley = cy - (x_pos * currentPixelsPerAU).toFloat()
+
+            drawCircle(color = p.color, radius = 18f, center = Offset(pxHalley, pyHalley))
+
+            val halleyTextOffset = (cometTextPaint.descent() + cometTextPaint.ascent()) / 2
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawText(p.symbol, pxHalley, pyHalley - halleyTextOffset, cometTextPaint)
             }
 
             // Arrow at 1:30 position (45 degrees, top-right)
