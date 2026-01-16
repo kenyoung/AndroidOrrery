@@ -86,9 +86,10 @@ data class PlanetElements(
 
 data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
 data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCenter: Float = Float.MAX_VALUE, var found: Boolean = false)
+data class RaDec(val ra: Double, val dec: Double)
 
 // Navigation Enum
-enum class Screen { TRANSITS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
+enum class Screen { TRANSITS, ELEVATIONS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
 
 // --- CACHE CLASS ---
 class AstroCache(
@@ -323,6 +324,14 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Planet Elevations") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.ELEVATIONS
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Schematic Orrery") },
                             onClick = {
                                 isAnimating = false
@@ -371,8 +380,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             )
         },
         bottomBar = {
-            // Hide bottom bar for Times and Analemma
-            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA) {
+            // Hide bottom bar for Times, Analemma, and Elevations
+            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS) {
                 BottomAppBar(
                     containerColor = Color.Black,
                     contentColor = Color.White
@@ -441,8 +450,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // INFO LINE (Hidden on Times and Analemma Screens)
-            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA) {
+            // INFO LINE (Hidden on Times, Analemma, and Elevations)
+            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.Top,
@@ -465,6 +474,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 when (currentScreen) {
                     Screen.TRANSITS -> {
                         if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId, usePhoneLocation && usePhoneTime)
+                    }
+                    Screen.ELEVATIONS -> {
+                        PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
                     }
                     Screen.SCHEMATIC -> {
                         SchematicOrrery(displayEpoch)
@@ -745,7 +757,7 @@ fun calculateSunDeclination(epochDay: Double): Double {
     return delta
 }
 
-// NEW SHARED FUNCTION
+// SHARED FUNCTION
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
     val jd = epochDay + 2440587.5
     val n = jd - 2451545.0
@@ -813,6 +825,95 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     val lambda = L + 6.289 * sin(M)
     var diff = (lambda - trueLongSun) % 360.0; if (diff < 0) diff += 360.0
     return diff
+}
+
+// NEW MOON POSITION MATH (Low Precision, suitable for visual rise/set)
+fun calculateMoonPosition(epochDay: Double): RaDec {
+    val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0
+    // Mean Longitude
+    val L_prime = Math.toRadians(218.3164477 + 481267.88123421 * T)
+    // Mean Elongation
+    val D = Math.toRadians(297.8501921 + 445267.1114034 * T)
+    // Sun's Mean Anomaly
+    val M = Math.toRadians(357.5291092 + 35999.0502909 * T)
+    // Moon's Mean Anomaly
+    val M_prime = Math.toRadians(134.9633964 + 477198.8675055 * T)
+    // Moon's Argument of Latitude
+    val F = Math.toRadians(93.2720950 + 483202.0175233 * T)
+
+    // Ecliptic Longitude (lambda) - Major terms
+    val lambda = L_prime + Math.toRadians(6.289 * sin(M_prime)) + Math.toRadians(-1.274 * sin(M_prime - 2 * D)) + Math.toRadians(0.658 * sin(2 * D)) + Math.toRadians(-0.186 * sin(M))
+
+    // Ecliptic Latitude (beta) - Major terms
+    val beta = Math.toRadians(5.128 * sin(F)) + Math.toRadians(0.280 * sin(M_prime + F))
+
+    // Obliquity of Ecliptic
+    val epsilon = Math.toRadians(23.439291 - 0.0130042 * T)
+
+    // Convert to RA/Dec
+    val x = cos(beta) * cos(lambda)
+    val y = cos(epsilon) * cos(beta) * sin(lambda) - sin(epsilon) * sin(beta)
+    val z = sin(epsilon) * cos(beta) * sin(lambda) + cos(epsilon) * sin(beta)
+
+    val raRad = atan2(y, x)
+    val decRad = asin(z)
+
+    var raHours = Math.toDegrees(raRad) / 15.0
+    if (raHours < 0) raHours += 24.0
+    val decDeg = Math.toDegrees(decRad)
+
+    return RaDec(raHours, decDeg)
+}
+
+fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): PlanetEvents {
+    // Standard approximation: Calculate RA/Dec at approx transit (local noon-ish)
+    val (raHours, decDeg) = calculateMoonPosition(epochDay + 0.5)
+
+    // Calculate times
+    val n = (2440587.5 + epochDay + 0.5) - 2451545.0
+    var GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0; if (GMST0 < 0) GMST0 += 24.0
+    var transitUT = raHours - (lon / 15.0) - GMST0
+    while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
+    val transitStandard = transitUT + timezoneOffset
+
+    val cosH = (sin(Math.toRadians(-0.5667)) - sin(Math.toRadians(lat)) * sin(Math.toRadians(decDeg))) / (cos(Math.toRadians(lat)) * cos(Math.toRadians(decDeg)))
+
+    if (cosH >= -1.0 && cosH <= 1.0) {
+        val H_hours = Math.toDegrees(acos(cosH)) / 15.0
+        // Approx motion correction for Moon (lags ~50 mins/day => ~2 mins/hr)
+        // A simple factor 1.035 improves the rise/set spacing relative to transit
+        val H_corrected = H_hours * 1.035
+
+        var rise = transitStandard - H_corrected; while (rise < 0) rise += 24.0; while (rise >= 24) rise -= 24.0
+        var set = transitStandard + H_corrected; while (set < 0) set += 24.0; while (set >= 24) set -= 24.0
+        var tr = transitStandard; while(tr < 0) tr+=24.0; while(tr>=24.0) tr-=24.0
+        return PlanetEvents(rise, tr, set)
+    }
+    return PlanetEvents(Double.NaN, Double.NaN, Double.NaN)
+}
+
+fun calculateAltitude(epochDay: Double, lat: Double, lon: Double, objectRa: Double, objectDec: Double, timeStandard: Double, timezoneOffset: Double): Double {
+    // 1. Convert Standard Time to UT
+    var ut = timeStandard - timezoneOffset
+    // 2. Calculate GMST for this moment
+    // n = (JD at 0h) + (Time/24)
+    val n0 = (2440587.5 + epochDay) - 2451545.0
+    val n = n0 + (ut / 24.0) // approx
+    var gmst = 18.697374558 + 24.06570982441908 * n
+    gmst %= 24.0; if (gmst < 0) gmst += 24.0
+    // 3. Calculate LST
+    var lst = gmst + (lon / 15.0)
+    lst %= 24.0; if (lst < 0) lst += 24.0
+    // 4. Hour Angle
+    var HA = lst - objectRa
+    while (HA < -12) HA += 24.0
+    while (HA > 12) HA -= 24.0
+    val HA_rad = Math.toRadians(HA * 15.0)
+    // 5. Altitude
+    val latRad = Math.toRadians(lat)
+    val decRad = Math.toRadians(objectDec)
+    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(HA_rad)
+    return Math.toDegrees(asin(sinAlt))
 }
 
 fun solveKepler(M: Double, e: Double): Double {
