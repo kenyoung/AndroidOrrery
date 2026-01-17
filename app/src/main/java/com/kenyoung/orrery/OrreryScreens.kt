@@ -161,98 +161,102 @@ fun ScaleOrrery(epochDay: Double) {
 
             // --- HALLEY'S COMET ---
             val p = halley
-            // 1. Draw Orbit Path (Using Eccentric Anomaly Steps for fidelity near Perihelion)
+            // 1. Draw Orbit Path
             val halleyPath = androidx.compose.ui.graphics.Path()
             val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
 
-            // Step E from 0 to 360. Uniform E steps provide natural clustering near perihelion
             for (deg in 0..360) {
                 val E_rad = Math.toRadians(deg.toDouble())
-
-                // Position in Orbital Plane
                 val xv = p.a * (cos(E_rad) - p.e)
                 val yv = p.a * sqrt(1 - p.e*p.e) * sin(E_rad)
-
-                // Calculate True Anomaly v directly from coordinates
                 val v = atan2(yv, xv)
-
-                // Heliocentric coordinates
                 val u = v + w_bar - N
                 val r = sqrt(xv*xv + yv*yv)
-
                 val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
                 val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
-
                 val px = cx - (y_ecl * currentPixelsPerAU).toFloat()
                 val py = cy - (x_ecl * currentPixelsPerAU).toFloat()
-
                 if (deg == 0) halleyPath.moveTo(px, py) else halleyPath.lineTo(px, py)
             }
             halleyPath.close()
-            // UPDATED: Use Gray for orbit path, same as planets
             drawPath(halleyPath, color = Color.Gray, style = Stroke(width = 2f))
 
-            // 2. Draw Current Position
+            // Current Position Halley
             val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
             val w_bar_curr = Math.toRadians(p.w_bar)
             val M_curr = Lp - w_bar_curr
             val E_curr = solveKepler(M_curr, p.e)
-
             val xv_curr = p.a * (cos(E_curr) - p.e)
             val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
             val v_curr = atan2(yv_curr, xv_curr)
-
             val N_curr = Math.toRadians(p.N); val i_curr = Math.toRadians(p.i)
             val u_curr = v_curr + w_bar_curr - N_curr
             val r_curr = p.a * (1 - p.e * cos(E_curr))
-
             val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
             val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
-
             val pxHalley = cx - (y_pos * currentPixelsPerAU).toFloat()
             val pyHalley = cy - (x_pos * currentPixelsPerAU).toFloat()
-
             drawCircle(color = p.color, radius = 18f, center = Offset(pxHalley, pyHalley))
-
             val halleyTextOffset = (cometTextPaint.descent() + cometTextPaint.ascent()) / 2
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawText(p.symbol, pxHalley, pyHalley - halleyTextOffset, cometTextPaint)
             }
 
-            // Arrow at 1:30 position (45 degrees, top-right)
+            // --- HELPER FOR DIRECTION ARROWS ---
             val arrowDistAU = 36.0
             val distPx = arrowDistAU * currentPixelsPerAU
-            val angle = Math.toRadians(45.0)
-            val ax = cx + (distPx * sin(angle)).toFloat()
-            // Shift down 1.5 * diameter (36f) = 54f
-            val ay = cy - (distPx * cos(angle)).toFloat() + 54f
-
-            // Arrow points straight up
-            val arrowTipY = ay - 80f
-
-            val labelLine1 = "To Vernal"
-            val labelLine2 = "Equinox"
-            val w1 = labelPaint.measureText(labelLine1)
-            val w2 = labelPaint.measureText(labelLine2)
-            val maxHalfWidth = max(w1, w2) / 2f
-
-            // Clamp to right edge padding 10f
-            val textX = if (ax + maxHalfWidth > w - 10f) { w - 10f - maxHalfWidth } else { ax }
-
-            drawLine(color = Color.White, start = Offset(ax, ay), end = Offset(ax, arrowTipY), strokeWidth = 4f)
-            val arrowHeadPath = Path().apply {
-                moveTo(ax, arrowTipY - 10f)
-                lineTo(ax - 10f, arrowTipY + 10f)
-                lineTo(ax + 10f, arrowTipY + 10f)
-                close()
-            }
             val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-                canvas.nativeCanvas.drawText(labelLine2, textX, arrowTipY - 20f, labelPaint)
-                canvas.nativeCanvas.drawText(labelLine1, textX, arrowTipY - 65f, labelPaint)
 
-                // Draw Bottom View Label (Anchored to 36 AU South + 2.5*Font(40) Offset, moves with Zoom)
+            fun drawArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
+                val angleRad = Math.toRadians(eclipticLongDeg + 90.0)
+
+                val xBase = cx - (distPx * cos(angleRad)).toFloat()
+                val yBase = cy - (distPx * sin(angleRad)).toFloat()
+
+                val arrowLen = 80f
+                val tipX = cx - ((distPx + arrowLen) * cos(angleRad)).toFloat()
+                val tipY = cy - ((distPx + arrowLen) * sin(angleRad)).toFloat()
+
+                drawLine(color = Color.White, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
+
+                val headSize = 10f
+                val arrowHeadPath = Path().apply {
+                    val anglePerp = angleRad + (Math.PI / 2.0)
+                    val dx = (headSize * cos(anglePerp)).toFloat()
+                    val dy = (headSize * sin(anglePerp)).toFloat()
+                    moveTo(tipX, tipY)
+                    val backX = cx - ((distPx + (arrowLen - headSize)) * cos(angleRad)).toFloat()
+                    val backY = cy - ((distPx + (arrowLen - headSize)) * sin(angleRad)).toFloat()
+                    lineTo(backX + dx, backY + dy)
+                    lineTo(backX - dx, backY - dy)
+                    close()
+                }
+
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+
+                    val labelDist = 45f
+                    val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
+                    val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
+
+                    canvas.nativeCanvas.drawText(l1, labelX, labelY, labelPaint)
+                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f, labelPaint)
+                }
+            }
+
+            // 1. Vernal Equinox (0.0) - Up. Shift label Right by w/10
+            val vernalShiftX = w / 10f
+            drawArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
+
+            // 2. Galactic Center (135.0 for 4:30) - Bottom Right
+            // MATCHING SCHEMATIC: 4:30 position. Text shifted Left to avoid clip.
+            drawArrow(135.0, "To Galactic", "Center", Offset(-80f, 0f))
+
+            // 3. CMB Dipole (225.0 for 7:30) - Bottom Left
+            // MATCHING SCHEMATIC: 7:30 position. Text shifted Right to avoid clip.
+            drawArrow(225.0, "To CMB", "Dipole", Offset(80f, 0f))
+
+            drawIntoCanvas { canvas ->
                 val viewLabelDistPx = 36.0 * currentPixelsPerAU
                 val viewLabelY = cy + viewLabelDistPx.toFloat() + 100f
                 canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, viewLabelY, labelPaint)
@@ -265,7 +269,7 @@ fun ScaleOrrery(epochDay: Double) {
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 40.dp), // Shifted down (less padding) to stay clear of orbit/label
+                    .padding(bottom = 40.dp),
                 style = TextStyle(fontSize = 14.sp)
             )
         }
@@ -276,7 +280,6 @@ fun ScaleOrrery(epochDay: Double) {
 @Composable
 fun SchematicOrrery(epochDay: Double) {
     val planetList = remember { getOrreryPlanets() }
-
     val textPaint = remember {
         Paint().apply {
             color = android.graphics.Color.BLACK
@@ -307,94 +310,99 @@ fun SchematicOrrery(epochDay: Double) {
         val maxRadius = (minDim / 2f) - topPadding
         val orbitStep = (maxRadius / 8f) * 1.063f
 
-        // Draw Sun (Yellow circle radius 18f with Black Symbol)
         drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
-
         val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
-        drawIntoCanvas { canvas ->
-            canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
-        }
+        drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint) }
 
         val d = (2440587.5 + epochDay) - 2451545.0
 
         for (i in 0 until planetList.size) {
             val p = planetList[i]
             val radius = orbitStep * (i + 1)
-
             drawCircle(color = Color.Gray, radius = radius, center = Offset(cx, cy), style = Stroke(width = 2f))
-
             val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
             val w_bar = Math.toRadians(p.w_bar)
             val M = Lp - w_bar
-            val E = solveKepler(M, p.e) // Use Helper
-
+            val E = solveKepler(M, p.e)
             val xv = p.a * (cos(E) - p.e)
             val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
             val v = atan2(yv, xv)
             val helioLong = v + w_bar
-
-            // CCW Calculation: x = cx - r*sin, y = cy - r*cos
             val px = cx - (radius * sin(helioLong)).toFloat()
             val py = cy - (radius * cos(helioLong)).toFloat()
-
             drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
-
             val textOffset = (textPaint.descent() + textPaint.ascent()) / 2
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint)
-            }
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint) }
 
             if (p.name == "Earth") {
                 val moonOrbitRadius = orbitStep / 2f
                 drawCircle(color = Color.Gray, radius = moonOrbitRadius, center = Offset(px, py), style = Stroke(width = 1f))
-
                 val elongationRad = Math.toRadians(calculateMoonPhaseAngle(epochDay))
-                val vecES_x = cx - px
-                val vecES_y = py - cy
+                val vecES_x = cx - px; val vecES_y = py - cy
                 val sunAngleStandard = atan2(vecES_y.toDouble(), vecES_x.toDouble())
-
                 val moonAngleStandard = sunAngleStandard + elongationRad
-
                 val mx = px + (moonOrbitRadius * cos(moonAngleStandard)).toFloat()
                 val my = py - (moonOrbitRadius * sin(moonAngleStandard)).toFloat()
-
                 drawCircle(color = Color.White, radius = 6.25f, center = Offset(mx, my))
             }
         }
 
-        // Arrow at 1:30 position (45 degrees, top-right)
+        // --- HELPER FOR DIRECTION ARROWS (Schematic) ---
         val outerRadius = orbitStep * 8f
         val dist = outerRadius + 60f
-        val angle = Math.toRadians(45.0)
-        val ax = cx + (dist * sin(angle)).toFloat()
-        val ay = cy - (dist * cos(angle)).toFloat()
-
-        // Arrow points straight up
-        val arrowTipY = ay - 80f
-
-        val labelLine1 = "To Vernal"
-        val labelLine2 = "Equinox"
-        val w1 = labelPaint.measureText(labelLine1)
-        val w2 = labelPaint.measureText(labelLine2)
-        val maxHalfWidth = max(w1, w2) / 2f
-
-        // Clamp to right edge padding 10f
-        val textX = if (ax + maxHalfWidth > w - 10f) { w - 10f - maxHalfWidth } else { ax }
-
-        drawLine(color = Color.White, start = Offset(ax, ay), end = Offset(ax, arrowTipY), strokeWidth = 4f)
-        val arrowHeadPath = Path().apply {
-            moveTo(ax, arrowTipY - 10f)
-            lineTo(ax - 10f, arrowTipY + 10f)
-            lineTo(ax + 10f, arrowTipY + 10f)
-            close()
-        }
         val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
-        drawIntoCanvas { canvas ->
-            canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-            canvas.nativeCanvas.drawText(labelLine2, textX, arrowTipY - 20f, labelPaint)
-            canvas.nativeCanvas.drawText(labelLine1, textX, arrowTipY - 65f, labelPaint)
 
-            // Draw Bottom View Label
+        // Updated helper to take Offset
+        fun drawSchematicArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
+            val angleRad = Math.toRadians(eclipticLongDeg + 90.0)
+
+            val xBase = cx - (dist * cos(angleRad)).toFloat()
+            val yBase = cy - (dist * sin(angleRad)).toFloat()
+            val arrowLen = 80f
+            val tipX = cx - ((dist + arrowLen) * cos(angleRad)).toFloat()
+            val tipY = cy - ((dist + arrowLen) * sin(angleRad)).toFloat()
+
+            drawLine(color = Color.White, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
+
+            val headSize = 10f
+            val arrowHeadPath = Path().apply {
+                val anglePerp = angleRad + (Math.PI / 2.0)
+                val dx = (headSize * cos(anglePerp)).toFloat()
+                val dy = (headSize * sin(anglePerp)).toFloat()
+                moveTo(tipX, tipY)
+                val backX = cx - ((dist + arrowLen - headSize) * cos(angleRad)).toFloat()
+                val backY = cy - ((dist + arrowLen - headSize) * sin(angleRad)).toFloat()
+                lineTo(backX + dx, backY + dy)
+                lineTo(backX - dx, backY - dy)
+                close()
+            }
+
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+
+                val labelDist = 45f
+                val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
+                val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
+
+                // Shift down h/50f logic included in y
+                val yShift = h / 50f
+
+                canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
+                canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
+            }
+        }
+
+        // 1. Vernal Equinox (0.0) - Up.
+        val vernalShiftX = 60f + (w / 10f)
+        drawSchematicArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
+
+        // 2. Galactic Center (135.0 for 4:30) - Down Right.
+        drawSchematicArrow(135.0, "To Galactic", "Center", Offset(-80f, 0f))
+
+        // 3. CMB Dipole (225.0 for 7:30) - Down Left.
+        drawSchematicArrow(225.0, "To CMB", "Dipole", Offset(80f, 0f))
+
+        drawIntoCanvas { canvas ->
             canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, h - 30f, labelPaint)
         }
     }
