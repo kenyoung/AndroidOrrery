@@ -199,17 +199,83 @@ marked “Now”.
 	<hr>
 
         <h2>Symbols Used</h2>
+
+        <style>
+            /* Per-object colors for the "Symbols Used" list */
+            :root {
+                --SunNameColor: #FFFF00;
+                --SunSymbolColor: #FFFF00;
+
+                --MercuryNameColor: #AAAAAA;
+                --MercurySymbolColor: #AAAAAA;
+
+                --VenusNameColor: #FFFFFF;
+                --VenusSymbolColor: #FFFFFF;
+
+                --EarthNameColor: #A0FFFF;
+                --EarthSymbolColor: #A0FFFF;
+
+                --MarsNameColor: #FF0000;
+                --MarsSymbolColor: #FF0000;
+
+                --JupiterNameColor: #FFA040;
+                --JupiterSymbolColor: #FFA040;
+
+                --SaturnNameColor: #FFFF00;
+                --SaturnSymbolColor: #FFFF00;
+
+                --UranusNameColor: #00FFE0;
+                --UranusSymbolColor: #00FFE0;
+
+                --NeptuneNameColor: #8080FF;
+                --NeptuneSymbolColor: #8080FF;
+
+                --CometNameColor: #FF00FF;
+                --CometSymbolColor: #FF00FF;
+            }
+
+            .symbols li .name.sun { color: var(--SunNameColor); }
+            .symbols li .symbol.sun { color: var(--SunSymbolColor); }
+
+            .symbols li .name.mercury { color: var(--MercuryNameColor); }
+            .symbols li .symbol.mercury { color: var(--MercurySymbolColor); }
+
+            .symbols li .name.venus { color: var(--VenusNameColor); }
+            .symbols li .symbol.venus { color: var(--VenusSymbolColor); }
+
+            .symbols li .name.earth { color: var(--EarthNameColor); }
+            .symbols li .symbol.earth { color: var(--EarthSymbolColor); }
+
+            .symbols li .name.mars { color: var(--MarsNameColor); }
+            .symbols li .symbol.mars { color: var(--MarsSymbolColor); }
+
+            .symbols li .name.jupiter { color: var(--JupiterNameColor); }
+            .symbols li .symbol.jupiter { color: var(--JupiterSymbolColor); }
+
+            .symbols li .name.saturn { color: var(--SaturnNameColor); }
+            .symbols li .symbol.saturn { color: var(--SaturnSymbolColor); }
+
+            .symbols li .name.uranus { color: var(--UranusNameColor); }
+            .symbols li .symbol.uranus { color: var(--UranusSymbolColor); }
+
+            .symbols li .name.neptune { color: var(--NeptuneNameColor); }
+            .symbols li .symbol.neptune { color: var(--NeptuneSymbolColor); }
+
+            .symbols li .name.comet { color: var(--CometNameColor); }
+            .symbols li .symbol.comet { color: var(--CometSymbolColor); }
+        </style>
+
         <ul class="symbols">
-            <li>Sun: ☉</li>
-            <li>Mercury: ☿</li>
-            <li>Venus: ♀</li>
-            <li>Earth: ⊕</li>
-            <li>Mars: ♂</li>
-            <li>Jupiter: ♃</li>
-            <li>Saturn: ♄</li>
-            <li>Uranus: ⛢</li>
-            <li>Neptune: ♆</li>
-	    <li>Comet: ☄</li>
+            <li><span class="name sun">Sun:</span> <span class="symbol sun">☉</span></li>
+            <li><span class="name mercury">Mercury:</span> <span class="symbol mercury">☿</span></li>
+            <li><span class="name venus">Venus:</span> <span class="symbol venus">♀</span></li>
+            <li><span class="name earth">Earth:</span> <span class="symbol earth">⊕</span></li>
+            <li><span class="name mars">Mars:</span> <span class="symbol mars">♂</span></li>
+            <li><span class="name jupiter">Jupiter:</span> <span class="symbol jupiter">♃</span></li>
+            <li><span class="name saturn">Saturn:</span> <span class="symbol saturn">♄</span></li>
+            <li><span class="name uranus">Uranus:</span> <span class="symbol uranus">⛢</span></li>
+            <li><span class="name neptune">Neptune:</span> <span class="symbol neptune">♆</span></li>
+            <li><span class="name comet">Comet:</span> <span class="symbol comet">☄</span></li>
         </ul>
 
         <hr>
