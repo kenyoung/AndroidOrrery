@@ -206,14 +206,15 @@ fun ScaleOrrery(epochDay: Double) {
             val arrowDistAU = 36.0
             val distPx = arrowDistAU * currentPixelsPerAU
             val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+            val arrowLen = 80f
 
             fun drawArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-                val angleRad = Math.toRadians(eclipticLongDeg + 90.0)
+                // FIXED: Use (90 - long) to map 0->Top, 90->Left (Counter-Clockwise)
+                val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
 
                 val xBase = cx - (distPx * cos(angleRad)).toFloat()
                 val yBase = cy - (distPx * sin(angleRad)).toFloat()
 
-                val arrowLen = 80f
                 val tipX = cx - ((distPx + arrowLen) * cos(angleRad)).toFloat()
                 val tipY = cy - ((distPx + arrowLen) * sin(angleRad)).toFloat()
 
@@ -244,17 +245,64 @@ fun ScaleOrrery(epochDay: Double) {
                 }
             }
 
+            // NEW HELPER for Arbitrary Position Arrows (Identical to SchematicOrrery)
+            fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
+                val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
+                val vecX = -cos(angleRad).toFloat()
+                val vecY = -sin(angleRad).toFloat()
+                val tipX = baseX + (arrowLen * vecX)
+                val tipY = baseY + (arrowLen * vecY)
+
+                drawLine(color = Color.White, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
+
+                val headSize = 10f
+                val arrowHeadPath = Path().apply {
+                    val anglePerp = angleRad + (Math.PI / 2.0)
+                    val dx = (headSize * cos(anglePerp)).toFloat()
+                    val dy = (headSize * sin(anglePerp)).toFloat()
+                    moveTo(tipX, tipY)
+                    val backX = baseX + ((arrowLen - headSize) * vecX)
+                    val backY = baseY + ((arrowLen - headSize) * vecY)
+                    lineTo(backX + dx, backY + dy)
+                    lineTo(backX - dx, backY - dy)
+                    close()
+                }
+
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                    val labelDist = 45f
+                    val labelX = tipX + (labelDist * vecX) + labelOffset.x
+                    val labelY = tipY + (labelDist * vecY) + labelOffset.y
+                    val yShift = h / 50f
+                    canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
+                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
+                }
+            }
+
             // 1. Vernal Equinox (0.0) - Up. Shift label Right by w/10
             val vernalShiftX = w / 10f
             drawArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
 
-            // 2. Galactic Center (135.0 for 4:30) - Bottom Right
-            // MATCHING SCHEMATIC: 4:30 position. Text shifted Left to avoid clip.
-            drawArrow(135.0, "To Galactic", "Center", Offset(-80f, 0f))
+            // 2. Galactic Center Arrow (Scaled to Zoom)
+            // Base Logic: Relative offset from Center at scale 1.0, multiplied by current scale.
+            val gcUnscaledOffsetX = (w * 0.84f) - cx
+            val gcUnscaledOffsetY = (h * 0.8f) - cy
+            val gcBaseX = cx + (gcUnscaledOffsetX * scale)
+            val gcBaseY = cy + (gcUnscaledOffsetY * scale)
 
-            // 3. CMB Dipole (225.0 for 7:30) - Bottom Left
-            // MATCHING SCHEMATIC: 7:30 position. Text shifted Right to avoid clip.
-            drawArrow(225.0, "To CMB", "Dipole", Offset(80f, 0f))
+            val gcLabelX = -0.1272f * w
+            val gcLabelY = 0.02554f * h
+            drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
+
+            // 3. CMB Dipole Arrow (Scaled to Zoom)
+            val cmbUnscaledOffsetX = (w * 0.059f) - cx
+            val cmbUnscaledOffsetY = (h * 0.8492f) - cy
+            val cmbBaseX = cx + (cmbUnscaledOffsetX * scale)
+            val cmbBaseY = cy + (cmbUnscaledOffsetY * scale)
+
+            val cmbLabelOffsetX = 0.03f * w
+            val cmbLabelOffsetY = -0.146f * h
+            drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
             drawIntoCanvas { canvas ->
                 val viewLabelDistPx = 36.0 * currentPixelsPerAU
@@ -351,14 +399,15 @@ fun SchematicOrrery(epochDay: Double) {
         val outerRadius = orbitStep * 8f
         val dist = outerRadius + 60f
         val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        val arrowLen = 80f
 
-        // Updated helper to take Offset
+        // Existing helper for Radial arrows (like Vernal)
         fun drawSchematicArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-            val angleRad = Math.toRadians(eclipticLongDeg + 90.0)
+            // FIXED: Use (90 - long) to map 0->Top, 90->Left (Counter-Clockwise)
+            val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
 
             val xBase = cx - (dist * cos(angleRad)).toFloat()
             val yBase = cy - (dist * sin(angleRad)).toFloat()
-            val arrowLen = 80f
             val tipX = cx - ((dist + arrowLen) * cos(angleRad)).toFloat()
             val tipY = cy - ((dist + arrowLen) * sin(angleRad)).toFloat()
 
@@ -392,15 +441,68 @@ fun SchematicOrrery(epochDay: Double) {
             }
         }
 
+        // NEW HELPER for Arbitrary Position Arrows
+        fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
+            // Angle mapping: 0deg=Top, 90deg=Left (CCW) -> angleRad = radians(90 - long)
+            val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
+
+            // Vector pointing in the direction of the angle in this screen space
+            val vecX = -cos(angleRad).toFloat()
+            val vecY = -sin(angleRad).toFloat()
+
+            val tipX = baseX + (arrowLen * vecX)
+            val tipY = baseY + (arrowLen * vecY)
+
+            drawLine(color = Color.White, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
+
+            val headSize = 10f
+            val arrowHeadPath = Path().apply {
+                val anglePerp = angleRad + (Math.PI / 2.0)
+                val dx = (headSize * cos(anglePerp)).toFloat()
+                val dy = (headSize * sin(anglePerp)).toFloat()
+                moveTo(tipX, tipY)
+                // Back point along the shaft
+                val backX = baseX + ((arrowLen - headSize) * vecX)
+                val backY = baseY + ((arrowLen - headSize) * vecY)
+                lineTo(backX + dx, backY + dy)
+                lineTo(backX - dx, backY - dy)
+                close()
+            }
+
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+
+                // Place labels further along the vector + manual offset
+                val labelDist = 45f
+                val labelX = tipX + (labelDist * vecX) + labelOffset.x
+                val labelY = tipY + (labelDist * vecY) + labelOffset.y
+                val yShift = h / 50f
+
+                canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
+                canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
+            }
+        }
+
         // 1. Vernal Equinox (0.0) - Up.
-        val vernalShiftX = 60f + (w / 10f)
+        // Moved Left by 0.296 * w. Then moved Right by 0.27 * w.
+        val vernalShiftX = (60f + (w / 10f)) - (0.296f * w) + (0.27f * w)
         drawSchematicArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
 
-        // 2. Galactic Center (135.0 for 4:30) - Down Right.
-        drawSchematicArrow(135.0, "To Galactic", "Center", Offset(-80f, 0f))
+        // 2. Galactic Center Arrow (Arbitrary Position)
+        val gcBaseX = w * 0.84f
+        val gcBaseY = h * 0.8f
+        // Total shift: (-0.1272f * w), (+0.02554f * h)
+        val gcLabelX = -0.1272f * w
+        val gcLabelY = 0.02554f * h
+        drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
 
-        // 3. CMB Dipole (225.0 for 7:30) - Down Left.
-        drawSchematicArrow(225.0, "To CMB", "Dipole", Offset(80f, 0f))
+        // 3. CMB Dipole Arrow (Arbitrary Position)
+        val cmbBaseX = w * 0.059f
+        val cmbBaseY = h * 0.8492f
+        // Previous offset: (0.03f * w, -0.146f * h)
+        val cmbLabelOffsetX = 0.03f * w
+        val cmbLabelOffsetY = -0.146f * h
+        drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
         drawIntoCanvas { canvas ->
             canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, h - 30f, labelPaint)
