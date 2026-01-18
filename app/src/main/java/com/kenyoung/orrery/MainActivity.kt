@@ -305,18 +305,20 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             )
 
                             // Reset Button on the Right (of the title box)
-                            // This places it to the left of the Actions menu
-                            TextButton(
-                                onClick = {
-                                    usePhoneTime = true
-                                    val now = LocalDate.now()
-                                    manualEpochDay = now.toEpochDay().toDouble()
-                                    currentInstant = Instant.now()
-                                },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)),
-                                modifier = Modifier.align(Alignment.CenterEnd)
-                            ) {
-                                Text("Reset Time", fontWeight = FontWeight.Bold)
+                            // Only show if NOT animating
+                            if (!isAnimating) {
+                                TextButton(
+                                    onClick = {
+                                        usePhoneTime = true
+                                        val now = LocalDate.now()
+                                        manualEpochDay = now.toEpochDay().toDouble()
+                                        currentInstant = Instant.now()
+                                    },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)),
+                                    modifier = Modifier.align(Alignment.CenterEnd)
+                                ) {
+                                    Text("Reset Time", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
@@ -458,24 +460,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                                 contentPadding = buttonPadding,
                                 modifier = buttonModifier
                             ) { Text("+100 Yrs", style = textStyle) }
-
-                            Button(
-                                onClick = {
-                                    usePhoneTime = true
-                                    val now = LocalDate.now()
-                                    manualEpochDay = now.toEpochDay().toDouble()
-                                    currentInstant = Instant.now()
-                                },
-                                enabled = !usePhoneTime,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.DarkGray,
-                                    contentColor = Color(0xFF00FF00),
-                                    disabledContainerColor = Color.DarkGray.copy(alpha = 0.5f),
-                                    disabledContentColor = Color.Gray
-                                ),
-                                contentPadding = buttonPadding,
-                                modifier = buttonModifier
-                            ) { Text("Reset", style = textStyle) }
                         }
                     }
                 }
