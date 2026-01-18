@@ -89,7 +89,7 @@ data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCent
 data class RaDec(val ra: Double, val dec: Double)
 
 // Navigation Enum
-enum class Screen { TRANSITS, ELEVATIONS, COMPASS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
+enum class Screen { TRANSITS, ELEVATIONS, COMPASS, SCHEMATIC, SCALE, MOON_CALENDAR, TIMES, ANALEMMA }
 
 // --- CACHE CLASS ---
 class AstroCache(
@@ -297,12 +297,30 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 title = {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         if (!usePhoneTime) {
+                            // Date on the Left
                             Text(
                                 text = dateString,
                                 style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.align(Alignment.CenterStart)
                             )
+
+                            // Reset Button on the Right (of the title box)
+                            // This places it to the left of the Actions menu
+                            TextButton(
+                                onClick = {
+                                    usePhoneTime = true
+                                    val now = LocalDate.now()
+                                    manualEpochDay = now.toEpochDay().toDouble()
+                                    currentInstant = Instant.now()
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)),
+                                modifier = Modifier.align(Alignment.CenterEnd)
+                            ) {
+                                Text("Reset Time", fontWeight = FontWeight.Bold)
+                            }
                         }
+
+                        // Main Title (Center)
                         Text(
                             text = "Orrery",
                             style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
@@ -356,6 +374,14 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Moon Calendar") },
+                            onClick = {
+                                isAnimating = false
+                                currentScreen = Screen.MOON_CALENDAR
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Astronomical Times") },
                             onClick = {
                                 isAnimating = false
@@ -388,8 +414,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             )
         },
         bottomBar = {
-            // Hide bottom bar for Times, Analemma, Elevations, and Compass
-            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS) {
+            // Hide bottom bar for Times, Analemma, Elevations, Compass, and Moon Calendar
+            if (currentScreen != Screen.TRANSITS && currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS && currentScreen != Screen.MOON_CALENDAR) {
                 BottomAppBar(
                     containerColor = Color.Black,
                     contentColor = Color.White
@@ -458,8 +484,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // INFO LINE (Hidden on Times, Analemma, Elevations, and Compass)
-            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS) {
+            // INFO LINE (Hidden on Times, Analemma, Elevations, Compass and Moon Calendar)
+            if (currentScreen != Screen.TIMES && currentScreen != Screen.ANALEMMA && currentScreen != Screen.ELEVATIONS && currentScreen != Screen.COMPASS && currentScreen != Screen.MOON_CALENDAR) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.Top,
@@ -494,6 +520,17 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     }
                     Screen.SCALE -> {
                         ScaleOrrery(displayEpoch)
+                    }
+                    Screen.MOON_CALENDAR -> {
+                        MoonCalendarScreen(
+                            currentDate = effectiveDate,
+                            lat = effectiveLat,
+                            onDateChange = { newDate ->
+                                usePhoneTime = false
+                                manualEpochDay = newDate.toEpochDay().toDouble()
+                                currentInstant = getInstantFromManual(manualEpochDay)
+                            }
+                        )
                     }
                     Screen.TIMES -> {
                         TimesScreen(currentInstant, effectiveLat, effectiveLon)
@@ -774,8 +811,7 @@ fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
     val n = jd - 2451545.0
     var L = (280.460 + 0.9856474 * n) % 360.0
     if (L < 0) L += 360.0
-    var g = (357.528 + 0.9856003 * n) % 360.0
-    if (g < 0) g += 360.0
+    var g = (357.528 + 0.9856003 * n) % 360.0; if (g < 0) g += 360.0
     val lambda = L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(Math.toRadians(2 * g))
     val epsilon = 23.439 - 0.0000004 * n
     val alphaRad = atan2(cos(Math.toRadians(epsilon)) * sin(Math.toRadians(lambda)), cos(Math.toRadians(lambda)))
