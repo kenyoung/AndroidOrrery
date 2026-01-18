@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -28,7 +29,11 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
     val yellowColorInt = Color.Yellow.toArgb()
     val lightBlueColorInt = Color(0xFFADD8E6).toArgb()
     val cyanColor = Color.Cyan
-    val grayColor = Color.Gray
+
+    // Color definitions for Earthshine shading
+    val grayColor = Color.Gray          // For +-2 days
+    val darkGrayColor = Color.DarkGray  // For exact New Moon
+    val fullMoonRingColor = Color.Red
 
     val textPaint = remember {
         Paint().apply {
@@ -134,19 +139,31 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
             }
         }
 
-        // --- BLUE MOON CALCULATION ---
+        // --- PRE-CALCULATE EVENTS ---
         val blueMoonMap = mutableMapOf<LocalDate, Boolean>()
+        val newMoonDates = mutableSetOf<LocalDate>()
+
         for (mDate in months) {
             val daysInMonth = mDate.lengthOfMonth()
             val fullMoonDays = mutableListOf<Int>()
+
             for (d in 1..daysInMonth) {
                 val epochDay = mDate.withDayOfMonth(d).toEpochDay().toDouble()
                 val phaseAngle = calculateMoonPhaseAngle(epochDay)
                 val nextPhaseAngle = calculateMoonPhaseAngle(epochDay + 1.0)
+
+                // Full Moon Check: Crossing 180
                 if (phaseAngle < 180 && nextPhaseAngle >= 180) {
                     fullMoonDays.add(d)
                 }
+
+                // New Moon Check: Crossing 360/0 (High to Low)
+                // e.g., 350 -> 5
+                if (phaseAngle > 300.0 && nextPhaseAngle < 60.0) {
+                    newMoonDates.add(mDate.withDayOfMonth(d))
+                }
             }
+
             if (fullMoonDays.size >= 2) {
                 blueMoonMap[mDate.withDayOfMonth(fullMoonDays[1])] = true
             }
@@ -179,21 +196,27 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
             // Draw Moons
             val daysInMonth = mDate.lengthOfMonth()
             val moonRadius = min(colWidth, rowHeight) * 0.4f
-            val grayThresholdDeg = 25.0
 
             for (d in 1..daysInMonth) {
                 val dayDate = mDate.withDayOfMonth(d)
                 val epochDay = dayDate.toEpochDay().toDouble()
                 val phaseAngle = calculateMoonPhaseAngle(epochDay)
+                val nextPhaseAngle = calculateMoonPhaseAngle(epochDay + 1.0)
 
                 val yCenter = topMargin + headerHeight + ((d - 1) * rowHeight) + (rowHeight / 2)
 
                 val isBlueMoon = blueMoonMap[dayDate] == true
                 val illuminationColor = if (isBlueMoon) cyanColor else Color.White
 
-                val distToNew = min(phaseAngle, 360.0 - phaseAngle)
-                val isOldMoon = distToNew < grayThresholdDeg
-                val bgFillColor = if (isOldMoon) grayColor else Color.Black
+                // Determine Background Color by Date Offset from New Moon
+                val bgFillColor = when {
+                    newMoonDates.contains(dayDate) -> darkGrayColor // Exact New Moon
+                    newMoonDates.contains(dayDate.minusDays(1)) -> grayColor // NM + 1
+                    newMoonDates.contains(dayDate.minusDays(2)) -> grayColor // NM + 2
+                    newMoonDates.contains(dayDate.plusDays(1)) -> grayColor  // NM - 1
+                    newMoonDates.contains(dayDate.plusDays(2)) -> grayColor  // NM - 2
+                    else -> Color.Black
+                }
 
                 drawMoonPhase(
                     center = Offset(xCenter, yCenter),
@@ -203,6 +226,16 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
                     illuminatedColor = illuminationColor,
                     bgColor = bgFillColor
                 )
+
+                // Draw Red Ring if this is the exact Full Moon day
+                if (phaseAngle < 180 && nextPhaseAngle >= 180) {
+                    drawCircle(
+                        color = fullMoonRingColor,
+                        radius = moonRadius + 3f, // Slightly larger than moon
+                        center = Offset(xCenter, yCenter),
+                        style = Stroke(width = 3f)
+                    )
+                }
             }
         }
     }
