@@ -140,11 +140,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val xEnd = timeToX(astroSetToday)
             if (xEnd > xStart) {
                 drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(neptuneBlue, Color.Black),
-                        startX = xStart,
-                        endX = xEnd
-                    ),
+                    brush = Brush.horizontalGradient(colors = listOf(neptuneBlue, Color.Black), startX = xStart, endX = xEnd),
                     topLeft = Offset(xStart, chartTop),
                     size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
                 )
@@ -155,11 +151,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val xEnd = timeToX(sunriseTomorrow)
             if (xEnd > xStart) {
                 drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color.Black, neptuneBlue),
-                        startX = xStart,
-                        endX = xEnd
-                    ),
+                    brush = Brush.horizontalGradient(colors = listOf(Color.Black, neptuneBlue), startX = xStart, endX = xEnd),
                     topLeft = Offset(xStart, chartTop),
                     size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
                 )
@@ -257,16 +249,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         val tickIncrements = listOf(0, 20, 40, 60, 80)
-
-        // Structure to hold label data for second pass drawing
         data class LabelData(val text: String, val x: Float, val y: Float, val color: Int)
         val labelsToDraw = mutableListOf<LabelData>()
 
-        // Helper to draw lines/ticks and queue label
-        fun drawObjectLineAndTicks(
-            yPos: Float, name: String, ev: PlanetEvents, dec: Double,
-            labelColorInt: Int, lineColor: Color
-        ) {
+        fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int, lineColor: Color) {
             if (!ev.rise.isNaN() && !ev.set.isNaN()) {
                 val candidates = listOf(-24.0, 0.0, 24.0)
                 candidates.forEach { shift ->
@@ -274,28 +260,19 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                     val s = ev.set + shift
                     var sFinal = s
                     if (sFinal < r) sFinal += 24.0
-
                     val overlapStart = max(startHour, r)
                     val overlapEnd = min(endHour, sFinal)
 
                     if (overlapEnd > overlapStart) {
                         val x1 = timeToX(overlapStart)
                         val x2 = timeToX(overlapEnd)
-
-                        // 1. Draw Gray Line
                         drawLine(Color.Gray, Offset(x1, yPos), Offset(x2, yPos), strokeWidth = 6f)
-
-                        // 2. Draw White Line (Night)
                         val xW1 = max(x1, xNightStart)
                         val xW2 = min(x2, xNightEnd)
                         if (xW2 > xW1 && hasNight) {
                             drawLine(Color.White, Offset(xW1, yPos), Offset(xW2, yPos), strokeWidth = 6f)
                         }
-
-                        // Queue Label
                         labelsToDraw.add(LabelData(name, (x1 + x2) / 2, yPos - 15f, labelColorInt))
-
-                        // 4. Draw Ticks
                         tickIncrements.forEach { alt ->
                             val ha = getHA(alt.toDouble(), dec)
                             if (!ha.isNaN()) {
@@ -313,8 +290,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                                 }
                             }
                         }
-
-                        // 5. Draw Transit Tick
                         val maxAlt = 90.0 - abs(lat - dec)
                         val tTransit = ev.transit + shift
                         if (tTransit >= overlapStart && tTransit <= overlapEnd) {
@@ -380,11 +355,11 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- DRAW MOON (Row 2) AND PLANETS (Rows 3+) ---
-        // 1. Add Moon
+        // 1. Add Moon (Use AstroEngine or legacy? Legacy is fine for moon event timings, but let's check position from Engine)
         val moonEv = calculateMoonEvents(epochDay, lat, lon, offsetHours)
         val moonPos = calculateMoonPosition(epochDay)
+        val moonY = chartTop + (chartH * 0.28f)
 
-        // Moon Label Color Logic
         var moonIsUp = false
         var mRiseNorm = moonEv.rise; var mSetNorm = moonEv.set
         if (mSetNorm < mRiseNorm) mSetNorm += 24.0
@@ -394,44 +369,28 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val isNightNow = (xNow >= xSS && xNow <= xSR)
         val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
 
-        val moonY = chartTop + (chartH * 0.28f)
         drawObjectLineAndTicks(moonY, "Moon", moonEv, moonPos.dec, moonLabelColor.toArgb(), Color.Gray)
 
-        // 2. Planets
+        // 2. Planets (UPDATED TO USE ASTRO ENGINE FOR DEC)
         val rowsStartY = chartTop + (chartH * 0.28f)
         val planetObjs = mutableListOf<Triple<String, PlanetEvents, Double>>()
+        val jd = epochDay + 2440587.5
+
         planetList.forEach { p ->
+            // Use legacy event calc (Keplerian) for the rise/set lines (fast),
+            // but use AstroEngine for the Declination (dec) to get accurate max altitude/ticks.
             val ev = calculatePlanetEvents(epochDay, lat, lon, offsetHours, p)
-            val d = (2440587.5 + epochDay + 0.5) - 2451545.0
-            val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
-            val Np = Math.toRadians(p.N); val ip = Math.toRadians(p.i); val w_bar_p = Math.toRadians(p.w_bar)
-            val Mp = Lp - w_bar_p; val Ep = solveKepler(Mp, p.e)
-            val xv = p.a * (cos(Ep) - p.e); val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
-            val v = atan2(yv, xv); val u = v + w_bar_p - Np; val rp = sqrt(xv*xv + yv*yv)
-            val xh = rp * (cos(u) * cos(Np) - sin(u) * sin(Np) * cos(ip))
-            val yh = rp * (cos(u) * sin(Np) + sin(u) * cos(Np) * cos(ip))
-            val zh = rp * (sin(u) * sin(ip))
-            val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
-            val Le = Math.toRadians((280.466 + 0.98564736 * d) % 360.0) + Math.toRadians(1.915 * sin(Me) + 0.020 * sin(2 * Me)) + Math.PI
-            val Re = 1.00014 - 0.01671 * cos(Me)
-            val xe = Re * cos(Le); val ye = Re * sin(Le); val ze = 0.0
-            val xg = xh - xe; val yg = yh - ye; val zg = zh - ze
-            val ecl = Math.toRadians(23.439 - 0.0000004 * d)
-            val yeq = yg * cos(ecl) - zg * sin(ecl); val zeq = yg * sin(ecl) + zg * cos(ecl); val xeq = xg
-            val dec = Math.toDegrees(atan2(zeq, sqrt(xeq*xeq + yeq*yeq)))
-            planetObjs.add(Triple(p.name, ev, dec))
+            val state = AstroEngine.getBodyState(p.name, jd)
+            planetObjs.add(Triple(p.name, ev, state.dec))
         }
 
-        val rowHeight = (chartH * 0.72f) / (planetObjs.size + 1) // +1 for Moon
-
+        val rowHeight = (chartH * 0.72f) / (planetObjs.size + 1)
         val allObjs = mutableListOf<Triple<String, PlanetEvents, Double>>()
         allObjs.add(Triple("Moon", moonEv, moonPos.dec))
         allObjs.addAll(planetObjs)
 
         allObjs.forEachIndexed { i, (name, ev, dec) ->
             val yPos = rowsStartY + (i * rowHeight)
-
-            // Label Color
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
             if (sNorm < rNorm) sNorm += 24.0
@@ -439,7 +398,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             while (cNorm < rNorm) cNorm += 24.0
             if (cNorm < sNorm) pIsUp = true
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
-
             drawObjectLineAndTicks(yPos, name, ev, dec, pLabelColor.toArgb(), Color.Gray)
 
             if (isNightNow && pIsUp) {
@@ -451,18 +409,12 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val currentAlt = getAlt(haHours, dec)
                 if (currentAlt > 0) {
                     drawIntoCanvas {
-                        it.nativeCanvas.drawText(
-                            currentAlt.toInt().toString(),
-                            xNow + 5f,
-                            yPos + 57f,
-                            currentElevationPaint
-                        )
+                        it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint)
                     }
                 }
             }
         }
 
-        // --- DRAW CURRENT TIME LINE ---
         val nowColor = if (isNightNow) currentLineGreen else currentLineGray
         val nowPaint = Paint().apply { color = nowColor.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER }
         drawLine(nowColor, Offset(xNow, chartTop), Offset(xNow, h - footerHeight), strokeWidth = 3f)
@@ -475,19 +427,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val lstStr = "%02d:%02d".format(lstH, lstM)
         drawIntoCanvas { it.nativeCanvas.drawText(lstStr, xNow, h - footerHeight + 60f, nowPaint) }
 
-        // --- DRAW LABELS (LAST PASS) ---
         labelsToDraw.forEach { item ->
             drawIntoCanvas { canvas ->
                 val paint = objectLabelPaint.apply { color = item.color }
                 val textBounds = Rect()
                 paint.getTextBounds(item.text, 0, item.text.length, textBounds)
-
                 val textW = textBounds.width().toFloat()
                 val boxTop = item.y - 40f
                 val boxBottom = item.y + 10f
                 val boxLeft = item.x - (textW/2) - 10f
                 val boxRight = item.x + (textW/2) + 10f
-
                 canvas.nativeCanvas.drawRect(boxLeft, boxTop, boxRight, boxBottom, blackFillPaint)
                 canvas.nativeCanvas.drawText(item.text, item.x, item.y, paint)
             }

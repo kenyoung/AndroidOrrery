@@ -43,7 +43,7 @@ fun ScaleOrrery(epochDay: Double) {
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
     }
-    // Specific paint for Halley's symbol (White) to contrast with Purple
+    // Specific paint for Halley's symbol (White)
     val cometTextPaint = remember {
         Paint().apply {
             color = android.graphics.Color.WHITE
@@ -64,15 +64,8 @@ fun ScaleOrrery(epochDay: Double) {
         }
     }
 
-    // Halley's Comet Data (J2000 approx)
-    val halley = remember {
-        PlanetElements(
-            "Halley", "☄", Color(0xFF800080), // Purple
-            236.35, 0.013126,
-            17.834, 0.96714,
-            162.26, 169.75, 58.42
-        )
-    }
+    // Halley's Comet Element (Only used for drawing the orbit path now)
+    val halley = remember { getHalleyElement() }
 
     Box(
         modifier = Modifier
@@ -94,7 +87,7 @@ fun ScaleOrrery(epochDay: Double) {
             val pixelsPerAU = (minDim / 2f) / baseFitAU
             val currentPixelsPerAU = pixelsPerAU * scale
 
-            // Draw Sun (Yellow circle radius 18f with Black Symbol)
+            // Draw Sun
             drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
 
             val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
@@ -102,11 +95,12 @@ fun ScaleOrrery(epochDay: Double) {
                 canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
             }
 
-            val d = (2440587.5 + epochDay) - 2451545.0
+            // JD for Engine
+            val jd = epochDay + 2440587.5
 
             // --- STANDARD PLANETS ---
             for (p in planetList) {
-                // Draw Orbit Path
+                // 1. Draw Orbit Path (Still uses Keplerian elements for the ellipse shape)
                 val orbitPath = androidx.compose.ui.graphics.Path()
                 for (angleIdx in 0..100) {
                     val M_sim = (angleIdx / 100.0) * 2.0 * Math.PI
@@ -131,25 +125,17 @@ fun ScaleOrrery(epochDay: Double) {
                 orbitPath.close()
                 drawPath(orbitPath, color = Color.Gray, style = Stroke(width = 2f))
 
-                // Draw Planet Position
-                val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
-                val w_bar_curr = Math.toRadians(p.w_bar)
-                val M_curr = Lp - w_bar_curr
-                val E_curr = solveKepler(M_curr, p.e)
+                // 2. Draw Planet Position (FROM ENGINE)
+                val state = AstroEngine.getBodyState(p.name, jd)
 
-                val xv_curr = p.a * (cos(E_curr) - p.e)
-                val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
-                val v_curr = atan2(yv_curr, xv_curr)
+                // Engine returns HelioPos (X,Y,Z). We map X->-Y (Screen Y), Y->-X (Screen X) ??
+                // Wait, previous math was:
+                // px = cx - (y_ecl * scale)
+                // py = cy - (x_ecl * scale)
+                // Engine x = x_ecl, Engine y = y_ecl.
 
-                val N_curr = Math.toRadians(p.N); val i_curr = Math.toRadians(p.i)
-                val u_curr = v_curr + w_bar_curr - N_curr
-                val r_curr = p.a * (1 - p.e * cos(E_curr))
-
-                val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
-                val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
-
-                val px = cx - (y_pos * currentPixelsPerAU).toFloat()
-                val py = cy - (x_pos * currentPixelsPerAU).toFloat()
+                val px = cx - (state.helioPos.y * currentPixelsPerAU).toFloat()
+                val py = cy - (state.helioPos.x * currentPixelsPerAU).toFloat()
 
                 drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
 
@@ -161,7 +147,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             // --- HALLEY'S COMET ---
             val p = halley
-            // 1. Draw Orbit Path
+            // 1. Draw Orbit Path (Keplerian Fallback for shape)
             val halleyPath = androidx.compose.ui.graphics.Path()
             val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
 
@@ -181,21 +167,12 @@ fun ScaleOrrery(epochDay: Double) {
             halleyPath.close()
             drawPath(halleyPath, color = Color.Gray, style = Stroke(width = 2f))
 
-            // Current Position Halley
-            val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
-            val w_bar_curr = Math.toRadians(p.w_bar)
-            val M_curr = Lp - w_bar_curr
-            val E_curr = solveKepler(M_curr, p.e)
-            val xv_curr = p.a * (cos(E_curr) - p.e)
-            val yv_curr = p.a * sqrt(1 - p.e*p.e) * sin(E_curr)
-            val v_curr = atan2(yv_curr, xv_curr)
-            val N_curr = Math.toRadians(p.N); val i_curr = Math.toRadians(p.i)
-            val u_curr = v_curr + w_bar_curr - N_curr
-            val r_curr = p.a * (1 - p.e * cos(E_curr))
-            val x_pos = r_curr * (cos(u_curr) * cos(N_curr) - sin(u_curr) * sin(N_curr) * cos(i_curr))
-            val y_pos = r_curr * (cos(u_curr) * sin(N_curr) + sin(u_curr) * cos(N_curr) * cos(i_curr))
-            val pxHalley = cx - (y_pos * currentPixelsPerAU).toFloat()
-            val pyHalley = cy - (x_pos * currentPixelsPerAU).toFloat()
+            // 2. Current Position Halley (FROM ENGINE - Hybrid)
+            val hState = AstroEngine.getBodyState("Halley", jd)
+
+            val pxHalley = cx - (hState.helioPos.y * currentPixelsPerAU).toFloat()
+            val pyHalley = cy - (hState.helioPos.x * currentPixelsPerAU).toFloat()
+
             drawCircle(color = p.color, radius = 18f, center = Offset(pxHalley, pyHalley))
             val halleyTextOffset = (cometTextPaint.descent() + cometTextPaint.ascent()) / 2
             drawIntoCanvas { canvas ->
@@ -209,7 +186,6 @@ fun ScaleOrrery(epochDay: Double) {
             val arrowLen = 80f
 
             fun drawArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-                // FIXED: Use (90 - long) to map 0->Top, 90->Left (Counter-Clockwise)
                 val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
 
                 val xBase = cx - (distPx * cos(angleRad)).toFloat()
@@ -245,7 +221,6 @@ fun ScaleOrrery(epochDay: Double) {
                 }
             }
 
-            // NEW HELPER for Arbitrary Position Arrows (Identical to SchematicOrrery)
             fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
                 val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
                 val vecX = -cos(angleRad).toFloat()
@@ -279,12 +254,11 @@ fun ScaleOrrery(epochDay: Double) {
                 }
             }
 
-            // 1. Vernal Equinox (0.0) - Up. Shift label Right by w/10
+            // 1. Vernal Equinox
             val vernalShiftX = w / 10f
             drawArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
 
-            // 2. Galactic Center Arrow (Scaled to Zoom)
-            // Base Logic: Relative offset from Center at scale 1.0, multiplied by current scale.
+            // 2. Galactic Center
             val gcUnscaledOffsetX = (w * 0.84f) - cx
             val gcUnscaledOffsetY = (h * 0.8f) - cy
             val gcBaseX = cx + (gcUnscaledOffsetX * scale)
@@ -294,7 +268,7 @@ fun ScaleOrrery(epochDay: Double) {
             val gcLabelY = 0.02554f * h
             drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
 
-            // 3. CMB Dipole Arrow (Scaled to Zoom)
+            // 3. CMB Dipole
             val cmbUnscaledOffsetX = (w * 0.059f) - cx
             val cmbUnscaledOffsetY = (h * 0.8492f) - cy
             val cmbBaseX = cx + (cmbUnscaledOffsetX * scale)
@@ -362,22 +336,31 @@ fun SchematicOrrery(epochDay: Double) {
         val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
         drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint) }
 
-        val d = (2440587.5 + epochDay) - 2451545.0
+        val jd = epochDay + 2440587.5
 
         for (i in 0 until planetList.size) {
             val p = planetList[i]
             val radius = orbitStep * (i + 1)
+
+            // Draw Orbit Circle
             drawCircle(color = Color.Gray, radius = radius, center = Offset(cx, cy), style = Stroke(width = 2f))
-            val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0)
-            val w_bar = Math.toRadians(p.w_bar)
-            val M = Lp - w_bar
-            val E = solveKepler(M, p.e)
-            val xv = p.a * (cos(E) - p.e)
-            val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
-            val v = atan2(yv, xv)
-            val helioLong = v + w_bar
-            val px = cx - (radius * sin(helioLong)).toFloat()
-            val py = cy - (radius * cos(helioLong)).toFloat()
+
+            // Get Position from Engine (using Helio Longitude)
+            val state = AstroEngine.getBodyState(p.name, jd)
+            val helioLongRad = Math.toRadians(state.eclipticLon) // Using EclipticLon is close enough for schematic
+
+            // Note: HelioLon (Ecliptic) from Engine is degrees.
+            // Map 0 deg (Vernal) to top? In the math:
+            // x = sin(long), y = cos(long) -> 0 deg is (0, 1) which is Bottom.
+            // Standard map: 0 is Right.
+            // Let's match previous code:
+            // px = cx - radius * sin(long)
+            // py = cy - radius * cos(long)
+            // If long=0, px=cx, py=cy-radius (TOP). Correct.
+
+            val px = cx - (radius * sin(helioLongRad)).toFloat()
+            val py = cy - (radius * cos(helioLongRad)).toFloat()
+
             drawCircle(color = p.color, radius = 18f, center = Offset(px, py))
             val textOffset = (textPaint.descent() + textPaint.ascent()) / 2
             drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText(p.symbol, px, py - textOffset, textPaint) }
@@ -385,6 +368,8 @@ fun SchematicOrrery(epochDay: Double) {
             if (p.name == "Earth") {
                 val moonOrbitRadius = orbitStep / 2f
                 drawCircle(color = Color.Gray, radius = moonOrbitRadius, center = Offset(px, py), style = Stroke(width = 1f))
+
+                // Moon Phase Angle from AstroMath
                 val elongationRad = Math.toRadians(calculateMoonPhaseAngle(epochDay))
                 val vecES_x = cx - px; val vecES_y = py - cy
                 val sunAngleStandard = atan2(vecES_y.toDouble(), vecES_x.toDouble())
@@ -395,15 +380,13 @@ fun SchematicOrrery(epochDay: Double) {
             }
         }
 
-        // --- HELPER FOR DIRECTION ARROWS (Schematic) ---
+        // --- HELPER FOR DIRECTION ARROWS ---
         val outerRadius = orbitStep * 8f
         val dist = outerRadius + 60f
         val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
         val arrowLen = 80f
 
-        // Existing helper for Radial arrows (like Vernal)
         fun drawSchematicArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-            // FIXED: Use (90 - long) to map 0->Top, 90->Left (Counter-Clockwise)
             val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
 
             val xBase = cx - (dist * cos(angleRad)).toFloat()
@@ -428,28 +411,19 @@ fun SchematicOrrery(epochDay: Double) {
 
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-
                 val labelDist = 45f
                 val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
                 val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
-
-                // Shift down h/50f logic included in y
                 val yShift = h / 50f
-
                 canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
                 canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
             }
         }
 
-        // NEW HELPER for Arbitrary Position Arrows
         fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
-            // Angle mapping: 0deg=Top, 90deg=Left (CCW) -> angleRad = radians(90 - long)
             val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
-
-            // Vector pointing in the direction of the angle in this screen space
             val vecX = -cos(angleRad).toFloat()
             val vecY = -sin(angleRad).toFloat()
-
             val tipX = baseX + (arrowLen * vecX)
             val tipY = baseY + (arrowLen * vecY)
 
@@ -461,7 +435,6 @@ fun SchematicOrrery(epochDay: Double) {
                 val dx = (headSize * cos(anglePerp)).toFloat()
                 val dy = (headSize * sin(anglePerp)).toFloat()
                 moveTo(tipX, tipY)
-                // Back point along the shaft
                 val backX = baseX + ((arrowLen - headSize) * vecX)
                 val backY = baseY + ((arrowLen - headSize) * vecY)
                 lineTo(backX + dx, backY + dy)
@@ -471,35 +444,29 @@ fun SchematicOrrery(epochDay: Double) {
 
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
-
-                // Place labels further along the vector + manual offset
                 val labelDist = 45f
                 val labelX = tipX + (labelDist * vecX) + labelOffset.x
                 val labelY = tipY + (labelDist * vecY) + labelOffset.y
                 val yShift = h / 50f
-
                 canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
                 canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
             }
         }
 
-        // 1. Vernal Equinox (0.0) - Up.
-        // Moved Left by 0.296 * w. Then moved Right by 0.27 * w.
+        // 1. Vernal Equinox
         val vernalShiftX = (60f + (w / 10f)) - (0.296f * w) + (0.27f * w)
         drawSchematicArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
 
-        // 2. Galactic Center Arrow (Arbitrary Position)
+        // 2. Galactic Center
         val gcBaseX = w * 0.84f
         val gcBaseY = h * 0.8f
-        // Total shift: (-0.1272f * w), (+0.02554f * h)
         val gcLabelX = -0.1272f * w
         val gcLabelY = 0.02554f * h
         drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
 
-        // 3. CMB Dipole Arrow (Arbitrary Position)
+        // 3. CMB Dipole
         val cmbBaseX = w * 0.059f
         val cmbBaseY = h * 0.8492f
-        // Previous offset: (0.03f * w, -0.146f * h)
         val cmbLabelOffsetX = 0.03f * w
         val cmbLabelOffsetY = -0.146f * h
         drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
