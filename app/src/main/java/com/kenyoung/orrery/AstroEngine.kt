@@ -25,6 +25,8 @@ object AstroEngine {
             val helioLat = csvData[EphemerisManager.IDX_HELIO_LAT]
 
             // Calculate Vectors
+            // Note: HelioPos here is derived from Ecliptic Longitude/Latitude
+            // This places the vector in the Ecliptic system, which matches OrreryScreens.
             val helioPos = sphericalToCartesian(helioDist, helioLon, helioLat)
 
             // Geo Pos (from RA/Dec/GeoDist)
@@ -68,20 +70,27 @@ object AstroEngine {
     }
 
     private fun getEarthState(jd: Double): BodyState {
-        // Get Sun State first (likely from CSV)
+        // Get Sun State first (likely from Keplerian fallback in AstroMath)
         val sunState = getBodyState("Sun", jd)
 
-        // Earth Helio Pos = -Sun Geo Pos
-        val ex = -sunState.geoPos.x
-        val ey = -sunState.geoPos.y
-        val ez = -sunState.geoPos.z
+        // BUG FIX:
+        // Originally, we inverted sunState.geoPos (which is Equatorial).
+        // ScaleOrrery expects helioPos to be Ecliptic (consistent with other planets).
+        // We must construct Earth's helioPos from the Ecliptic coordinates provided by the Sun calculation.
 
-        val helioPos = Vector3(ex, ey, ez)
-        val helioDist = sqrt(ex*ex + ey*ey + ez*ez)
-        val helioLon = normalizeDegrees(Math.toDegrees(atan2(ey, ex)))
-        val helioLat = Math.toDegrees(asin(ez / helioDist))
+        // Earth Helio Longitude = Sun Ecliptic Longitude + 180 degrees
+        val helioLon = normalizeDegrees(sunState.eclipticLon + 180.0)
 
-        // Earth Geo Pos is origin
+        // Earth Helio Latitude = -Sun Ecliptic Latitude (approx 0)
+        val helioLat = -sunState.eclipticLat
+
+        // Earth Helio Dist = Sun Geo Distance
+        val helioDist = sunState.distGeo
+
+        // Construct Ecliptic Vector
+        val helioPos = sphericalToCartesian(helioDist, helioLon, helioLat)
+
+        // Earth Geo Pos is origin (0,0,0)
         return BodyState(
             "Earth", jd, helioPos, Vector3(0.0,0.0,0.0),
             0.0, 0.0, helioDist, 0.0, helioLon, helioLat
