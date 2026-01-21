@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -31,7 +32,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
     val cyanColor = Color.Cyan
 
     // Color definitions for Earthshine shading
-    val grayColor = Color.Gray          // For +-2 days
+    val grayColor = Color.Gray          // For +-3 days
     val darkGrayColor = Color.DarkGray  // For exact New Moon
     val fullMoonRingColor = Color.Red
 
@@ -208,13 +209,15 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
                 val isBlueMoon = blueMoonMap[dayDate] == true
                 val illuminationColor = if (isBlueMoon) cyanColor else Color.White
 
-                // Determine Background Color by Date Offset from New Moon
+                // Determine Background Color by Date Offset from New Moon (Expanded to 3 days)
                 val bgFillColor = when {
                     newMoonDates.contains(dayDate) -> darkGrayColor // Exact New Moon
                     newMoonDates.contains(dayDate.minusDays(1)) -> grayColor // NM + 1
                     newMoonDates.contains(dayDate.minusDays(2)) -> grayColor // NM + 2
+                    newMoonDates.contains(dayDate.minusDays(3)) -> grayColor // NM + 3
                     newMoonDates.contains(dayDate.plusDays(1)) -> grayColor  // NM - 1
                     newMoonDates.contains(dayDate.plusDays(2)) -> grayColor  // NM - 2
+                    newMoonDates.contains(dayDate.plusDays(3)) -> grayColor  // NM - 3
                     else -> Color.Black
                 }
 
@@ -231,8 +234,19 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
                 if (phaseAngle < 180 && nextPhaseAngle >= 180) {
                     drawCircle(
                         color = fullMoonRingColor,
-                        radius = moonRadius + 3f, // Slightly larger than moon
+                        radius = moonRadius + 2.25f,
                         center = Offset(xCenter, yCenter),
+                        style = Stroke(width = 4.5f)
+                    )
+                }
+
+                // Draw Yellow Box for the Current Day
+                if (dayDate == currentDate) {
+                    val boxHalfSize = moonRadius + 7f
+                    drawRect(
+                        color = Color.Yellow,
+                        topLeft = Offset(xCenter - boxHalfSize, yCenter - boxHalfSize),
+                        size = Size(boxHalfSize * 2, boxHalfSize * 2),
                         style = Stroke(width = 3f)
                     )
                 }

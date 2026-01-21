@@ -345,18 +345,12 @@ fun SchematicOrrery(epochDay: Double) {
             // Draw Orbit Circle
             drawCircle(color = Color.Gray, radius = radius, center = Offset(cx, cy), style = Stroke(width = 2f))
 
-            // Get Position from Engine (using Helio Longitude)
+            // Get Position from Engine
             val state = AstroEngine.getBodyState(p.name, jd)
-            val helioLongRad = Math.toRadians(state.eclipticLon) // Using EclipticLon is close enough for schematic
 
-            // Note: HelioLon (Ecliptic) from Engine is degrees.
-            // Map 0 deg (Vernal) to top? In the math:
-            // x = sin(long), y = cos(long) -> 0 deg is (0, 1) which is Bottom.
-            // Standard map: 0 is Right.
-            // Let's match previous code:
-            // px = cx - radius * sin(long)
-            // py = cy - radius * cos(long)
-            // If long=0, px=cx, py=cy-radius (TOP). Correct.
+            // FIX: Use Heliocentric Vectors to get the true Heliocentric Longitude (in Radians)
+            // This prevents "retrograde" motion which is an artifact of using Geocentric Ecliptic Longitude.
+            val helioLongRad = atan2(state.helioPos.y, state.helioPos.x)
 
             val px = cx - (radius * sin(helioLongRad)).toFloat()
             val py = cy - (radius * cos(helioLongRad)).toFloat()

@@ -94,16 +94,6 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val currentHour = localTime.hour + (localTime.minute / 60.0) + (localTime.second / 3600.0)
             val xNow = centerX + (normalizeGraphTime(currentHour) * pixelsPerHour)
 
-            val (todayRise, todaySet) = cache.getSunTimes(nowEpochDay, false)
-            var isNightNow = false
-            if (!todayRise.isNaN() && !todaySet.isNaN()) {
-                isNightNow = !(currentHour > todayRise && currentHour < todaySet)
-            } else {
-                val sunDec = calculateSunDeclination(nowEpochDay)
-                val altNoon = 90.0 - abs(lat - Math.toDegrees(sunDec))
-                isNightNow = altNoon < -0.833
-            }
-
             // --- DRAWING LOOP ---
             drawIntoCanvas { canvas ->
                 for (y in textHeight.toInt() until h.toInt()) {
@@ -159,11 +149,10 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
                     if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 
-                    if (isLive && isNightNow && drawPlanets) {
-                        if (abs(targetEpochDay - nowEpochDay) < 0.5) {
-                            if (xNow >= effectiveXSunset && xNow <= effectiveXSunrise) {
-                                canvas.nativeCanvas.drawPoint(xNow.toFloat(), y.toFloat(), greyPaint)
-                            }
+                    // Draw gray pixel at the current time if it is night time on this specific day
+                    if (drawPlanets) {
+                        if (xNow >= effectiveXSunset && xNow <= effectiveXSunrise) {
+                            canvas.nativeCanvas.drawPoint(xNow.toFloat(), y.toFloat(), greyPaint)
                         }
                     }
 

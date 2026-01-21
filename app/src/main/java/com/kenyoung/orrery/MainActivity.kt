@@ -164,7 +164,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 currentInstant = now
                 if (currentScreen == Screen.TIMES) {
                     delay(100L) // 10Hz
-                } else if (currentScreen == Screen.MOON_CALENDAR) {
+                } else if (currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA) {
                     // Update once per hour
                     val currentMillis = now.toEpochMilli()
                     val millisUntilNextHour = 3_600_000 - (currentMillis % 3_600_000)
