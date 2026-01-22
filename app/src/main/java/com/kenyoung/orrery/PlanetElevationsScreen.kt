@@ -34,7 +34,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     val (_, astroSetToday) = calculateSunTimes(epochDay, lat, lon, offsetHours, -18.0)
     val (astroRiseTomorrow, _) = calculateSunTimes(epochDay + 1.0, lat, lon, offsetHours, -18.0)
 
-    // Handle edge cases for center time
     val centerTime = if (!sunsetToday.isNaN() && !sunriseTomorrow.isNaN()) {
         val sSet = if (sunsetToday < 12.0) sunsetToday + 24.0 else sunsetToday
         val sRise = sunriseTomorrow + 24.0
@@ -42,8 +41,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     } else {
         24.0
     }
-
-    // Window: Center +/- 12 hours
     val startHour = centerTime - 12.0
     val endHour = centerTime + 12.0
 
@@ -78,6 +75,11 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             while (adjustedT > endHour) adjustedT -= 24.0
             return ((adjustedT - startHour) * pixelsPerHour).toFloat()
         }
+
+        val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
+        val currentLocal = now.atOffset(currentOffset).toLocalTime()
+        val currentH = currentLocal.hour + currentLocal.minute / 60.0
+        val xNow = timeToX(currentH)
 
         // Native Paints
         val axisTextPaint = Paint().apply { color = brightBlue.toArgb(); textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
@@ -123,11 +125,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- AXIS & GRID ---
-        val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
-        val currentLocal = now.atOffset(currentOffset).toLocalTime()
-        val currentH = currentLocal.hour + currentLocal.minute / 60.0
-        val xNow = timeToX(currentH)
-
         val startTickUT = floor(startHour - offsetHours).toInt()
         val endTickUT = ceil(endHour - offsetHours).toInt()
         drawLine(blueAxis, Offset(0f, chartTop), Offset(w, chartTop), strokeWidth = 2f)
@@ -149,11 +146,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (x >= -1f && x <= w + 1f) {
                 drawLine(blueAxis, Offset(x, h - footerHeight), Offset(x, h - footerHeight - 15f), strokeWidth = 2f)
 
-                // Approximate LST for grid
-                val lstStr = calculateLST(now, lon) // Just to get current
+                val lstStr = calculateLST(now, lon)
                 val parts = lstStr.split(":")
                 val currentLST = parts[0].toDouble() + parts[1].toDouble() / 60.0
-                // Simple linear shift for grid labels
                 var lst = currentLST + ((hourVal - currentH) * 1.0027379)
                 while (lst < 0) lst += 24.0; while (lst >= 24.0) lst -= 24.0
                 val lstInt = lst.toInt()
@@ -178,6 +173,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val xNightEnd = min(w, xSR)
         val hasNight = xNightEnd > xNightStart
 
+        // HA Calculator (Only suitable for Planets with constant Dec)
         fun getHA(targetAlt: Double, decDeg: Double): Double {
             val altRad = Math.toRadians(targetAlt)
             val latRad = Math.toRadians(lat)
@@ -201,7 +197,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         data class LabelData(val text: String, val x: Float, val y: Float, val color: Int)
         val labelsToDraw = mutableListOf<LabelData>()
 
-        // --- ORIGINAL DRAWING FUNCTION ---
         fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int, lineColor: Color) {
             if (!ev.rise.isNaN() && !ev.set.isNaN()) {
                 val candidates = listOf(-24.0, 0.0, 24.0)
@@ -223,23 +218,52 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                             drawLine(Color.White, Offset(xW1, yPos), Offset(xW2, yPos), strokeWidth = 6f)
                         }
                         labelsToDraw.add(LabelData(name, (x1 + x2) / 2, yPos - 15f, labelColorInt))
+
+                        // TICK DRAWING LOGIC
                         tickIncrements.forEach { alt ->
-                            val ha = getHA(alt.toDouble(), dec)
-                            if (!ha.isNaN()) {
-                                val tTransit = ev.transit + shift
-                                val times = listOf(tTransit - ha, tTransit + ha)
-                                times.forEach { tTick ->
-                                    if (tTick >= overlapStart && tTick <= overlapEnd) {
-                                        val xTick = timeToX(tTick)
-                                        val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
-                                        val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
-                                        val tColor = Color(tickColor)
-                                        drawLine(tColor, Offset(xTick, yPos - 10), Offset(xTick, yPos + 10), strokeWidth = 2f)
-                                        drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + 30f, tickTextPaint.apply { color = tickColor }) }
+                            if (name == "Moon" && alt == 0) {
+                                // --- MOON 0 DEGREE SPECIAL CASE ---
+                                // Use the exact 0-degree event for the Moon to account for changing Declination
+                                // We rely on the ev object which might have stored rise/set/transit.
+                                // But ev is typically Refraction (-0.57).
+                                // We calculate the specific 0.0 tick time here.
+                                // Optimization: Calculate it once outside loop? Yes, but concise here.
+                                val zeroEv = ComplexEventSolver.solveEvents(epochDay, "Moon", lat, lon, offsetHours, 0.0)
+                                if (!zeroEv.rise.isNaN()) {
+                                    val tZeroRise = zeroEv.rise + shift
+                                    val tZeroSet = zeroEv.set + shift
+                                    val times = listOf(tZeroRise, tZeroSet)
+                                    times.forEach { tTick ->
+                                        if (tTick >= overlapStart && tTick <= overlapEnd) {
+                                            val xTick = timeToX(tTick)
+                                            val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
+                                            val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
+                                            val tColor = Color(tickColor)
+                                            drawLine(tColor, Offset(xTick, yPos - 10), Offset(xTick, yPos + 10), strokeWidth = 2f)
+                                            drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + 30f, tickTextPaint.apply { color = tickColor }) }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Standard Logic for Planets and Moon > 0
+                                val ha = getHA(alt.toDouble(), dec)
+                                if (!ha.isNaN()) {
+                                    val tTransit = ev.transit + shift
+                                    val times = listOf(tTransit - ha, tTransit + ha)
+                                    times.forEach { tTick ->
+                                        if (tTick >= overlapStart && tTick <= overlapEnd) {
+                                            val xTick = timeToX(tTick)
+                                            val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
+                                            val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
+                                            val tColor = Color(tickColor)
+                                            drawLine(tColor, Offset(xTick, yPos - 10), Offset(xTick, yPos + 10), strokeWidth = 2f)
+                                            drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + 30f, tickTextPaint.apply { color = tickColor }) }
+                                        }
                                     }
                                 }
                             }
                         }
+                        // Max Alt Tick
                         val maxAlt = 90.0 - abs(lat - dec)
                         val tTransit = ev.transit + shift
                         if (tTransit >= overlapStart && tTransit <= overlapEnd) {
@@ -260,60 +284,30 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val transitToday = (riseToday + sunsetToday) / 2.0
             val sunDecToday = Math.toDegrees(calculateSunDeclination(epochDay))
-            val xStart = 0f
-            val xEnd = timeToX(sunsetToday)
-            if (xEnd > 0) {
-                drawLine(sunRed, Offset(xStart, sunY), Offset(xEnd, sunY), strokeWidth = 6f)
-                labelsToDraw.add(LabelData("Sun", (xStart + xEnd)/2, sunY - 15f, android.graphics.Color.RED))
-                tickIncrements.forEach { alt ->
-                    val ha = getHA(alt.toDouble(), sunDecToday)
-                    if (!ha.isNaN()) {
-                        val tTick = transitToday + ha
-                        if (tTick < sunsetToday) {
-                            val xTick = timeToX(tTick)
-                            if (xTick >= 0 && xTick <= xEnd) {
-                                drawLine(sunRed, Offset(xTick, sunY - 10), Offset(xTick, sunY + 10), strokeWidth = 2f)
-                                drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, sunY + 30f, tickTextPaint.apply { color = android.graphics.Color.RED }) }
-                            }
-                        }
-                    }
-                }
-            }
+            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED, sunRed)
         }
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
             val transitTomorrow = (sunriseTomorrow + setTomorrow) / 2.0
             val sunDecTomorrow = Math.toDegrees(calculateSunDeclination(epochDay + 1.0))
-            val xStart = timeToX(sunriseTomorrow)
-            val xEnd = w
-            if (xStart < w) {
-                drawLine(sunRed, Offset(xStart, sunY), Offset(xEnd, sunY), strokeWidth = 6f)
-                labelsToDraw.add(LabelData("Sun", (xStart + xEnd)/2, sunY - 15f, android.graphics.Color.RED))
-                tickIncrements.forEach { alt ->
-                    val ha = getHA(alt.toDouble(), sunDecTomorrow)
-                    if (!ha.isNaN()) {
-                        val tTick = transitTomorrow - ha
-                        if (tTick > sunriseTomorrow) {
-                            val xTick = timeToX(tTick)
-                            if (xTick >= xStart && xTick <= w) {
-                                drawLine(sunRed, Offset(xTick, sunY - 10), Offset(xTick, sunY + 10), strokeWidth = 2f)
-                                drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, sunY + 30f, tickTextPaint.apply { color = android.graphics.Color.RED }) }
-                            }
-                        }
-                    }
-                }
-            }
+            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED, sunRed)
         }
 
         // --- DRAW MOON (Row 2) ---
-        // FIX 1: Use ComplexEventSolver for accurate Moon Times (Rise/Set)
-        val moonEv = ComplexEventSolver.solveEvents(epochDay, "Moon", lat, lon, offsetHours, 0.125)
+        // 1. Line: Use -0.5667 (Refraction corrected, visual line)
+        val moonEv = ComplexEventSolver.solveEvents(epochDay, "Moon", lat, lon, offsetHours, -0.5667)
+        // 2. Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
+        var moonDec = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + 0.5).dec
+        if (!moonEv.transit.isNaN()) {
+            val transitJD = epochDay + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
+            val mTrans = AstroEngine.getBodyState("Moon", transitJD)
+            // LST at Transit
+            val transitInstant = Instant.ofEpochMilli(((transitJD - 2440587.5) * 86400000.0).toLong())
+            val lstParts = calculateLST(transitInstant, lon).split(":")
+            val lstVal = lstParts[0].toDouble() + lstParts[1].toDouble()/60.0
+            moonDec = toTopocentric(mTrans.ra, mTrans.dec, mTrans.distGeo, lat, lon, lstVal).dec
+        }
 
-        // FIX 2: Use AstroEngine for accurate Moon Declination (better ticks)
-        val moonState = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + 0.5)
-        val moonDec = moonState.dec
         val moonY = chartTop + (chartH * 0.28f)
-
-        // Moon Visibility Logic
         var moonIsUp = false
         var mRiseNorm = moonEv.rise; var mSetNorm = moonEv.set
         if (mSetNorm < mRiseNorm) mSetNorm += 24.0
@@ -323,28 +317,18 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val isNightNow = (xNow >= xSS && xNow <= xSR)
         val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
 
-        // Use the Original Drawing Function with corrected Data
         drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb(), Color.Gray)
 
         // --- DRAW PLANETS (Rows 3+) ---
         val rowsStartY = chartTop + (chartH * 0.28f)
-        val planetObjs = mutableListOf<Triple<String, PlanetEvents, Double>>()
         val jd = epochDay + 2440587.5
+        val rowHeight = (chartH * 0.72f) / (planetList.size + 1)
 
-        planetList.forEach { p ->
-            // Use ComplexEventSolver for planets too for consistency (High Precision)
+        planetList.forEachIndexed { i, p ->
+            val yPos = rowsStartY + ((i + 1) * rowHeight)
+            // Planets use same -0.5667 refraction for line
             val ev = ComplexEventSolver.solveEvents(epochDay, p.name, lat, lon, offsetHours, -0.5667)
             val state = AstroEngine.getBodyState(p.name, jd)
-            planetObjs.add(Triple(p.name, ev, state.dec))
-        }
-
-        val rowHeight = (chartH * 0.72f) / (planetObjs.size + 1)
-        val allObjs = mutableListOf<Triple<String, PlanetEvents, Double>>()
-        allObjs.add(Triple("Moon", moonEv, moonDec))
-        allObjs.addAll(planetObjs)
-
-        allObjs.forEachIndexed { i, (name, ev, dec) ->
-            val yPos = rowsStartY + (i * rowHeight)
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
             if (sNorm < rNorm) sNorm += 24.0
@@ -353,44 +337,34 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (cNorm2 < sNorm) pIsUp = true
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
 
-            // Draw Line/Ticks
-            drawObjectLineAndTicks(yPos, name, ev, dec, pLabelColor.toArgb(), Color.Gray)
+            drawObjectLineAndTicks(yPos, p.name, ev, state.dec, pLabelColor.toArgb(), Color.Gray)
 
-            // --- MOON FIX 3: Topocentric Elevation for Current Altitude Text ---
+            // Planet Current Elevation (Simple)
             if (isNightNow && pIsUp) {
-                // Default Geocentric Alt calc
-                var tT = ev.transit
-                var tT_adj = tT
+                var tT = ev.transit; var tT_adj = tT
                 while(tT_adj < currentH - 12.0) tT_adj += 24.0
                 while(tT_adj > currentH + 12.0) tT_adj -= 24.0
-                val haHours = currentH - tT_adj
-
-                // For Moon, calculate Topocentric Alt specifically
-                if (name == "Moon") {
-                    // Need accurate LST
-                    val lstStr = calculateLST(now, lon)
-                    val parts = lstStr.split(":")
-                    val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
-
-                    // Geocentric State at *current* time
-                    val mGeo = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + (currentH/24.0))
-                    val mTopo = toTopocentric(mGeo.ra, mGeo.dec, mGeo.distGeo, lat, lon, lstVal)
-                    val (_, currAlt) = calculateAzAlt(lstVal, lat, mTopo.ra/15.0, mTopo.dec)
-
-                    if (currAlt > 0) {
-                        drawIntoCanvas { it.nativeCanvas.drawText(currAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint) }
-                    }
-                } else {
-                    // Planets (Legacy logic is fine, or update later)
-                    val currentAlt = getAlt(haHours, dec)
-                    if (currentAlt > 0) {
-                        drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint) }
-                    }
+                val currentAlt = getAlt(currentH - tT_adj, state.dec)
+                if (currentAlt > 0) {
+                    drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint) }
                 }
             }
         }
 
-        // Draw Current Time Line
+        // --- MOON CURRENT ELEVATION (Precise) ---
+        if (isNightNow && moonIsUp) {
+            val lstStr = calculateLST(now, lon)
+            val parts = lstStr.split(":")
+            val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
+            val mGeo = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + (currentH/24.0))
+            val mTopo = toTopocentric(mGeo.ra, mGeo.dec, mGeo.distGeo, lat, lon, lstVal)
+            val (_, currAlt) = calculateAzAlt(lstVal, lat, mTopo.ra/15.0, mTopo.dec)
+            if (currAlt > 0) {
+                drawIntoCanvas { it.nativeCanvas.drawText(currAlt.toInt().toString(), xNow + 5f, moonY + 57f, currentElevationPaint) }
+            }
+        }
+
+        // Current Time Line
         val nowColor = if (isNightNow) currentLineGreen else currentLineGray
         val nowPaint = Paint().apply { color = nowColor.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER }
         drawLine(nowColor, Offset(xNow, chartTop), Offset(xNow, h - footerHeight), strokeWidth = 3f)
@@ -400,7 +374,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val lstNow = calculateLST(now, lon)
         drawIntoCanvas { it.nativeCanvas.drawText(lstNow, xNow, h - footerHeight + 60f, nowPaint) }
 
-        // Draw Labels (Batched)
+        // Labels
         labelsToDraw.forEach { item ->
             drawIntoCanvas { canvas ->
                 val paint = objectLabelPaint.apply { color = item.color }

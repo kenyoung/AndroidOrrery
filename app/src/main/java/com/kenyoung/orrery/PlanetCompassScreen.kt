@@ -59,17 +59,22 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val sunEvents = ComplexEventSolver.solveEvents(jdStart, "Sun", lat, lon, offset, -0.833)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents))
 
-            // 2. Moon (FIXED: Parallax Correction for the "Dot" position)
+            // 2. Moon (FIX: Parallax Correction for visual dot)
             val moonState = AstroEngine.getBodyState("Moon", jdStart)
+
+            // Calculate LST for the current 'now' to place the dot correctly
             val lstStr = calculateLST(now, lon)
             val parts = lstStr.split(":")
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
 
-            // Use toTopocentric from AstroMath to get the visual position
+            // Apply Topocentric correction
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            val moonEvents = ComplexEventSolver.solveEvents(jdStart, "Moon", lat, lon, offset, 0.125)
-            // Note: We use topoMoon RA/Dec here so the dot appears in the correct place on the radar
+            // Calculate Events using Solver (which now handles Parallax internally)
+            // Use -0.5667 (Standard Refraction) to match PlanetElevationsScreen logic
+            val moonEvents = ComplexEventSolver.solveEvents(jdStart, "Moon", lat, lon, offset, -0.5667)
+
+            // Store TOPOCENTRIC coords in the plot object so the radar draws it correctly
             newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents))
 
             // 3. Planets
@@ -240,6 +245,7 @@ fun CompassCanvas(
 
             for(obj in plotData) {
                 // FIXED: obj.ra is in DEGREES. Must convert to HOURS for calculateAzAlt.
+                // For the Moon, obj.ra is already Topocentric from the LaunchedEffect block.
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val pColor = if(alt > 0) paints.whiteInt else paints.redInt
@@ -293,12 +299,7 @@ fun CompassCanvas(
                 val riseUT = normalizeTime(obj.events.rise - offset)
                 paints.tableDataCenter.color = if(currAlt <= 0) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(riseUT, false), cols[2], currY, paints.tableDataCenter)
-                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true) // Wait, is this in AstroMath?
-                // calculateAzAtRiseSet was in AstroMath in original turn 17?
-                // No, it was in AstroMath.kt in Turn 17 logic? No, AstroMath had calculateRiseSet.
-                // It was defined as a helper in this file in Turn 18.
-                // CHECK ASTRO MATH FROM TURN 21: It does NOT have calculateAzAtRiseSet.
-                // Therefore I must KEEP calculateAzAtRiseSet in this file.
+                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
 
@@ -407,22 +408,21 @@ object ComplexEventSolver {
         for (i in 0..5) {
             val state = AstroEngine.getBodyState(name, t)
 
-            // Calculate LST for this moment
+            // Calculate LST for this moment to apply parallax correction
             val gst = calculateGST(t)
             val lst = (gst + (lon/15.0)) % 24.0
             val lstNorm = if(lst<0) lst+24.0 else lst
 
-            // --- FIX START: PARALLAX CORRECTION FOR MOON ---
+            // FIX: Parallax Correction for Moon Events
             val (calcRA, calcDec) = if (name == "Moon") {
                 val topo = toTopocentric(state.ra, state.dec, state.distGeo, lat, lon, lstNorm)
                 Pair(topo.ra, topo.dec)
             } else {
                 Pair(state.ra, state.dec)
             }
-            // --- FIX END ---
 
             val raHours = calcRA / 15.0
-            // Use calculateAzAlt from AstroMath (moved there in prev turn)
+            // Use shared function
             val (az, alt) = calculateAzAlt(lstNorm, lat, raHours, calcDec)
 
             val error = alt - targetAlt
@@ -444,9 +444,8 @@ object ComplexEventSolver {
     }
 }
 
-// --- SHARED MATH HELPERS (Top-Level) ---
+// --- SHARED MATH HELPERS ---
 
-// calculateAzAtRiseSet was NOT moved to AstroMath, so we keep it here.
 fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     val latRad = Math.toRadians(lat)
     val decRad = Math.toRadians(dec)
@@ -457,5 +456,4 @@ fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     return if (isRise) azDeg else 360.0 - azDeg
 }
 
-// NOTE: calculateAzAlt, normalizeTime, and formatTimeMM were moved to AstroMath.kt
-// and are removed from here to prevent conflicts.
+// Note: calculateAzAlt, normalizeTime, and formatTimeMM are now in AstroMath.kt
