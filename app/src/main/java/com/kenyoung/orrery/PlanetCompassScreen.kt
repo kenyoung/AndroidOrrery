@@ -59,10 +59,18 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val sunEvents = ComplexEventSolver.solveEvents(jdStart, "Sun", lat, lon, offset, -0.833)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents))
 
-            // 2. Moon
+            // 2. Moon (FIXED: Parallax Correction for the "Dot" position)
             val moonState = AstroEngine.getBodyState("Moon", jdStart)
+            val lstStr = calculateLST(now, lon)
+            val parts = lstStr.split(":")
+            val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
+
+            // Use toTopocentric from AstroMath to get the visual position
+            val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
+
             val moonEvents = ComplexEventSolver.solveEvents(jdStart, "Moon", lat, lon, offset, 0.125)
-            newList.add(PlotObject("Moon", "☾", redColorInt, moonState.ra, moonState.dec, moonEvents))
+            // Note: We use topoMoon RA/Dec here so the dot appears in the correct place on the radar
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents))
 
             // 3. Planets
             for (p in planets) {
@@ -285,7 +293,12 @@ fun CompassCanvas(
                 val riseUT = normalizeTime(obj.events.rise - offset)
                 paints.tableDataCenter.color = if(currAlt <= 0) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(riseUT, false), cols[2], currY, paints.tableDataCenter)
-                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
+                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true) // Wait, is this in AstroMath?
+                // calculateAzAtRiseSet was in AstroMath in original turn 17?
+                // No, it was in AstroMath.kt in Turn 17 logic? No, AstroMath had calculateRiseSet.
+                // It was defined as a helper in this file in Turn 18.
+                // CHECK ASTRO MATH FROM TURN 21: It does NOT have calculateAzAtRiseSet.
+                // Therefore I must KEEP calculateAzAtRiseSet in this file.
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
 
@@ -329,13 +342,13 @@ class CompassPaints(
     val line = Paint().apply { strokeWidth=4f; style=Paint.Style.STROKE; isAntiAlias=true }
     val symbol = Paint().apply { textSize=54f; textAlign=Paint.Align.CENTER; typeface=Typeface.DEFAULT_BOLD; isAntiAlias=true }
 
-    val tableHeaderCenter = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); isAntiAlias=true }
-    val tableHeaderLeft = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); isAntiAlias=true }
-    val tableHeaderRight = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.RIGHT; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); isAntiAlias=true }
+    val tableHeaderCenter = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.CENTER; typeface=Typeface.MONOSPACE; isAntiAlias=true }
+    val tableHeaderLeft = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.LEFT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
+    val tableHeaderRight = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 
-    val tableDataCenter = Paint().apply { textSize=29f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL); isAntiAlias=true }
-    val tableDataLeft = Paint().apply { textSize=29f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL); isAntiAlias=true }
-    val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL); isAntiAlias=true }
+    val tableDataCenter = Paint().apply { textSize=29f; textAlign=Paint.Align.CENTER; typeface=Typeface.MONOSPACE; isAntiAlias=true }
+    val tableDataLeft = Paint().apply { textSize=29f; textAlign=Paint.Align.LEFT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
+    val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 }
 
 // --- COMPLEX EVENT SOLVER (Iterative Hybrid Engine) ---
@@ -378,7 +391,6 @@ object ComplexEventSolver {
             val lst = (gst + (lon/15.0)) % 24.0
             val lstNorm = if(lst<0) lst+24.0 else lst
 
-            // AstroEngine returns degrees. Convert to HOURS.
             val raHours = state.ra / 15.0
             var ha = lstNorm - raHours
             while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
@@ -394,10 +406,24 @@ object ComplexEventSolver {
         var t = guessJD
         for (i in 0..5) {
             val state = AstroEngine.getBodyState(name, t)
-            // AstroEngine.ra is DEGREES. Pass directly to helper that accepts RA hours?
-            // No, calculateAzAltSimple calls calculateAzAlt which expects RA HOURS.
-            val raHours = state.ra / 15.0
-            val (az, alt) = calculateAzAltSimple(t, lat, lon, raHours, state.dec)
+
+            // Calculate LST for this moment
+            val gst = calculateGST(t)
+            val lst = (gst + (lon/15.0)) % 24.0
+            val lstNorm = if(lst<0) lst+24.0 else lst
+
+            // --- FIX START: PARALLAX CORRECTION FOR MOON ---
+            val (calcRA, calcDec) = if (name == "Moon") {
+                val topo = toTopocentric(state.ra, state.dec, state.distGeo, lat, lon, lstNorm)
+                Pair(topo.ra, topo.dec)
+            } else {
+                Pair(state.ra, state.dec)
+            }
+            // --- FIX END ---
+
+            val raHours = calcRA / 15.0
+            // Use calculateAzAlt from AstroMath (moved there in prev turn)
+            val (az, alt) = calculateAzAlt(lstNorm, lat, raHours, calcDec)
 
             val error = alt - targetAlt
             if (abs(error) < 0.01) return t
@@ -416,32 +442,11 @@ object ComplexEventSolver {
         gmst %= 24.0; if (gmst < 0) gmst += 24.0
         return gmst
     }
-
-    private fun calculateAzAltSimple(jd: Double, lat: Double, lon: Double, raHours: Double, dec: Double): Pair<Double, Double> {
-        val gst = calculateGST(jd)
-        var lst = gst + (lon/15.0)
-        lst %= 24.0; if(lst<0) lst+=24.0
-        return calculateAzAlt(lst, lat, raHours, dec)
-    }
 }
 
 // --- SHARED MATH HELPERS (Top-Level) ---
 
-fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Double): Pair<Double, Double> {
-    val haHours = lstHours - raHours
-    val haRad = Math.toRadians(haHours * 15.0)
-    val latRad = Math.toRadians(latDeg)
-    val decRad = Math.toRadians(decDeg)
-    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-    val altRad = asin(sinAlt.coerceIn(-1.0, 1.0))
-    val cosAz = (sin(decRad) - sin(altRad) * sin(latRad)) / (cos(altRad) * cos(latRad))
-    val azRadAbs = acos(cosAz.coerceIn(-1.0, 1.0))
-    val sinHA = sin(haRad)
-    var azDeg = Math.toDegrees(azRadAbs)
-    if (sinHA > 0) azDeg = 360.0 - azDeg
-    return Pair(azDeg, Math.toDegrees(altRad))
-}
-
+// calculateAzAtRiseSet was NOT moved to AstroMath, so we keep it here.
 fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     val latRad = Math.toRadians(lat)
     val decRad = Math.toRadians(dec)
@@ -452,18 +457,5 @@ fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     return if (isRise) azDeg else 360.0 - azDeg
 }
 
-fun normalizeTime(t: Double): Double {
-    var v = t
-    while(v < 0) v += 24.0
-    while(v >= 24) v -= 24.0
-    return v
-}
-
-fun formatTimeMM(t: Double, isSigned: Boolean): String {
-    if (t.isNaN()) return "--:--"
-    val absT = abs(t)
-    val h = floor(absT).toInt()
-    val m = floor((absT - h) * 60.0).toInt()
-    val sign = if (isSigned) { if (t < 0) "-" else " " } else ""
-    return "%s%02d:%02d".format(sign, h, m)
-}
+// NOTE: calculateAzAlt, normalizeTime, and formatTimeMM were moved to AstroMath.kt
+// and are removed from here to prevent conflicts.

@@ -31,7 +31,7 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
     val bgColor = Color.Black
     val headerYellow = Color(0xFFFFFF00)
     val planetYellow = Color(0xFFFFFFE0)
-    val eventBlue = Color(0xFF6495ED)
+    val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 
     var phenomenaData by remember { mutableStateOf<List<PlanetPhenomenaData>?>(null) }

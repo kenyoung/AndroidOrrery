@@ -3,6 +3,11 @@ package com.kenyoung.orrery
 import kotlin.math.*
 import java.time.Instant
 
+// --- CONSTANTS FOR PARALLAX ---
+const val AU_METERS = 149597870700.0
+const val EARTH_RADIUS_EQ_METERS = 6378137.0
+const val EARTH_FLATTENING = 1.0 / 298.257223563
+
 // --- RAW MATH FUNCTIONS ---
 
 fun solveKepler(M: Double, e: Double): Double {
@@ -21,7 +26,6 @@ fun normalizeDegrees(deg: Double): Double {
 }
 
 // Convert Spherical (Helio) to Cartesian (Vector3)
-// lon/lat in degrees, dist in AU
 fun sphericalToCartesian(dist: Double, lonDeg: Double, latDeg: Double): Vector3 {
     val lonRad = Math.toRadians(lonDeg)
     val latRad = Math.toRadians(latDeg)
@@ -38,7 +42,6 @@ fun calculateObliquity(jd: Double): Double {
 }
 
 // Convert Equatorial (RA/Dec) to Ecliptic (Lon/Lat)
-// Used for phenomena checks when using CSV data
 fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
     val eps = Math.toRadians(calculateObliquity(jd))
     val alpha = Math.toRadians(raDeg)
@@ -54,9 +57,80 @@ fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double
     return Pair(normalizeDegrees(Math.toDegrees(lambda)), Math.toDegrees(beta))
 }
 
-// --- KEPLERIAN CALCULATORS (Moved from MainActivity) ---
+// --- NEW: PARALLAX CORRECTION ---
+fun toTopocentric(
+    raDeg: Double, decDeg: Double, distAU: Double,
+    latDeg: Double, lonDeg: Double, lstHours: Double, elevationM: Double = 0.0
+): RaDec {
+    val latRad = Math.toRadians(latDeg)
+    val lstRad = Math.toRadians(lstHours * 15.0)
 
-// Calculates Sun Position (Low Precision Keplerian)
+    val f = EARTH_FLATTENING
+    val u = atan((1 - f) * tan(latRad))
+    val sinU = sin(u)
+    val cosU = cos(u)
+
+    val rhoSinPhiP = (1 - f) * sinU + (elevationM / EARTH_RADIUS_EQ_METERS) * sin(latRad)
+    val rhoCosPhiP = cosU + (elevationM / EARTH_RADIUS_EQ_METERS) * cos(latRad)
+
+    val eqRadInAU = EARTH_RADIUS_EQ_METERS / AU_METERS
+
+    val xo = eqRadInAU * rhoCosPhiP * cos(lstRad)
+    val yo = eqRadInAU * rhoCosPhiP * sin(lstRad)
+    val zo = eqRadInAU * rhoSinPhiP
+
+    val raRad = Math.toRadians(raDeg)
+    val decRad = Math.toRadians(decDeg)
+    val xg = distAU * cos(decRad) * cos(raRad)
+    val yg = distAU * cos(decRad) * sin(raRad)
+    val zg = distAU * sin(decRad)
+
+    val xt = xg - xo
+    val yt = yg - yo
+    val zt = zg - zo
+
+    val rt = sqrt(xt*xt + yt*yt + zt*zt)
+    val raTopRad = atan2(yt, xt)
+    val decTopRad = asin(zt / rt)
+
+    val raTopDeg = normalizeDegrees(Math.toDegrees(raTopRad))
+    val decTopDeg = Math.toDegrees(decTopRad)
+
+    return RaDec(raTopDeg, decTopDeg)
+}
+
+// --- SHARED UTILS (Moved from PlanetCompassScreen) ---
+
+fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Double): Pair<Double, Double> {
+    val haRad = Math.toRadians((lstHours - raHours) * 15.0)
+    val latRad = Math.toRadians(latDeg)
+    val decRad = Math.toRadians(decDeg)
+    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
+    val altRad = asin(sinAlt.coerceIn(-1.0, 1.0))
+    val cosAz = (sin(decRad) - sin(altRad) * sin(latRad)) / (cos(altRad) * cos(latRad))
+    val azRadAbs = acos(cosAz.coerceIn(-1.0, 1.0))
+    val azDeg = if (sin(haRad) > 0) 360.0 - Math.toDegrees(azRadAbs) else Math.toDegrees(azRadAbs)
+    return Pair(azDeg, Math.toDegrees(altRad))
+}
+
+fun normalizeTime(t: Double): Double {
+    var v = t
+    while (v < 0) v += 24.0
+    while (v >= 24) v -= 24.0
+    return v
+}
+
+fun formatTimeMM(t: Double, isSigned: Boolean): String {
+    if (t.isNaN()) return "--:--"
+    val absT = abs(t)
+    val h = floor(absT).toInt()
+    val m = floor((absT - h) * 60.0).toInt()
+    val sign = if (isSigned && t < 0) "-" else ""
+    return "%s%02d:%02d".format(sign, h, m)
+}
+
+// --- KEPLERIAN CALCULATORS ---
+
 fun calculateSunPositionKepler(jd: Double): BodyState {
     val n = jd - 2451545.0
     var L = normalizeDegrees(280.460 + 0.9856474 * n)
@@ -65,29 +139,18 @@ fun calculateSunPositionKepler(jd: Double): BodyState {
     val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
     val r = 1.00014 - 0.01671 * cos(Math.toRadians(g)) - 0.00014 * cos(2 * Math.toRadians(g))
 
-    // Geo Cartesian (Sun from Earth)
-    // Note: Keplerian model usually treats Sun at (0,0,0) Helio, but here we want Geocentric coords
-    // Convert Ecliptic to Equatorial
     val alpha = atan2(cos(epsilonRad) * sin(lambdaRad), cos(lambdaRad))
     val delta = asin(sin(epsilonRad) * sin(lambdaRad))
 
     val raDeg = normalizeDegrees(Math.toDegrees(alpha))
     val decDeg = Math.toDegrees(delta)
-
-    // Helio Pos for Sun is origin
-    val helioPos = Vector3(0.0, 0.0, 0.0)
-
-    // Geo Pos (Earth relative to Sun is -Sun relative to Earth)
-    // But for "Sun" BodyState, we want Sun's position relative to Earth.
-    // X = r * cos(dec) * cos(ra) ...
     val geoPos = sphericalToCartesian(r, raDeg, decDeg)
 
     return BodyState(
-        "Sun", jd, helioPos, geoPos, raDeg, decDeg, 0.0, r, Math.toDegrees(lambdaRad), 0.0
+        "Sun", jd, Vector3(0.0, 0.0, 0.0), geoPos, raDeg, decDeg, 0.0, r, Math.toDegrees(lambdaRad), 0.0
     )
 }
 
-// Calculates Planet Position (Keplerian)
 fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
     val d = jd - 2451545.0
     val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
@@ -104,24 +167,17 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
     val xh = rp * (cos(u) * cos(Np) - sin(u) * sin(Np) * cos(ip))
     val yh = rp * (cos(u) * sin(Np) + sin(u) * cos(Np) * cos(ip))
     val zh = rp * (sin(u) * sin(ip))
-    
-    // Heliocentric State
-    val helioPos = Vector3(xh, yh, zh)
-    val helioLon = normalizeDegrees(Math.toDegrees(atan2(yh, xh)))
-    val helioLat = Math.toDegrees(asin(zh / rp))
 
-    // Geocentric
+    val helioPos = Vector3(xh, yh, zh)
     val xg = xh - xe; val yg = yh - ye; val zg = zh - ze
     val distGeo = sqrt(xg*xg + yg*yg + zg*zg)
-    
-    // Equatorial
+
     val ecl = Math.toRadians(23.439 - 0.0000004 * d)
     val xeq = xg; val yeq = yg * cos(ecl) - zg * sin(ecl); val zeq = yg * sin(ecl) + zg * cos(ecl)
     val raHours = Math.toDegrees(atan2(yeq, xeq)) / 15.0
     val raDeg = normalizeDegrees(raHours * 15.0)
     val decDeg = Math.toDegrees(atan2(zeq, sqrt(xeq*xeq + yeq*yeq)))
 
-    // Ecliptic Geocentric (for phenomena)
     val (eclLon, eclLat) = equatorialToEcliptic(raDeg, decDeg, jd)
 
     return BodyState(p.name, jd, helioPos, Vector3(xg, yg, zg), raDeg, decDeg, rp, distGeo, eclLon, eclLat)
@@ -130,53 +186,46 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
 // --- LEGACY/COMPATIBILITY HELPERS ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = -0.833): Pair<Double, Double> {
-    val state = calculateSunPositionKepler(epochDay + 2440587.5 + 0.5) // approx noon
+    val state = calculateSunPositionKepler(epochDay + 2440587.5 + 0.5)
     return calculateRiseSet(state.ra, state.dec, lat, lon, timezoneOffset, altitude, epochDay)
 }
 
-// Universal Rise/Set calculator from RA/Dec
 fun calculateRiseSet(raDeg: Double, decDeg: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double, epochDay: Double): Pair<Double, Double> {
     val jd = epochDay + 2440587.5 + 0.5
     val n = jd - 2451545.0
     val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
-    
+
     val raHours = raDeg / 15.0
-    
+
     var transitUT = raHours - (lon / 15.0) - gmstFixed
     while (transitUT < 0) transitUT += 24.0
     while (transitUT >= 24) transitUT -= 24.0
-    
+
     val transitStandard = transitUT + timezoneOffset
-    
+
     val latRad = Math.toRadians(lat)
     val decRad = Math.toRadians(decDeg)
     val altRad = Math.toRadians(altitude)
-    
+
     val cosH = (sin(altRad) - sin(latRad) * sin(decRad)) / (cos(latRad) * cos(decRad))
     if (cosH < -1.0 || cosH > 1.0) return Pair(Double.NaN, Double.NaN)
-    
+
     val hHours = Math.toDegrees(acos(cosH)) / 15.0
-    
+
     var rise = transitStandard - hHours
     var set = transitStandard + hHours
-    
+
     while (rise < 0) rise += 24.0; while (rise >= 24) rise -= 24.0
     while (set < 0) set += 24.0; while (set >= 24) set -= 24.0
-    
+
     return Pair(rise, set)
 }
 
-// Compatible with TransitsScreen calling structure
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
-    // We defer to AstroEngine if strictly necessary, but for now we keep this purely math-based
-    // to avoid circular deps or complex refactors of legacy screens.
-    // Ideally TransitsScreen should call AstroEngine, but this file satisfies the "raw math" requirement.
-    // We will use the Keplerian calculation here for speed in the cache generator.
     val state = calculatePlanetStateKeplerian(epochDay + 2440587.5 + 0.5, p)
     val (rise, set) = calculateRiseSet(state.ra, state.dec, lat, lon, timezoneOffset, -0.5667, epochDay)
-    
-    // Recalculate transit
+
     val n = (epochDay + 2440587.5 + 0.5) - 2451545.0
     val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
@@ -188,7 +237,6 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     return PlanetEvents(rise, tr, set)
 }
 
-// Moon Functions (Simplified for compatibility)
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
     val d = (2440587.5 + epochDay) - 2451545.0
     val Ms = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
@@ -202,7 +250,6 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
 }
 
 fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): PlanetEvents {
-    // Low precision logic for display
     val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0
     val L_prime = Math.toRadians(218.3164477 + 481267.88123421 * T)
     val M_prime = Math.toRadians(134.9633964 + 477198.8675055 * T)
@@ -217,10 +264,9 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     val decRad = asin(z)
     val raDeg = normalizeDegrees(Math.toDegrees(raRad))
     val decDeg = Math.toDegrees(decRad)
-    
-    val (rise, set) = calculateRiseSet(raDeg, decDeg, lat, lon, timezoneOffset, 0.125, epochDay) // Parallax approx
-    
-    // Recalc transit
+
+    val (rise, set) = calculateRiseSet(raDeg, decDeg, lat, lon, timezoneOffset, 0.125, epochDay)
+
     val n = (epochDay + 2440587.5 + 0.5) - 2451545.0
     val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
@@ -228,10 +274,10 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
     val tr = transitUT + timezoneOffset
     var trFin = tr; while(trFin < 0) trFin+=24.0; while(trFin>=24.0) trFin-=24.0
-    
+
     return PlanetEvents(rise, trFin, set)
 }
-// Shared EOT
+
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
     val jd = epochDay + 2440587.5
     val n = jd - 2451545.0
@@ -257,8 +303,6 @@ fun calculateSunDeclination(epochDay: Double): Double {
     return asin(sin(epsilonRad) * sin(lambdaRad))
 }
 fun calculateMoonPosition(epochDay: Double): RaDec {
-   val ev = calculateMoonEvents(epochDay, 0.0, 0.0, 0.0) // Dummy call to reuse logic?
-   // Actually better to duplicate the lightweight low-prec logic for now:
     val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0
     val L_prime = Math.toRadians(218.3164477 + 481267.88123421 * T)
     val M_prime = Math.toRadians(134.9633964 + 477198.8675055 * T)
