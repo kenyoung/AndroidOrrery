@@ -221,29 +221,26 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
                         // TICK DRAWING LOGIC
                         tickIncrements.forEach { alt ->
-                            if (name == "Moon" && alt == 0) {
-                                // --- MOON 0 DEGREE SPECIAL CASE ---
-                                // Manually calculate using Keplerian position (fast, matches Transits)
-                                val mPos = calculateMoonPosition(epochDay)
-                                val (zRise, zSet) = calculateRiseSet(mPos.ra * 15.0, mPos.dec, lat, lon, offsetHours, 0.0, epochDay)
+                            if (alt == 0) {
+                                // --- HORIZON (0 DEGREE) CASE ---
+                                // FIXED: Use 'r' and 'sFinal' which account for the +24h wrap used in line drawing.
+                                // This ensures the ticks align with the drawn line endpoints.
+                                val tTickRise = r
+                                val tTickSet = sFinal
 
-                                if (!zRise.isNaN()) {
-                                    val tTickRise = zRise + shift
-                                    val tTickSet = zSet + shift
-                                    val times = listOf(tTickRise, tTickSet)
-                                    times.forEach { tTick ->
-                                        if (tTick >= overlapStart && tTick <= overlapEnd) {
-                                            val xTick = timeToX(tTick)
-                                            val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
-                                            val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
-                                            val tColor = Color(tickColor)
-                                            drawLine(tColor, Offset(xTick, yPos - 10), Offset(xTick, yPos + 10), strokeWidth = 2f)
-                                            drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + 30f, tickTextPaint.apply { color = tickColor }) }
-                                        }
+                                val times = listOf(tTickRise, tTickSet)
+                                times.forEach { tTick ->
+                                    if (tTick >= overlapStart && tTick <= overlapEnd) {
+                                        val xTick = timeToX(tTick)
+                                        val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
+                                        val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
+                                        val tColor = Color(tickColor)
+                                        drawLine(tColor, Offset(xTick, yPos - 10), Offset(xTick, yPos + 10), strokeWidth = 2f)
+                                        drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + 30f, tickTextPaint.apply { color = tickColor }) }
                                     }
                                 }
                             } else {
-                                // Standard Logic for Planets and Moon > 0
+                                // --- INTERIOR TICKS (20, 40, 60, 80) ---
                                 val ha = getHA(alt.toDouble(), dec)
                                 if (!ha.isNaN()) {
                                     val tTransit = ev.transit + shift
@@ -261,7 +258,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                                 }
                             }
                         }
-                        // Max Alt Tick
+                        // Max Alt Tick (Transit)
                         val maxAlt = 90.0 - abs(lat - dec)
                         val tTransit = ev.transit + shift
                         if (tTransit >= overlapStart && tTransit <= overlapEnd) {

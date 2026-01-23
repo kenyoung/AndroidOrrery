@@ -223,18 +223,84 @@ fun calculateRiseSet(raDeg: Double, decDeg: Double, lat: Double, lon: Double, ti
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
-    val state = calculatePlanetStateKeplerian(epochDay + 2440587.5 + 0.5, p)
-    val (rise, set) = calculateRiseSet(state.ra, state.dec, lat, lon, timezoneOffset, -0.5667, epochDay)
+    // UPDATED: Iterative calculation for Planets (same precision logic as Moon)
+    // Recalculates position at each step to handle motion (RA/Dec change) during the day.
 
-    val n = (epochDay + 2440587.5 + 0.5) - 2451545.0
-    val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
-    val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
-    var transitUT = (state.ra / 15.0) - (lon / 15.0) - gmstFixed
-    while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
-    val transit = transitUT + timezoneOffset
-    var tr = transit; while(tr < 0) tr+=24.0; while(tr>=24.0) tr-=24.0
+    // 1. Initial Guess for Transit: Start search at Local Noon adjusted to UT
+    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
 
-    return PlanetEvents(rise, tr, set)
+    // --- ITERATION 1: TRANSIT (Hour Angle = 0) ---
+    for (i in 0..4) {
+        // Calculate dynamic position at guess time
+        val state = calculatePlanetStateKeplerian(tGuess + 2440587.5, p)
+        val raHours = state.ra / 15.0
+
+        val jd = tGuess + 2440587.5
+        val n = jd - 2451545.0
+        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
+        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
+
+        var lst = gmstFixed + (lon / 15.0)
+        while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
+
+        var ha = lst - raHours
+        while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
+
+        // Standard 0.99727 rate for solar vs sidereal
+        tGuess -= (ha / 24.0) * 0.99727
+    }
+    val tTransit = tGuess
+
+    // Helper to calculate Altitude at a given time t
+    fun getAlt(t: Double): Double {
+        val state = calculatePlanetStateKeplerian(t + 2440587.5, p)
+        val jd = t + 2440587.5
+        val n = jd - 2451545.0
+        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
+        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
+        val lst = (gmstFixed + lon/15.0 + 24.0) % 24.0
+
+        val raHours = state.ra / 15.0
+        val haHours = lst - raHours
+        val haRad = Math.toRadians(haHours * 15.0)
+        val latRad = Math.toRadians(lat)
+        val decRad = Math.toRadians(state.dec)
+
+        val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
+        return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    }
+
+    // Target Altitude = -0.5667 degrees (Standard Refraction)
+    val targetAlt = -0.5667
+
+    // --- ITERATION 2: RISE ---
+    var tRise = tTransit - 0.25
+    for(i in 0..4) {
+        val alt = getAlt(tRise)
+        val diff = alt - targetAlt
+        val rate = 360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break
+        tRise -= (diff / rate)
+    }
+
+    // --- ITERATION 3: SET ---
+    var tSet = tTransit + 0.25
+    for(i in 0..4) {
+        val alt = getAlt(tSet)
+        val diff = alt - targetAlt
+        val rate = -360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break
+        tSet -= (diff / rate)
+    }
+
+    // Convert to Local Hours (0..24)
+    fun toLocal(t: Double): Double {
+        var h = (t - floor(t)) * 24.0 + timezoneOffset
+        while(h < 0) h += 24.0; while(h >= 24) h -= 24.0
+        return h
+    }
+
+    return PlanetEvents(toLocal(tRise), toLocal(tTransit), toLocal(tSet))
 }
 
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
@@ -250,32 +316,87 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
 }
 
 fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): PlanetEvents {
-    val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0
-    val L_prime = Math.toRadians(218.3164477 + 481267.88123421 * T)
-    val M_prime = Math.toRadians(134.9633964 + 477198.8675055 * T)
-    val F = Math.toRadians(93.2720950 + 483202.0175233 * T)
-    val lambda = L_prime + Math.toRadians(6.289 * sin(M_prime))
-    val beta = Math.toRadians(5.128 * sin(F))
-    val epsilon = Math.toRadians(23.439291 - 0.0130042 * T)
-    val x = cos(beta) * cos(lambda)
-    val y = cos(epsilon) * cos(beta) * sin(lambda) - sin(epsilon) * sin(beta)
-    val z = sin(epsilon) * cos(beta) * sin(lambda) + cos(epsilon) * sin(beta)
-    val raRad = atan2(y, x)
-    val decRad = asin(z)
-    val raDeg = normalizeDegrees(Math.toDegrees(raRad))
-    val decDeg = Math.toDegrees(decRad)
+    // UPDATED: Iterative calculation to account for Moon's motion (13 deg/day)
 
-    val (rise, set) = calculateRiseSet(raDeg, decDeg, lat, lon, timezoneOffset, 0.125, epochDay)
+    // 1. Initial Guess for Transit: Start search at Local Noon adjusted to UT
+    // (This prevents locking onto yesterday's/tomorrow's transit)
+    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
 
-    val n = (epochDay + 2440587.5 + 0.5) - 2451545.0
-    val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
-    val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
-    var transitUT = (raDeg / 15.0) - (lon / 15.0) - gmstFixed
-    while (transitUT < 0) transitUT += 24.0; while (transitUT >= 24) transitUT -= 24.0
-    val tr = transitUT + timezoneOffset
-    var trFin = tr; while(trFin < 0) trFin+=24.0; while(trFin>=24.0) trFin-=24.0
+    // --- ITERATION 1: TRANSIT (Hour Angle = 0) ---
+    for (i in 0..4) {
+        val pos = calculateMoonPosition(tGuess)
+        val raHours = pos.ra
 
-    return PlanetEvents(rise, trFin, set)
+        val jd = tGuess + 2440587.5
+        val n = jd - 2451545.0
+        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
+        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
+
+        var lst = gmstFixed + (lon / 15.0)
+        while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
+
+        var ha = lst - raHours
+        while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
+
+        // 1.035 factor compensates for Moon's prograde motion (approx 1/29th faster solar day)
+        tGuess -= (ha / 24.0) * 1.035
+    }
+    val tTransit = tGuess
+
+    // Helper to calculate Altitude at a given time t
+    fun getAlt(t: Double): Double {
+        val pos = calculateMoonPosition(t)
+        val jd = t + 2440587.5
+        val n = jd - 2451545.0
+        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
+        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
+        val lst = (gmstFixed + lon/15.0 + 24.0) % 24.0
+
+        val haHours = lst - pos.ra
+        val haRad = Math.toRadians(haHours * 15.0)
+        val latRad = Math.toRadians(lat)
+        val decRad = Math.toRadians(pos.dec)
+
+        val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
+        return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    }
+
+    // Target Altitude = 0.125 degrees (matches app standard)
+    val targetAlt = 0.125
+
+    // --- ITERATION 2: RISE ---
+    // Start guess: Transit - 6 hours
+    var tRise = tTransit - 0.25
+    for(i in 0..4) {
+        val alt = getAlt(tRise)
+        val diff = alt - targetAlt
+        // Approximate rate of change (Earth rotation rate ~360/day adjusted for lat)
+        // Cos(lat) factor is crucial.
+        val rate = 360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break // Polar safety
+        tRise -= (diff / rate)
+    }
+
+    // --- ITERATION 3: SET ---
+    // Start guess: Transit + 6 hours
+    var tSet = tTransit + 0.25
+    for(i in 0..4) {
+        val alt = getAlt(tSet)
+        val diff = alt - targetAlt
+        // For Setting, altitude is decreasing, so rate is negative
+        val rate = -360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break
+        tSet -= (diff / rate)
+    }
+
+    // Convert to Local Hours (0..24)
+    fun toLocal(t: Double): Double {
+        var h = (t - floor(t)) * 24.0 + timezoneOffset
+        while(h < 0) h += 24.0; while(h >= 24) h -= 24.0
+        return h
+    }
+
+    return PlanetEvents(toLocal(tRise), toLocal(tTransit), toLocal(tSet))
 }
 
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
