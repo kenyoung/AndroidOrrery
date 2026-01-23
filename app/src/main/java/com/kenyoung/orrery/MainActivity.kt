@@ -253,11 +253,15 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         val screens = listOf(
-                            "Planet Transits" to Screen.TRANSITS, "Planet Elevations" to Screen.ELEVATIONS,
-                            "Planet Phenomena" to Screen.PHENOMENA, "Planet Compass" to Screen.COMPASS,
-                            "Schematic Orrery" to Screen.SCHEMATIC, "To-scale Orrery" to Screen.SCALE,
-                            "Moon Calendar" to Screen.MOON_CALENDAR, "Astronomical Times" to Screen.TIMES,
-                            "Analemma" to Screen.ANALEMMA
+                            "Planet Transits" to Screen.TRANSITS,
+                            "Planet Elevations" to Screen.ELEVATIONS,
+                            "Planet Compass" to Screen.COMPASS,
+                            "Planet Phenomena" to Screen.PHENOMENA,
+                            "Moon Calendar" to Screen.MOON_CALENDAR,
+                            "Analemma" to Screen.ANALEMMA,
+                            "Schematic Orrery" to Screen.SCHEMATIC,
+                            "To-scale Orrery" to Screen.SCALE,
+                            "Astronomical Times" to Screen.TIMES
                         )
                         screens.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; currentScreen = screen; showMenu = false })

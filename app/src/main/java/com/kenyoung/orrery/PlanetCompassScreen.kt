@@ -55,37 +55,59 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val newList = mutableListOf<PlotObject>()
 
             // 1. Sun
+            // Visual Position: High Precision (Engine)
             val sunState = AstroEngine.getBodyState("Sun", jdStart)
-            val sunEvents = ComplexEventSolver.solveEvents(jdStart, "Sun", lat, lon, offset, -0.833)
+
+            // Events: Standard Low Precision (Math) - Matches TransitsScreen
+            // We manually reconstruct the event logic here since AstroMath doesn't have a direct "getSunEvents" returning a triplet.
+            val sunKepler = calculateSunPositionKepler(jdStart + 0.5) // Noon
+            val (sunRise, sunSet) = calculateRiseSet(sunKepler.ra, sunKepler.dec, lat, lon, offset, -0.833, epochDay)
+
+            // Calculate Sun Transit (Local Apparent Noon)
+            val nSun = (jdStart + 0.5) - 2451545.0
+            val gmstSun = (6.697374558 + 0.06570982441908 * nSun) % 24.0
+            val gmstFixedSun = if (gmstSun < 0) gmstSun + 24.0 else gmstSun
+            var sunTransitUT = (sunKepler.ra / 15.0) - (lon / 15.0) - gmstFixedSun
+            while (sunTransitUT < 0) sunTransitUT += 24.0
+            while (sunTransitUT >= 24) sunTransitUT -= 24.0
+            var sunTransit = sunTransitUT + offset
+            while (sunTransit < 0) sunTransit += 24.0; while (sunTransit >= 24) sunTransit -= 24.0
+
+            val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents))
 
-            // 2. Moon (FIX: Parallax Correction for visual dot)
+
+            // 2. Moon
+            // Visual Position: High Precision (Engine)
             val moonState = AstroEngine.getBodyState("Moon", jdStart)
 
-            // Calculate LST for the current 'now' to place the dot correctly
+            // Calculate LST for the current 'now' to place the dot correctly on the Radar
             val lstStr = calculateLST(now, lon)
             val parts = lstStr.split(":")
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
-
-            // Apply Topocentric correction
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            // Calculate Events using Solver (which now handles Parallax internally)
-            // Use -0.5667 (Standard Refraction) to match PlanetElevationsScreen logic
-            val moonEvents = ComplexEventSolver.solveEvents(jdStart, "Moon", lat, lon, offset, -0.5667)
+            // Events: Standard Low Precision (Math) - Matches TransitsScreen
+            val moonEvents = calculateMoonEvents(epochDay, lat, lon, offset)
 
-            // Store TOPOCENTRIC coords in the plot object so the radar draws it correctly
+            // Use Topocentric coords for plotting the dot, but standard events for the table
             newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents))
+
 
             // 3. Planets
             for (p in planets) {
                 if (p.name != "Earth") {
+                    // Visual Position: High Precision (Engine)
                     val state = AstroEngine.getBodyState(p.name, jdStart)
                     val col = p.color.toArgb()
-                    val events = ComplexEventSolver.solveEvents(jdStart, p.name, lat, lon, offset, -0.5667)
+
+                    // Events: Standard Low Precision (Math) - Matches TransitsScreen
+                    val events = calculatePlanetEvents(epochDay, lat, lon, offset, p)
+
                     newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events))
                 }
             }
+
             plotData = newList
             calculationTime = epochDay
         }
@@ -93,7 +115,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
         if (plotData.isEmpty()) {
-            Text("Calculating High Precision Ephemeris...", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            Text("Calculating...", color = Color.White, modifier = Modifier.align(Alignment.Center))
         } else {
             CompassCanvas(
                 plotData = plotData,
@@ -245,7 +267,6 @@ fun CompassCanvas(
 
             for(obj in plotData) {
                 // FIXED: obj.ra is in DEGREES. Must convert to HOURS for calculateAzAlt.
-                // For the Moon, obj.ra is already Topocentric from the LaunchedEffect block.
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val pColor = if(alt > 0) paints.whiteInt else paints.redInt
@@ -280,7 +301,6 @@ fun CompassCanvas(
             val offset = round(lon/15.0)
 
             for(obj in plotData) {
-                // FIXED: obj.ra is in DEGREES. Convert to HOURS.
                 val raHours = obj.ra / 15.0
                 val (currAz, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val ha = lst - raHours
@@ -352,98 +372,6 @@ class CompassPaints(
     val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 }
 
-// --- COMPLEX EVENT SOLVER (Iterative Hybrid Engine) ---
-object ComplexEventSolver {
-
-    fun solveEvents(epochDay: Double, name: String, lat: Double, lon: Double, offset: Double, horizonAlt: Double): PlanetEvents {
-        val jdNoon = epochDay + 2440587.5 + 0.5
-
-        // 1. Find Transit (LST ~= RA)
-        val transitJD = findTransit(jdNoon, name, lon)
-
-        // 2. Find Rise (Alt = horizon, before Transit)
-        val riseJD = findAltitudeCrossing(transitJD - 0.25, name, lat, lon, horizonAlt, true)
-
-        // 3. Find Set (Alt = horizon, after Transit)
-        val setJD = findAltitudeCrossing(transitJD + 0.25, name, lat, lon, horizonAlt, false)
-
-        return PlanetEvents(
-            jdToLocalHour(riseJD, offset),
-            jdToLocalHour(transitJD, offset),
-            jdToLocalHour(setJD, offset)
-        )
-    }
-
-    private fun jdToLocalHour(jd: Double, offset: Double): Double {
-        if (jd.isNaN()) return Double.NaN
-        val jd0 = floor(jd - 0.5) + 0.5
-        val frac = jd - jd0
-        var h = frac * 24.0
-        h += offset
-        while(h < 0) h+=24.0; while(h>=24) h-=24.0
-        return h
-    }
-
-    private fun findTransit(guessJD: Double, name: String, lon: Double): Double {
-        var t = guessJD
-        for (i in 0..4) {
-            val state = AstroEngine.getBodyState(name, t)
-            val gst = calculateGST(t)
-            val lst = (gst + (lon/15.0)) % 24.0
-            val lstNorm = if(lst<0) lst+24.0 else lst
-
-            val raHours = state.ra / 15.0
-            var ha = lstNorm - raHours
-            while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
-
-            if (abs(ha) < 0.0001) return t
-
-            t -= (ha / 24.0) * 0.99727
-        }
-        return t
-    }
-
-    private fun findAltitudeCrossing(guessJD: Double, name: String, lat: Double, lon: Double, targetAlt: Double, isRise: Boolean): Double {
-        var t = guessJD
-        for (i in 0..5) {
-            val state = AstroEngine.getBodyState(name, t)
-
-            // Calculate LST for this moment to apply parallax correction
-            val gst = calculateGST(t)
-            val lst = (gst + (lon/15.0)) % 24.0
-            val lstNorm = if(lst<0) lst+24.0 else lst
-
-            // FIX: Parallax Correction for Moon Events
-            val (calcRA, calcDec) = if (name == "Moon") {
-                val topo = toTopocentric(state.ra, state.dec, state.distGeo, lat, lon, lstNorm)
-                Pair(topo.ra, topo.dec)
-            } else {
-                Pair(state.ra, state.dec)
-            }
-
-            val raHours = calcRA / 15.0
-            // Use shared function
-            val (az, alt) = calculateAzAlt(lstNorm, lat, raHours, calcDec)
-
-            val error = alt - targetAlt
-            if (abs(error) < 0.01) return t
-
-            val rateDegPerDay = 360.0 * cos(Math.toRadians(lat)) * sin(Math.toRadians(az))
-            if (abs(rateDegPerDay) < 1.0) return Double.NaN
-
-            t -= (error / rateDegPerDay)
-        }
-        return t
-    }
-
-    private fun calculateGST(jd: Double): Double {
-        val d = jd - 2451545.0
-        var gmst = 18.697374558 + 24.06570982441908 * d
-        gmst %= 24.0; if (gmst < 0) gmst += 24.0
-        return gmst
-    }
-}
-
 // --- SHARED MATH HELPERS ---
 
 fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
@@ -455,5 +383,3 @@ fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     val azDeg = Math.toDegrees(azRad)
     return if (isRise) azDeg else 360.0 - azDeg
 }
-
-// Note: calculateAzAlt, normalizeTime, and formatTimeMM are now in AstroMath.kt

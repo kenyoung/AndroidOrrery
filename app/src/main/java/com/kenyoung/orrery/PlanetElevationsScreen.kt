@@ -223,16 +223,14 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                         tickIncrements.forEach { alt ->
                             if (name == "Moon" && alt == 0) {
                                 // --- MOON 0 DEGREE SPECIAL CASE ---
-                                // Use the exact 0-degree event for the Moon to account for changing Declination
-                                // We rely on the ev object which might have stored rise/set/transit.
-                                // But ev is typically Refraction (-0.57).
-                                // We calculate the specific 0.0 tick time here.
-                                // Optimization: Calculate it once outside loop? Yes, but concise here.
-                                val zeroEv = ComplexEventSolver.solveEvents(epochDay, "Moon", lat, lon, offsetHours, 0.0)
-                                if (!zeroEv.rise.isNaN()) {
-                                    val tZeroRise = zeroEv.rise + shift
-                                    val tZeroSet = zeroEv.set + shift
-                                    val times = listOf(tZeroRise, tZeroSet)
+                                // Manually calculate using Keplerian position (fast, matches Transits)
+                                val mPos = calculateMoonPosition(epochDay)
+                                val (zRise, zSet) = calculateRiseSet(mPos.ra * 15.0, mPos.dec, lat, lon, offsetHours, 0.0, epochDay)
+
+                                if (!zRise.isNaN()) {
+                                    val tTickRise = zRise + shift
+                                    val tTickSet = zSet + shift
+                                    val times = listOf(tTickRise, tTickSet)
                                     times.forEach { tTick ->
                                         if (tTick >= overlapStart && tTick <= overlapEnd) {
                                             val xTick = timeToX(tTick)
@@ -293,9 +291,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- DRAW MOON (Row 2) ---
-        // 1. Line: Use -0.5667 (Refraction corrected, visual line)
-        val moonEv = ComplexEventSolver.solveEvents(epochDay, "Moon", lat, lon, offsetHours, -0.5667)
-        // 2. Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
+        // Use Standard Calculator (matches TransitsScreen)
+        val moonEv = calculateMoonEvents(epochDay, lat, lon, offsetHours)
+
+        // Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
         var moonDec = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + 0.5).dec
         if (!moonEv.transit.isNaN()) {
             val transitJD = epochDay + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
@@ -326,8 +325,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         planetList.forEachIndexed { i, p ->
             val yPos = rowsStartY + ((i + 1) * rowHeight)
-            // Planets use same -0.5667 refraction for line
-            val ev = ComplexEventSolver.solveEvents(epochDay, p.name, lat, lon, offsetHours, -0.5667)
+            // Use Standard Calculator (matches TransitsScreen)
+            val ev = calculatePlanetEvents(epochDay, lat, lon, offsetHours, p)
             val state = AstroEngine.getBodyState(p.name, jd)
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
