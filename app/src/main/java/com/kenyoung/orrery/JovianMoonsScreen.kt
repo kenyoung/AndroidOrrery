@@ -41,9 +41,11 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     // Colors
     val bgColor = Color.Black
     val creamColor = Color(0xFFFDEEBD)
+    val shadowColor = Color.Black
     val colorIo = Color(0xFFFF69B4)
     val colorEu = Color(0xFF00FF00)
-    val colorGa = Color(0xFF9370DB)
+    // Brighter Ganymede color (was 0xFF9370DB)
+    val colorGa = Color(0xFFE0B0FF)
     val colorCa = Color(0xFFFFFF00)
     val gridColor = Color.Gray
     val textColor = Color.White
@@ -173,16 +175,37 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 val flipX = if (isEastRight) -1f else 1f
                 val flipY = if (isNorthUp) -1f else 1f
 
+                // Draw Jupiter Disk
                 drawOval(creamColor, topLeft = Offset(centerX - jW/2, currentY - jH/2), size = androidx.compose.ui.geometry.Size(jW, jH))
 
                 val currentPos = calculateJovianMoons(effectiveJD)
                 val moonColors = mapOf("Io" to colorIo, "Europa" to colorEu, "Ganymede" to colorGa, "Callisto" to colorCa)
 
+                // 1. Draw Shadows on Disk
+                moonColors.forEach { (name, _) ->
+                    val pos = currentPos[name]!!
+                    if (pos.shadowOnDisk) {
+                        val sx = centerX + (pos.shadowX * topScalePxPerRad * flipX).toFloat()
+                        val sy = currentY + (pos.shadowY * topScalePxPerRad * flipY).toFloat()
+                        // Draw shadow as small black oval
+                        val sSize = 4f
+                        drawOval(shadowColor, topLeft = Offset(sx - sSize/2, sy - sSize/2), size = androidx.compose.ui.geometry.Size(sSize, sSize))
+                    }
+                }
+
+                // 2. Draw Moons (if not eclipsed)
+                // Updated Size: 6f -> 7.5f (+25%)
+                val mSize = 7.5f
+                val mHalf = mSize / 2f
+
                 moonColors.forEach { (name, col) ->
                     val pos = currentPos[name]!!
-                    val mx = centerX + (pos.x * topScalePxPerRad * flipX).toFloat()
-                    val my = currentY + (pos.y * topScalePxPerRad * flipY).toFloat()
-                    drawRect(col, topLeft = Offset(mx - 3f, my - 3f), size = androidx.compose.ui.geometry.Size(6f, 6f))
+                    // Skip drawing if eclipsed (in shadow of Jupiter)
+                    if (!pos.eclipsed) {
+                        val mx = centerX + (pos.x * topScalePxPerRad * flipX).toFloat()
+                        val my = currentY + (pos.y * topScalePxPerRad * flipY).toFloat()
+                        drawRect(col, topLeft = Offset(mx - mHalf, my - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
+                    }
                 }
 
                 // --- MIDDLE SECTION: GRAPH ---
@@ -260,7 +283,6 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 }
 
                 // Current Time Dots (Animated)
-                // Use calculated effectiveJD relative to startEpoch
                 val currentFracTotal = effectiveJD - 2440587.5 - startEpoch
                 val currentDayInt = floor(currentFracTotal).toInt() + 1
                 val currentFrac = currentFracTotal - floor(currentFracTotal)
@@ -275,7 +297,6 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                     cPos.forEach { (name, state) ->
                         val xPx = (state.x * graphScalePxPerRad * flipX).toFloat()
                         val screenX = baseX + xPx
-                        // Mask the line (Reduced 25%: 20f -> 15f)
                         drawCircle(bgColor, radius = 15f, center = Offset(screenX, yPos))
                         drawCircle(moonColors[name]!!, radius = 6f, center = Offset(screenX, yPos))
                     }

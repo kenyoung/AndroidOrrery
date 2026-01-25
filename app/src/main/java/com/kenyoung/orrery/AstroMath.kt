@@ -9,7 +9,15 @@ const val EARTH_RADIUS_EQ_METERS = 6378137.0
 const val EARTH_FLATTENING = 1.0 / 298.257223563
 
 // --- DATA STRUCTURES ---
-data class JovianMoonState(val x: Double, val y: Double, val z: Double)
+data class JovianMoonState(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val shadowX: Double = 0.0,    // X position of the shadow on Jupiter (if transit)
+    val shadowY: Double = 0.0,    // Y position of the shadow on Jupiter
+    val shadowOnDisk: Boolean = false, // Is the shadow visible on Jupiter?
+    val eclipsed: Boolean = false      // Is the moon hidden in Jupiter's shadow?
+)
 
 // --- RAW MATH FUNCTIONS ---
 
@@ -186,7 +194,7 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
     return BodyState(p.name, jd, helioPos, Vector3(xg, yg, zg), raDeg, decDeg, rp, distGeo, eclLon, eclLat)
 }
 
-// --- JOVIAN MOONS (Meeus Chapter 44 - Accurate Implementation) ---
+// --- JOVIAN MOONS (Meeus Chapter 44 - Accurate Implementation with Shadows) ---
 
 fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val d = jd - 2451545.0
@@ -195,6 +203,51 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     // Local trigonometric helpers working in RADIANS
     fun sinR(rad: Double) = kotlin.math.sin(rad)
     fun cosR(rad: Double) = kotlin.math.cos(rad)
+
+    // --- PHASE ANGLE & SHADOW GEOMETRY ---
+    val planetList = getOrreryPlanets()
+    val earthElem = planetList.find { it.name == "Earth" }!!
+    val jupElem = planetList.find { it.name == "Jupiter" }!!
+
+    val earthState = calculatePlanetStateKeplerian(jd, earthElem)
+    val jupState = calculatePlanetStateKeplerian(jd, jupElem)
+
+    // Vectors in Heliocentric Ecliptic Coords
+    // Renamed to avoid conflict with Meeus variables later
+    val J_vec = jupState.helioPos // Sun -> Jupiter
+    val E_vec = earthState.helioPos // Sun -> Earth
+
+    // Vector Earth -> Jupiter (Line of Sight)
+    // val obsVec = Vector3(J_vec.x - E_vec.x, J_vec.y - E_vec.y, J_vec.z - E_vec.z)
+
+    // val earthLon = Math.toRadians(earthState.eclipticLon)
+    val jupLon = Math.toRadians(jupState.eclipticLon)
+    val sunLon = Math.toRadians(jupState.eclipticLon + 180.0) // From Jup, Sun is opposite
+
+    val r = earthState.distSun
+    val R = jupState.distSun
+    val Delta = jupState.distGeo
+
+    // Meeus (48.2) Phase Angle
+    // Better: use law of cosines on distances
+    val cosAlpha = (R*R + Delta*Delta - r*r) / (2*R*Delta)
+    val alpha = acos(cosAlpha.coerceIn(-1.0, 1.0))
+
+    // Shadow displacement factor (tan alpha)
+    val shadowFactor = tan(alpha)
+
+    val sunRA = calculateSunPositionKepler(jd).ra
+    val jupRA = jupState.ra
+
+    var raDiff = sunRA - jupRA
+    while(raDiff < -180) raDiff += 360
+    while(raDiff > 180) raDiff -= 360
+
+    // If Sun RA > Jup RA, Sun is "East" in sky (Left). Shadow goes West (+X).
+    val shadowSign = if (raDiff > 0) 1.0 else -1.0
+    val xShiftPerZ = shadowSign * shadowFactor
+
+    // --- MOON POSITIONS ---
 
     val V = (172.74 + 0.00111588 * d) * deg2rad
     val M = (357.529 + 0.9856003 * d) * deg2rad
@@ -205,19 +258,19 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val B = 5.555 * sinR(N) + 0.168 * sinR(2.0 * N)
 
     val K = J + (A - B) * deg2rad
-    val R = 1.00014 - 0.01671 * cosR(M) - 0.00014 * cosR(2.0 * M)
-    val r = 5.20872 - 0.25208 * cosR(N) - 0.00611 * cosR(2.0 * N)
+    val R_orb = 1.00014 - 0.01671 * cosR(M) - 0.00014 * cosR(2.0 * M)
+    val r_orb = 5.20872 - 0.25208 * cosR(N) - 0.00611 * cosR(2.0 * N)
 
-    val Delta = sqrt(r * r + R * R - 2.0 * r * R * cosR(K))
-    val psi = asin((R / Delta) * sinR(K))
+    val Delta_dist = sqrt(r_orb * r_orb + R_orb * R_orb - 2.0 * r_orb * R_orb * cosR(K))
+    val psi = asin((R_orb / Delta_dist) * sinR(K))
 
     val lam = (34.35 + 0.083091 * d + 0.329 * sinR(V) + B) * deg2rad
 
     val DS = (3.12 * sinR(lam + 42.8 * deg2rad)) * deg2rad
     val DE = DS - (2.22 * sinR(psi) * cosR(lam + 22.0 * deg2rad) +
-            1.3 * (r - Delta) / Delta * sinR(lam - 100.5 * deg2rad)) * deg2rad
+            1.3 * (r_orb - Delta_dist) / Delta_dist * sinR(lam - 100.5 * deg2rad)) * deg2rad
 
-    val dd = d - Delta / 173.0
+    val dd = d - Delta_dist / 173.0
 
     var u1 = (163.8069 + 203.4058646 * dd) * deg2rad + psi - B * deg2rad
     var u2 = (358.4140 + 101.2916335 * dd) * deg2rad + psi - B * deg2rad
@@ -243,12 +296,30 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     fun makeState(rm: Double, u: Double): JovianMoonState {
         val su = sinR(u)
         val cu = cosR(u)
-        // Meeus Rectangular Coordinates (X positive West, Y positive North)
         val x = rm * su
         val y = -rm * cu * sDE
-        // Derived Z for occlusion: Positive Z is behind Jupiter
         val z = rm * cu * cDE
-        return JovianMoonState(x, y, z)
+
+        // --- SHADOW & ECLIPSE CALCULATION ---
+
+        // 1. Shadow Position (Project Moon onto Jupiter Plane at Z=0)
+        val sX = x + (xShiftPerZ * -z)
+        val sY = y
+
+        // Check if Shadow is on Disk
+        // Jupiter Radius = 1.0. Use 0.95 to account for margin.
+        val isOnDisk = (z < 0) && ((sX*sX + sY*sY) < 0.95)
+
+        // 2. Eclipse (Moon inside Jupiter Shadow)
+        // Shadow center at distance Z is shifted by (xShiftPerZ * Z).
+        val shadowCenterX = xShiftPerZ * z
+        val shadowCenterY = 0.0
+
+        // Check distance of Moon (x,y) from Shadow Center
+        val distSq = (x - shadowCenterX).pow(2) + (y - shadowCenterY).pow(2)
+        val isEclipsed = (z > 0) && (distSq < 0.95)
+
+        return JovianMoonState(x, y, z, sX, sY, isOnDisk, isEclipsed)
     }
 
     return mapOf(
