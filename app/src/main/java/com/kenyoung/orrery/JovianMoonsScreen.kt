@@ -90,10 +90,14 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     val effectiveJD = if (isAnimating || animDayOffset > 0.0) {
         startEpoch + animDayOffset + 2440587.5
     } else {
-        // FIXED: Calculate JD directly from Instant to avoid Local Date vs UTC Date mismatch
-        // JD = (Millis / 86400000) + 2440587.5
         currentInstant.toEpochMilli() / 86400000.0 + 2440587.5
     }
+
+    // Prepare Display String for Animation Time
+    val displayInstant = Instant.ofEpochMilli(((effectiveJD - 2440587.5) * 86400000.0).toLong())
+    val displayTimeStr = DateTimeFormatter.ofPattern("dd MMM HH:mm")
+        .withZone(ZoneId.of("UTC"))
+        .format(displayInstant)
 
     // Jupiter Scale
     val maxElongationRadii = 32.0
@@ -350,20 +354,34 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Animation Button
-            Button(
-                onClick = {
-                    if (!isAnimating && animDayOffset >= daysInMonth) animDayOffset = 0.0
-                    isAnimating = !isAnimating
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isAnimating) Color.Red else Color.DarkGray,
-                    contentColor = Color.White
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                modifier = Modifier.height(36.dp)
+            // Left: Animation Button and Time Display
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(bottom = 4.dp)
             ) {
-                Text(if (isAnimating) "Stop" else "Animate", fontSize = 14.sp)
+                Button(
+                    onClick = {
+                        if (!isAnimating && animDayOffset >= daysInMonth) animDayOffset = 0.0
+                        isAnimating = !isAnimating
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isAnimating) Color.Red else Color.DarkGray,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(if (isAnimating) "Stop" else "Animate", fontSize = 14.sp)
+                }
+
+                if (isAnimating || animDayOffset > 0.0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = displayTimeStr,
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
             }
 
             // Right: Orientation Controls (Stacked Columns)

@@ -8,6 +8,9 @@ const val AU_METERS = 149597870700.0
 const val EARTH_RADIUS_EQ_METERS = 6378137.0
 const val EARTH_FLATTENING = 1.0 / 298.257223563
 
+// --- DATA STRUCTURES ---
+data class JovianMoonState(val x: Double, val y: Double, val z: Double)
+
 // --- RAW MATH FUNCTIONS ---
 
 fun solveKepler(M: Double, e: Double): Double {
@@ -183,7 +186,80 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
     return BodyState(p.name, jd, helioPos, Vector3(xg, yg, zg), raDeg, decDeg, rp, distGeo, eclLon, eclLat)
 }
 
-// --- LEGACY HELPERS ---
+// --- JOVIAN MOONS (Meeus Chapter 44 - Accurate Implementation) ---
+
+fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
+    val d = jd - 2451545.0
+    val deg2rad = Math.PI / 180.0
+
+    // Local trigonometric helpers working in RADIANS
+    fun sinR(rad: Double) = kotlin.math.sin(rad)
+    fun cosR(rad: Double) = kotlin.math.cos(rad)
+
+    val V = (172.74 + 0.00111588 * d) * deg2rad
+    val M = (357.529 + 0.9856003 * d) * deg2rad
+    val N = (20.020 + 0.0830853 * d + 0.329 * sinR(V)) * deg2rad
+    val J = (66.115 + 0.9025179 * d - 0.329 * sinR(V)) * deg2rad
+
+    val A = 1.915 * sinR(M) + 0.020 * sinR(2.0 * M)
+    val B = 5.555 * sinR(N) + 0.168 * sinR(2.0 * N)
+
+    val K = J + (A - B) * deg2rad
+    val R = 1.00014 - 0.01671 * cosR(M) - 0.00014 * cosR(2.0 * M)
+    val r = 5.20872 - 0.25208 * cosR(N) - 0.00611 * cosR(2.0 * N)
+
+    val Delta = sqrt(r * r + R * R - 2.0 * r * R * cosR(K))
+    val psi = asin((R / Delta) * sinR(K))
+
+    val lam = (34.35 + 0.083091 * d + 0.329 * sinR(V) + B) * deg2rad
+
+    val DS = (3.12 * sinR(lam + 42.8 * deg2rad)) * deg2rad
+    val DE = DS - (2.22 * sinR(psi) * cosR(lam + 22.0 * deg2rad) +
+            1.3 * (r - Delta) / Delta * sinR(lam - 100.5 * deg2rad)) * deg2rad
+
+    val dd = d - Delta / 173.0
+
+    var u1 = (163.8069 + 203.4058646 * dd) * deg2rad + psi - B * deg2rad
+    var u2 = (358.4140 + 101.2916335 * dd) * deg2rad + psi - B * deg2rad
+    var u3 = (5.7176 + 50.2345180 * dd) * deg2rad + psi - B * deg2rad
+    var u4 = (224.8092 + 21.4879800 * dd) * deg2rad + psi - B * deg2rad
+
+    val G = (331.18 + 50.310482 * dd) * deg2rad
+    val H = (87.45 + 21.569231 * dd) * deg2rad
+
+    u1 += (0.472 * sinR(2.0 * (u1 - u2))) * deg2rad
+    u2 += (1.073 * sinR(2.0 * (u2 - u3))) * deg2rad
+    u3 += (0.174 * sinR(G) + 0.035 * sinR(2.0 * G)) * deg2rad
+    u4 += (0.845 * sinR(H) + 0.034 * sinR(2.0 * H)) * deg2rad
+
+    val r1 = 5.9057 - 0.0244 * cosR(2.0 * (u1 - u2))
+    val r2 = 9.3966 - 0.0882 * cosR(2.0 * (u2 - u3))
+    val r3 = 14.9883 - 0.0216 * cosR(G)
+    val r4 = 26.3627 - 0.1939 * cosR(H)
+
+    val sDE = sinR(DE)
+    val cDE = cosR(DE)
+
+    fun makeState(rm: Double, u: Double): JovianMoonState {
+        val su = sinR(u)
+        val cu = cosR(u)
+        // Meeus Rectangular Coordinates (X positive West, Y positive North)
+        val x = rm * su
+        val y = -rm * cu * sDE
+        // Derived Z for occlusion: Positive Z is behind Jupiter
+        val z = rm * cu * cDE
+        return JovianMoonState(x, y, z)
+    }
+
+    return mapOf(
+        "Io" to makeState(r1, u1),
+        "Europa" to makeState(r2, u2),
+        "Ganymede" to makeState(r3, u3),
+        "Callisto" to makeState(r4, u4)
+    )
+}
+
+// --- LEGACY HELPERS (Must remain for existing calls) ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = -0.833): Pair<Double, Double> {
     val state = calculateSunPositionKepler(epochDay + 2440587.5 + 0.5)
@@ -355,103 +431,4 @@ fun calculateLST(instant: Instant, lon: Double): String {
     var lst = gmst + (lon / 15.0)
     lst %= 24.0; if (lst < 0) lst += 24.0
     return "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
-}
-
-// --- JOVIAN MOONS MATH (Meeus Chapter 44 Implementation) ---
-
-data class JovianMoonState(val x: Double, val y: Double, val z: Double)
-
-fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
-    // 1. Light Time Correction
-    // Calculate distance Earth-Jupiter for Delta correction.
-    val jupElem = getOrreryPlanets().find { it.name == "Jupiter" }!!
-    val jupState = calculatePlanetStateKeplerian(jd, jupElem)
-    val distAU = jupState.distGeo
-    val deltaC = distAU / 173.1446 // Light time in days
-    val tJD = jd - deltaC // True time of event at Jupiter
-
-    val d = tJD - 2433282.5
-
-    // Mean Longitudes (Meeus 44.1)
-    var l1 = normalizeDegrees(106.07719 + 203.488955790 * d)
-    var l2 = normalizeDegrees(175.73161 + 101.374724735 * d)
-    var l3 = normalizeDegrees(120.55883 + 50.317609207 * d)
-    var l4 = normalizeDegrees(84.44459 + 21.571071177 * d)
-
-    val pi = normalizeDegrees(66.1 + 0.9025179 * d / 365.25) // Perihelion Jup
-    val omega = normalizeDegrees(100.5 + 1.0286295 * d / 365.25) // Node Jup
-
-    // Periodic Terms (simplified major terms from Meeus 44)
-    // We assume Earth Heliocentric Coords approx needed for Phase.
-    // Meeus method uses Longitude/Latitudes.
-
-    // Instead of full trigonometric expansion of G, H, etc., we use simplified perturbations for 1:2:4 resonance
-    // and solve geometric projection.
-
-    // Mean Anomaly of Jup
-    val G = normalizeDegrees(357.529 + 0.9856003 * (tJD - 2451545.0)) // Earth
-    val J = normalizeDegrees(273.8777 + 0.083091052 * d) // Jupiter Mean Anomaly approx
-
-    // Corrected Longitudes (u)
-    // Major inequalities (Meeus 44.2 - 44.4)
-    val phi = l1 - 2*l2
-    val u1 = l1 + 0.472 * sin(Math.toRadians(2*(l1-l2)))
-    val u2 = l2 + 1.065 * sin(Math.toRadians(2*(l2-l3)))
-    val u3 = l3 + 0.165 * sin(Math.toRadians(l3 - pi))
-    val u4 = l4 + 0.843 * sin(Math.toRadians(l4 - pi))
-
-    // Use Geometric Phase Projection
-    // Angle visible from Earth (Lambda)
-    // L_Earth - L_Jup.
-    val sunState = calculateSunPositionKepler(tJD)
-    val earthLon = normalizeDegrees(sunState.eclipticLon + 180.0)
-    val jupLon = jupState.eclipticLon
-
-    // Angle Earth-Jupiter-Sun (Phase)
-    // Approx by (L_Jup - L_Earth).
-    val alpha = normalizeDegrees(jupLon - earthLon) // Phase angle (approx)
-
-    // Correction K (Meeus 44.5)
-    val K = alpha + 180.0
-
-    // Radii
-    val r1 = 5.9; val r2 = 9.4; val r3 = 15.0; val r4 = 26.4
-
-    // Declination of Earth (De)
-    // Reuse pole calculation from previous fix
-    val alpha0 = Math.toRadians(268.05); val delta0 = Math.toRadians(64.49)
-    val jRA = Math.toRadians(jupState.ra); val jDec = Math.toRadians(jupState.dec)
-    val sinDe = -sin(delta0)*sin(jDec) - cos(delta0)*cos(jDec)*cos(alpha0 - jRA)
-    val De = asin(sinDe)
-
-    fun calc(u: Double, r: Double): JovianMoonState {
-        // Apparent distance X, Y
-        // X = r * sin(u - L_Jup + Phase) = r * sin(u - L_Earth)
-        // Correct approach is u - JupLon + (JupLon - EarthLon) ?
-        // Meeus formula: X = r * sin(u - L + correction).
-        // Let's use simple geometric:
-        // Argument theta = u - EarthLon.
-        // At opposition (EarthLon = JupLon + 180), theta = u - JupLon - 180.
-        // If Moon at conjunction (u=JupLon), theta = -180. sin(-180)=0. Correct.
-        // If Moon at max elong East (u=JupLon+90), theta = -90. sin=-1. (Screen left). Correct.
-
-        val theta = Math.toRadians(u - earthLon)
-        val x = -r * sin(theta) // Negate so East is Right (Astronomical) or Left (Map)?
-        // Astronomical convention: East is Left. X positive.
-        // We want simple map: "East Left" option handles flip.
-        // Let's standard: X = r sin(theta).
-
-        // Z depth
-        val z = r * cos(theta) * cos(De)
-        val y = r * cos(theta) * sin(De)
-
-        return JovianMoonState(x, y, z)
-    }
-
-    return mapOf(
-        "Io" to calc(u1, r1),
-        "Europa" to calc(u2, r2),
-        "Ganymede" to calc(u3, r3),
-        "Callisto" to calc(u4, r4)
-    )
 }
