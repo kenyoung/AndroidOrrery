@@ -244,7 +244,10 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     while(raDiff > 180) raDiff -= 360
 
     // If Sun RA > Jup RA, Sun is "East" in sky (Left). Shadow goes West (+X).
-    val shadowSign = if (raDiff > 0) 1.0 else -1.0
+    // UPDATED: shadowSign must be -1.0 when Sun is East to produce positive X shift (West)
+    // because X displacement is (tanAlpha * -z). For transit, -z is negative.
+    // Negative * Negative = Positive (Right/West).
+    val shadowSign = if (raDiff > 0) -1.0 else 1.0
     val xShiftPerZ = shadowSign * shadowFactor
 
     // --- MOON POSITIONS ---
@@ -307,8 +310,8 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
         val sY = y
 
         // Check if Shadow is on Disk
-        // Jupiter Radius = 1.0. Use 0.95 to account for margin.
-        val isOnDisk = (z < 0) && ((sX*sX + sY*sY) < 0.95)
+        // FIX: Moon must be in FRONT (z > 0) to cast a shadow on the visible face.
+        val isOnDisk = (z > 0) && ((sX*sX + sY*sY) < 0.95)
 
         // 2. Eclipse (Moon inside Jupiter Shadow)
         // Shadow center at distance Z is shifted by (xShiftPerZ * Z).
@@ -316,8 +319,9 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
         val shadowCenterY = 0.0
 
         // Check distance of Moon (x,y) from Shadow Center
+        // FIX: Moon must be BEHIND (z < 0) to be in Jupiter's shadow.
         val distSq = (x - shadowCenterX).pow(2) + (y - shadowCenterY).pow(2)
-        val isEclipsed = (z > 0) && (distSq < 0.95)
+        val isEclipsed = (z < 0) && (distSq < 0.95)
 
         return JovianMoonState(x, y, z, sX, sY, isOnDisk, isEclipsed)
     }

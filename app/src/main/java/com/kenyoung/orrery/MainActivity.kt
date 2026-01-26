@@ -215,10 +215,21 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         DateDialog(
             currentUsePhone = usePhoneTime,
             onDismiss = { showDateDialog = false },
-            onConfirm = { usePhone, date ->
+            onConfirm = { usePhone, utEpochDay ->
                 usePhoneTime = usePhone
-                if (!usePhone && date != null) {
-                    manualEpochDay = date.toEpochDay().toDouble()
+                if (!usePhone && utEpochDay != null) {
+                    // 1. Convert UT Epoch Day (from Dialog) directly to UTC Instant
+                    // This prevents the app from interpreting the input as Local Time.
+                    val days = utEpochDay.toLong()
+                    val frac = utEpochDay - days
+                    val nanos = (frac * 86_400_000_000_000L).toLong()
+                    val ld = LocalDate.ofEpochDay(days)
+                    val lt = LocalTime.ofNanoOfDay(nanos)
+                    currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
+
+                    // 2. Recalculate manualEpochDay (Local Time) from this new Instant
+                    // This ensures the animation loop and other manual-time logic remain consistent
+                    manualEpochDay = getManualFromInstant(currentInstant)
                 }
                 showDateDialog = false
             }
@@ -269,7 +280,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                         }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
-                        DropdownMenuItem(text = { Text("Date") }, onClick = { showMenu = false; showDateDialog = true })
+                        DropdownMenuItem(text = { Text("Date and Time") }, onClick = { showMenu = false; showDateDialog = true })
                         DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://kenyoung.github.io/AndroidOrrery/")); context.startActivity(intent) })
                     }
                 },
@@ -445,10 +456,18 @@ fun LocationDialog(
 fun DateDialog(
     currentUsePhone: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (Boolean, LocalDate?) -> Unit
+    onConfirm: (Boolean, Double?) -> Unit
 ) {
     var usePhone by remember { mutableStateOf(currentUsePhone) }
-    var dateString by remember { mutableStateOf("") }
+
+    var dayString by remember { mutableStateOf("") }
+    var monthString by remember { mutableStateOf("") }
+    var yearString by remember { mutableStateOf("") }
+
+    var hourString by remember { mutableStateOf("") }
+    var minString by remember { mutableStateOf("") }
+    var secString by remember { mutableStateOf("") }
+
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     fun validateAndSubmit() {
@@ -457,18 +476,35 @@ fun DateDialog(
             return
         }
         try {
-            val formatter = DateTimeFormatter.ofPattern("d/M/yyyy")
-            val parsedDate = LocalDate.parse(dateString, formatter)
-            onConfirm(false, parsedDate)
+            val d = if (dayString.isBlank()) 0 else dayString.toInt()
+            val m = if (monthString.isBlank()) 0 else monthString.toInt()
+            val y = if (yearString.isBlank()) 0 else yearString.toInt()
+
+            // Constructs LocalDate (will throw DateTimeException if invalid)
+            val parsedDate = LocalDate.of(y, m, d)
+            val dateEpoch = parsedDate.toEpochDay().toDouble()
+
+            val h = if (hourString.isBlank()) 0 else hourString.toInt()
+            val min = if (minString.isBlank()) 0 else minString.toInt()
+            val s = if (secString.isBlank()) 0.0 else secString.toDouble()
+
+            if (h !in 0..23) { errorMsg = "Hour must be 0-23"; return }
+            if (min !in 0..59) { errorMsg = "Minute must be 0-59"; return }
+            if (s < 0.0 || s >= 60.0) { errorMsg = "Second must be 0-59.9"; return }
+
+            val timeFraction = (h * 3600.0 + min * 60.0 + s) / 86400.0
+            val finalEpochDay = dateEpoch + timeFraction
+
+            onConfirm(false, finalEpochDay)
         } catch (e: Exception) {
-            errorMsg = "Invalid Date. Use D/M/YYYY"
+            errorMsg = "Invalid Date or Time."
         }
     }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Enter Date", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                Text("Enter Date & Time (UT)", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = usePhone, onCheckedChange = { usePhone = it; errorMsg = null }, colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black))
@@ -477,18 +513,22 @@ fun DateDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val inputColor = if (usePhone) Color.Gray else Color.Green
+                val contentAlpha = if (usePhone) 0.38f else 1f
 
-                OutlinedTextField(
-                    value = dateString,
-                    onValueChange = { dateString = it },
-                    label = { Text("D/M/YYYY", color = inputColor) },
-                    singleLine = true,
-                    enabled = !usePhone,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = inputColor, fontSize = 16.sp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.White, unfocusedBorderColor = Color.Gray, cursorColor = Color.White)
-                )
+                Text("Date (DD/MM/YYYY)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    DmsInput(dayString, { dayString = it }, "Day", !usePhone, inputColor)
+                    DmsInput(monthString, { monthString = it }, "Month", !usePhone, inputColor)
+                    DmsInput(yearString, { yearString = it }, "Year", !usePhone, inputColor)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Universal Time (HH:MM:SS)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    DmsInput(hourString, { hourString = it }, "Hour", !usePhone, inputColor)
+                    DmsInput(minString, { minString = it }, "Min", !usePhone, inputColor)
+                    DmsInput(secString, { secString = it }, "Sec", !usePhone, inputColor)
+                }
 
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
                 Spacer(modifier = Modifier.height(24.dp))

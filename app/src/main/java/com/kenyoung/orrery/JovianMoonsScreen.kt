@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -41,8 +42,11 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     // Colors
     val bgColor = Color.Black
     val creamColor = Color(0xFFFDEEBD)
+    // Tan color for Jupiter's cloud bands
+    val tanColor = Color(0xFFD2B48C)
     val shadowColor = Color.Black
-    val colorIo = Color(0xFFFF69B4)
+    // Updated Io to Bright Red
+    val colorIo = Color.Red
     val colorEu = Color(0xFF00FF00)
     // Brighter Ganymede color (was 0xFF9370DB)
     val colorGa = Color(0xFFE0B0FF)
@@ -175,38 +179,68 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 val flipX = if (isEastRight) -1f else 1f
                 val flipY = if (isNorthUp) -1f else 1f
 
-                // Draw Jupiter Disk
-                drawOval(creamColor, topLeft = Offset(centerX - jW/2, currentY - jH/2), size = androidx.compose.ui.geometry.Size(jW, jH))
+                // Define DrawOp for sorting objects by depth (Painter's Algorithm)
+                data class DrawOp(val z: Double, val draw: DrawScope.() -> Unit)
+                val drawList = mutableListOf<DrawOp>()
+
+                // 1. Add Jupiter (Z = 0)
+                drawList.add(DrawOp(0.0) {
+                    drawOval(creamColor, topLeft = Offset(centerX - jW/2, currentY - jH/2), size = androidx.compose.ui.geometry.Size(jW, jH))
+                    val bandThickness = jH / 10f
+                    val bandWidth = jW * 0.8f
+                    val bandXOffset = jW * 0.1f
+                    val band1Top = currentY - jH/4 - bandThickness/2
+                    val band2Top = currentY + jH/4 - bandThickness/2
+
+                    drawRect(
+                        tanColor,
+                        topLeft = Offset(centerX - jW/2 + bandXOffset, band1Top),
+                        size = androidx.compose.ui.geometry.Size(bandWidth, bandThickness)
+                    )
+                    drawRect(
+                        tanColor,
+                        topLeft = Offset(centerX - jW/2 + bandXOffset, band2Top),
+                        size = androidx.compose.ui.geometry.Size(bandWidth, bandThickness)
+                    )
+                })
 
                 val currentPos = calculateJovianMoons(effectiveJD)
                 val moonColors = mapOf("Io" to colorIo, "Europa" to colorEu, "Ganymede" to colorGa, "Callisto" to colorCa)
 
-                // 1. Draw Shadows on Disk
-                moonColors.forEach { (name, _) ->
-                    val pos = currentPos[name]!!
-                    if (pos.shadowOnDisk) {
-                        val sx = centerX + (pos.shadowX * topScalePxPerRad * flipX).toFloat()
-                        val sy = currentY + (pos.shadowY * topScalePxPerRad * flipY).toFloat()
-                        // Draw shadow as small black oval
-                        val sSize = 4f
-                        drawOval(shadowColor, topLeft = Offset(sx - sSize/2, sy - sSize/2), size = androidx.compose.ui.geometry.Size(sSize, sSize))
-                    }
-                }
-
-                // 2. Draw Moons (if not eclipsed)
-                // Updated Size: 6f -> 7.5f (+25%)
+                // Define Moon Size
                 val mSize = 7.5f
                 val mHalf = mSize / 2f
 
-                moonColors.forEach { (name, col) ->
+                // 2. Add Shadows
+                moonColors.forEach { (name, _) ->
                     val pos = currentPos[name]!!
-                    // Skip drawing if eclipsed (in shadow of Jupiter)
-                    if (!pos.eclipsed) {
-                        val mx = centerX + (pos.x * topScalePxPerRad * flipX).toFloat()
-                        val my = currentY + (pos.y * topScalePxPerRad * flipY).toFloat()
-                        drawRect(col, topLeft = Offset(mx - mHalf, my - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
+                    if (pos.shadowOnDisk) {
+                        // With AstroMath.kt fixed, shadowOnDisk implies Z > 0 (Transit).
+                        // Place shadow just in front of Jupiter (0.1).
+                        drawList.add(DrawOp(0.1) {
+                            val sx = centerX + (pos.shadowX * topScalePxPerRad * flipX).toFloat()
+                            val sy = currentY + (pos.shadowY * topScalePxPerRad * flipY).toFloat()
+                            drawOval(shadowColor, topLeft = Offset(sx - mHalf, sy - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
+                        })
                     }
                 }
+
+                // 3. Add Moons (Z = Calculated Z)
+                moonColors.forEach { (name, col) ->
+                    val pos = currentPos[name]!!
+                    // Skip if eclipsed (inside shadow), otherwise add to list
+                    if (!pos.eclipsed) {
+                        drawList.add(DrawOp(pos.z) {
+                            val mx = centerX + (pos.x * topScalePxPerRad * flipX).toFloat()
+                            val my = currentY + (pos.y * topScalePxPerRad * flipY).toFloat()
+                            drawRect(col, topLeft = Offset(mx - mHalf, my - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
+                        })
+                    }
+                }
+
+                // 4. Sort and Draw (Low Z first -> High Z last)
+                drawList.sortBy { it.z }
+                drawList.forEach { it.draw(this) }
 
                 // --- MIDDLE SECTION: GRAPH ---
                 val col1X = w * 0.25f
