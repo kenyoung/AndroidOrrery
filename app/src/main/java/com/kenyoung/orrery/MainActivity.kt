@@ -96,6 +96,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var usePhoneLocation by remember { mutableStateOf(true) }
     var manualLat by remember { mutableStateOf(0.0) }
     var manualLon by remember { mutableStateOf(0.0) }
+    // Stores the last text entered by the user (LatDeg, LatMin, LatSec, LonDeg, LonMin, LonSec)
+    var savedLocationInput by remember { mutableStateOf<List<String>?>(null) }
 
     val effectiveLat = if (usePhoneLocation) initialGpsLat else manualLat
     val effectiveLon = if (usePhoneLocation) initialGpsLon else manualLon
@@ -103,6 +105,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     // --- TIME STATE ---
     var usePhoneTime by remember { mutableStateOf(true) }
     var manualEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay().toDouble()) }
+    // Stores the last text entered by the user (Day, Month, Year, Hour, Min, Sec)
+    var savedDateInput by remember { mutableStateOf<List<String>?>(null) }
 
     var currentInstant by remember { mutableStateOf(Instant.now()) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -203,10 +207,17 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     if (showLocationDialog) {
         LocationDialog(
             currentUsePhone = usePhoneLocation,
+            phoneLat = initialGpsLat,
+            phoneLon = initialGpsLon,
+            savedInput = savedLocationInput,
             onDismiss = { showLocationDialog = false },
-            onConfirm = { usePhone, lat, lon ->
+            onConfirm = { usePhone, lat, lon, inputStrings ->
                 usePhoneLocation = usePhone
-                if (!usePhone) { manualLat = lat; manualLon = lon }
+                if (!usePhone) {
+                    manualLat = lat
+                    manualLon = lon
+                    savedLocationInput = inputStrings
+                }
                 showLocationDialog = false
             }
         )
@@ -214,22 +225,20 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     if (showDateDialog) {
         DateDialog(
             currentUsePhone = usePhoneTime,
+            phoneInstant = Instant.now(),
+            savedInput = savedDateInput,
             onDismiss = { showDateDialog = false },
-            onConfirm = { usePhone, utEpochDay ->
+            onConfirm = { usePhone, utEpochDay, inputStrings ->
                 usePhoneTime = usePhone
                 if (!usePhone && utEpochDay != null) {
-                    // 1. Convert UT Epoch Day (from Dialog) directly to UTC Instant
-                    // This prevents the app from interpreting the input as Local Time.
                     val days = utEpochDay.toLong()
                     val frac = utEpochDay - days
                     val nanos = (frac * 86_400_000_000_000L).toLong()
                     val ld = LocalDate.ofEpochDay(days)
                     val lt = LocalTime.ofNanoOfDay(nanos)
                     currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
-
-                    // 2. Recalculate manualEpochDay (Local Time) from this new Instant
-                    // This ensures the animation loop and other manual-time logic remain consistent
                     manualEpochDay = getManualFromInstant(currentInstant)
+                    savedDateInput = inputStrings
                 }
                 showDateDialog = false
             }
@@ -369,24 +378,76 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId)
     return AstroCache(startEpochDay, daysCount, sunRise, sunSet, astroRise, astroSet, planetMap)
 }
 
+// --- UTILITIES ---
+fun degToDms(valDeg: Double): Triple<String, String, String> {
+    val absVal = abs(valDeg)
+    val d = floor(absVal).toInt()
+    val mPart = (absVal - d) * 60.0
+    val m = floor(mPart).toInt()
+    val s = (mPart - m) * 60.0
+    val sign = if (valDeg < 0) "-" else ""
+    // Use integer for seconds if very close, else decimal
+    val sInt = s.roundToInt()
+    val sStr = if (abs(s - sInt) < 0.001) sInt.toString() else "%.1f".format(s)
+    return Triple("$sign$d", "$m", sStr)
+}
+
 @Composable
 fun LocationDialog(
     currentUsePhone: Boolean,
+    phoneLat: Double,
+    phoneLon: Double,
+    savedInput: List<String>?,
     onDismiss: () -> Unit,
-    onConfirm: (Boolean, Double, Double) -> Unit
+    onConfirm: (Boolean, Double, Double, List<String>) -> Unit
 ) {
     var usePhone by remember { mutableStateOf(currentUsePhone) }
-    var latDeg by remember { mutableStateOf("") }
-    var latMin by remember { mutableStateOf("") }
-    var latSec by remember { mutableStateOf("") }
-    var lonDeg by remember { mutableStateOf("") }
-    var lonMin by remember { mutableStateOf("") }
-    var lonSec by remember { mutableStateOf("") }
+
+    // Initialize Fields based on mode
+    val phoneLatDms = degToDms(phoneLat)
+    val phoneLonDms = degToDms(phoneLon)
+
+    // If saving input exists, use it. Otherwise fallback to phone defaults.
+    val initialVals = if (savedInput != null) {
+        savedInput
+    } else {
+        listOf(phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
+            phoneLonDms.first, phoneLonDms.second, phoneLonDms.third)
+    }
+
+    // If using phone currently, we show phone values. If Manual, we show saved values.
+    val startVals = if (currentUsePhone) {
+        listOf(phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
+            phoneLonDms.first, phoneLonDms.second, phoneLonDms.third)
+    } else {
+        initialVals
+    }
+
+    var latDeg by remember { mutableStateOf(startVals[0]) }
+    var latMin by remember { mutableStateOf(startVals[1]) }
+    var latSec by remember { mutableStateOf(startVals[2]) }
+    var lonDeg by remember { mutableStateOf(startVals[3]) }
+    var lonMin by remember { mutableStateOf(startVals[4]) }
+    var lonSec by remember { mutableStateOf(startVals[5]) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    // When toggling Use Phone, update fields accordingly
+    LaunchedEffect(usePhone) {
+        if (usePhone) {
+            latDeg = phoneLatDms.first; latMin = phoneLatDms.second; latSec = phoneLatDms.third
+            lonDeg = phoneLonDms.first; lonMin = phoneLonDms.second; lonSec = phoneLonDms.third
+        } else {
+            if (savedInput != null) {
+                latDeg = savedInput[0]; latMin = savedInput[1]; latSec = savedInput[2]
+                lonDeg = savedInput[3]; lonMin = savedInput[4]; lonSec = savedInput[5]
+            }
+        }
+    }
 
     fun validateAndSubmit() {
         if (usePhone) {
-            onConfirm(true, 0.0, 0.0)
+            // Return empty strings for saved input as they are ignored in phone mode
+            onConfirm(true, 0.0, 0.0, emptyList())
             return
         }
         try {
@@ -411,7 +472,9 @@ fun LocationDialog(
 
             if (abs(finalLat) > 90.0) { errorMsg = "Invalid Latitude."; return }
             if (abs(finalLon) > 180.0) { errorMsg = "Invalid Longitude."; return }
-            onConfirm(false, finalLat, finalLon)
+
+            val inputStrings = listOf(latDeg, latMin, latSec, lonDeg, lonMin, lonSec)
+            onConfirm(false, finalLat, finalLon, inputStrings)
         } catch (e: Exception) {
             errorMsg = "Invalid number format."
         }
@@ -455,30 +518,65 @@ fun LocationDialog(
 @Composable
 fun DateDialog(
     currentUsePhone: Boolean,
+    phoneInstant: Instant,
+    savedInput: List<String>?,
     onDismiss: () -> Unit,
-    onConfirm: (Boolean, Double?) -> Unit
+    onConfirm: (Boolean, Double?, List<String>?) -> Unit
 ) {
     var usePhone by remember { mutableStateOf(currentUsePhone) }
 
-    var dayString by remember { mutableStateOf("") }
-    var monthString by remember { mutableStateOf("") }
-    var yearString by remember { mutableStateOf("") }
+    // Default values from Phone (System Time)
+    val phoneZDT = phoneInstant.atZone(ZoneId.of("UTC"))
+    val pDate = phoneZDT.toLocalDate()
+    val pTime = phoneZDT.toLocalTime()
+    val s = pTime.second + (pTime.nano / 1_000_000_000.0)
+    val sStr = if (pTime.nano == 0) pTime.second.toString() else "%.1f".format(s)
 
-    var hourString by remember { mutableStateOf("") }
-    var minString by remember { mutableStateOf("") }
-    var secString by remember { mutableStateOf("") }
+    val phoneVals = listOf(
+        pDate.dayOfMonth.toString(), pDate.monthValue.toString(), pDate.year.toString(),
+        pTime.hour.toString(), pTime.minute.toString(), sStr
+    )
+
+    // Initial values logic
+    val startVals = if (currentUsePhone) phoneVals else (savedInput ?: phoneVals)
+
+    var dayString by remember { mutableStateOf(startVals[0]) }
+    var monthString by remember { mutableStateOf(startVals[1]) }
+    var yearString by remember { mutableStateOf(startVals[2]) }
+
+    var hourString by remember { mutableStateOf(startVals[3]) }
+    var minString by remember { mutableStateOf(startVals[4]) }
+    var secString by remember { mutableStateOf(startVals[5]) }
 
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
+    // Toggle Logic
+    LaunchedEffect(usePhone) {
+        if (usePhone) {
+            dayString = phoneVals[0]; monthString = phoneVals[1]; yearString = phoneVals[2]
+            hourString = phoneVals[3]; minString = phoneVals[4]; secString = phoneVals[5]
+        } else {
+            if (savedInput != null) {
+                dayString = savedInput[0]; monthString = savedInput[1]; yearString = savedInput[2]
+                hourString = savedInput[3]; minString = savedInput[4]; secString = savedInput[5]
+            }
+        }
+    }
+
     fun validateAndSubmit() {
         if (usePhone) {
-            onConfirm(true, null)
+            onConfirm(true, null, null)
             return
         }
         try {
             val d = if (dayString.isBlank()) 0 else dayString.toInt()
             val m = if (monthString.isBlank()) 0 else monthString.toInt()
-            val y = if (yearString.isBlank()) 0 else yearString.toInt()
+            var y = if (yearString.isBlank()) 0 else yearString.toInt()
+
+            // Logic for 2-digit years
+            if (y >= 0 && y < 100) {
+                y += 2000
+            }
 
             // Constructs LocalDate (will throw DateTimeException if invalid)
             val parsedDate = LocalDate.of(y, m, d)
@@ -495,7 +593,9 @@ fun DateDialog(
             val timeFraction = (h * 3600.0 + min * 60.0 + s) / 86400.0
             val finalEpochDay = dateEpoch + timeFraction
 
-            onConfirm(false, finalEpochDay)
+            val inputStrings = listOf(dayString, monthString, yearString, hourString, minString, secString)
+
+            onConfirm(false, finalEpochDay, inputStrings)
         } catch (e: Exception) {
             errorMsg = "Invalid Date or Time."
         }
@@ -515,7 +615,7 @@ fun DateDialog(
                 val inputColor = if (usePhone) Color.Gray else Color.Green
                 val contentAlpha = if (usePhone) 0.38f else 1f
 
-                Text("Date (DD/MM/YYYY)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                Text("Date (DD/MM/{YY}YY)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     DmsInput(dayString, { dayString = it }, "Day", !usePhone, inputColor)
                     DmsInput(monthString, { monthString = it }, "Month", !usePhone, inputColor)

@@ -48,8 +48,8 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     // Updated Io to Bright Red
     val colorIo = Color.Red
     val colorEu = Color(0xFF00FF00)
-    // Brighter Ganymede color (was 0xFF9370DB)
-    val colorGa = Color(0xFFE0B0FF)
+    // Ganymede to Light Blue
+    val colorGa = Color(0xFFADD8E6)
     val colorCa = Color(0xFFFFFF00)
     val gridColor = Color.Gray
     val textColor = Color.White
@@ -171,7 +171,10 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
 
                 // --- TOP SECTION: CURRENT VIEW (Animated) ---
                 val currentY = topSectionH / 2f
-                val topScalePxPerRad = ((w * 0.9f) / (2 * maxElongationRadii)).toFloat()
+
+                // UPDATED SCALE: Increased from 0.9f to 1.15f (approx +25%)
+                val topScalePxPerRad = ((w * 1.15f) / (2 * maxElongationRadii)).toFloat()
+
                 val jFlat = 15f / 16f
                 val jW = topScalePxPerRad * 2f
                 val jH = jW * jFlat
