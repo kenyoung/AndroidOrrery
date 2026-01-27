@@ -261,7 +261,18 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 title = {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         if (!usePhoneTime) {
-                            Text(text = dateString, style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace), modifier = Modifier.align(Alignment.CenterStart))
+                            Column(modifier = Modifier.align(Alignment.CenterStart)) {
+                                Text(
+                                    text = dateString,
+                                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                    modifier = Modifier.offset(y = (-6).dp)
+                                )
+                                Text(
+                                    text = "${DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("UTC")).format(currentInstant)} UT",
+                                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                    modifier = Modifier.offset(y = (-6).dp)
+                                )
+                            }
                             if (!isAnimating) {
                                 TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                             }
@@ -316,15 +327,11 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (currentScreen !in listOf(Screen.TIMES, Screen.ANALEMMA, Screen.ELEVATIONS, Screen.COMPASS, Screen.MOON_CALENDAR, Screen.JOVIAN_MOONS, Screen.PHENOMENA)) {
+            // UPDATED: Simplified logic. Only TRANSITS shows a header row now.
+            if (currentScreen == Screen.TRANSITS) {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
-                    if (currentScreen == Screen.TRANSITS) {
-                        Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                        Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    } else {
-                        Text(text = "Date: $dateString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                        Text(text = "UT $utString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    }
+                    Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                 }
             }
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
