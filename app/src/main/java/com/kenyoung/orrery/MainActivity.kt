@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // Navigation Enum
-enum class Screen { TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, JOVIAN_MOONS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
+enum class Screen { TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, JOVIAN_MOONS, JOVIAN_EVENTS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -290,6 +290,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Moon Calendar" to Screen.MOON_CALENDAR,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
+                            "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Analemma" to Screen.ANALEMMA,
                             "Schematic Orrery" to Screen.SCHEMATIC,
                             "To-scale Orrery" to Screen.SCALE,
@@ -327,7 +328,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         containerColor = Color.Black
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // UPDATED: Simplified logic. Only TRANSITS shows a header row now.
             if (currentScreen == Screen.TRANSITS) {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
@@ -345,6 +345,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
+                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat)
                 }
