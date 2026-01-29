@@ -4,14 +4,20 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +31,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -94,8 +101,18 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
 
     val bgColor = Color.Black
 
-    val utcDate = currentInstant.atZone(ZoneId.of("UTC")).toLocalDate()
-    val startMJD = utcDate.toEpochDay() + 40587.0
+    // --- TIME ZONE STATE ---
+    var useLocalTime by remember { mutableStateOf(false) }
+    val zoneId = if (useLocalTime) ZoneId.systemDefault() else ZoneId.of("UTC")
+    val timeLabel = if (useLocalTime) "" else " UT" // Standard time usually implies local without suffix, or we can use zone ID
+
+    // Calculate start MJD based on the "Today" of the selected zone
+    val zonedDateTime = currentInstant.atZone(zoneId)
+    val todayDate = zonedDateTime.toLocalDate()
+    val startOfDayInstant = todayDate.atStartOfDay(zoneId).toInstant()
+
+    // MJD = JD - 2400000.5. JD of Instant is (millis/86400000) + 2440587.5
+    val startMJD = (startOfDayInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
     val nowMJD = (currentInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
 
     var eventList by remember { mutableStateOf<List<JovianEventItem>?>(null) }
@@ -119,7 +136,6 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
             .background(bgColor)
     ) {
         // --- TOP: System Diagram ---
-        // Reduced height to 60.dp
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -133,20 +149,20 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
             }
         }
 
-        // --- BOTTOM: Event List ---
+        // --- MIDDLE: Event List ---
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            val list = eventList
-            if (list == null) {
+            val fullList = eventList
+            if (fullList == null) {
                 Text(
                     "Calculating events...",
                     color = Color.White,
                     modifier = Modifier.align(Alignment.Center)
                 )
-            } else if (list.isEmpty()) {
+            } else if (fullList.isEmpty()) {
                 Text(
                     "No events found or calculation error.",
                     color = Color.Red,
@@ -154,8 +170,9 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                 )
             } else {
                 val rowHeight = 55f
-                val headerHeight = 60f
+                val headerHeight = 90f
                 val dateHeaderHeight = 60f
+                val bottomPadding = 20f
                 val textSizeContent = 40f
                 val headerYellow = Color(0xFFFFFFE0)
                 val dateYellow = Color(0xFFFFFFE0)
@@ -163,13 +180,33 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                 val textGreen = Color(0xFF00FF00)
                 val textRed = Color.Red
 
+                // Determine if we show 3 days or filter to 2
+                // We must group by the *Selected Zone Date*
+                val distinctDates3 = fullList
+                    .filter { !it.isSimultaneousAlert }
+                    .map { mjdToInstant(it.mjd).atZone(zoneId).toLocalDate().toEpochDay() }
+                    .distinct()
+                    .count()
+                val height3Days = headerHeight + (distinctDates3 * dateHeaderHeight) + (fullList.size * rowHeight) + bottomPadding
+
+                val screenHeight = constraints.maxHeight.toFloat()
+
+                // If 3 days fit, show all. Else filter to 2 days (standard behavior)
+                val list = if (height3Days <= screenHeight) {
+                    fullList
+                } else {
+                    val limit2Days = startMJD + 2.0
+                    fullList.filter { it.mjd < limit2Days }
+                }
+
+                // Recalculate metrics for the chosen list
                 val distinctDates = list
                     .filter { !it.isSimultaneousAlert }
-                    .map { mjdToLocalDate(it.mjd).toEpochDay() }
+                    .map { mjdToInstant(it.mjd).atZone(zoneId).toLocalDate().toEpochDay() }
                     .distinct()
                     .count()
 
-                val totalHeightPx = headerHeight + (distinctDates * dateHeaderHeight) + (list.size * rowHeight) + 100f
+                val totalHeightPx = headerHeight + (distinctDates * dateHeaderHeight) + (list.size * rowHeight) + bottomPadding
                 val totalHeightDp = with(density) { totalHeightPx.toDp() }
 
                 Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
@@ -177,20 +214,26 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                         val w = size.width
 
                         // Paints
-                        // Restored Font Size to 48f
                         val titlePaint = Paint().apply { color = headerYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+                        val timeHeaderPaint = Paint().apply { color = headerYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
                         val dateHeaderPaint = Paint().apply { color = dateYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
 
                         val paintGray = Paint().apply { color = textGray.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }
                         val paintGreen = Paint().apply { color = textGreen.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }
                         val paintRed = Paint().apply { color = textRed.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }
 
-                        // Adjusted Y to 50f for the larger font baseline
                         var currentY = 50f
 
                         drawIntoCanvas { canvas ->
+                            // 1. Title
                             canvas.nativeCanvas.drawText("Galilean Moon Events", w/2, currentY, titlePaint)
-                            currentY += 50f
+                            currentY += 45f
+
+                            // 2. Current Time (Centered below title)
+                            val nowFormatter = DateTimeFormatter.ofPattern("'It is now 'HH:mm")
+                            val nowStr = currentInstant.atZone(zoneId).format(nowFormatter) + timeLabel
+                            canvas.nativeCanvas.drawText(nowStr, w/2, currentY, timeHeaderPaint)
+                            currentY += 45f
 
                             var lastEpochDay = -99999L
                             val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -198,7 +241,8 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
 
                             for (item in list) {
                                 if (!item.isSimultaneousAlert) {
-                                    val itemDate = mjdToLocalDate(item.mjd)
+                                    // Use Zone-aware date
+                                    val itemDate = mjdToInstant(item.mjd).atZone(zoneId).toLocalDate()
                                     val itemEpochDay = itemDate.toEpochDay()
                                     if (itemEpochDay != lastEpochDay) {
                                         currentY += dateHeaderHeight
@@ -220,15 +264,46 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                                     item.text
                                 } else {
                                     val instant = mjdToInstant(item.mjd)
-                                    val timeStr = instant.atZone(ZoneId.of("UTC")).format(timeFormatter)
-                                    "$timeStr UT, ${item.text}"
+                                    val timeStr = instant.atZone(zoneId).format(timeFormatter)
+                                    "$timeStr$timeLabel, ${item.text}"
                                 }
 
                                 canvas.nativeCanvas.drawText(displayString, 40f, currentY, activePaint)
+
+                                // Check Mark for Past Events
+                                if (item.mjd < nowMJD) {
+                                    val textWidth = activePaint.measureText(displayString)
+                                    canvas.nativeCanvas.drawText("✓", 40f + textWidth + 20f, currentY, activePaint)
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // --- BOTTOM: Radio Buttons ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = !useLocalTime,
+                    onClick = { useLocalTime = false }
+                )
+                Text("Universal Time", color = Color.White, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = useLocalTime,
+                    onClick = { useLocalTime = true }
+                )
+                Text("Standard Time", color = Color.White, fontSize = 14.sp)
             }
         }
     }
@@ -309,7 +384,8 @@ fun JovianSystemDiagram(moons: List<MoonVisualState>) {
 
 private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, lat: Double, lon: Double): List<JovianEventItem> {
     val nowMJD = (nowInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
-    val endMJD = startMJD + 2.0
+    // Increase range to 3 days to check if they fit
+    val endMJD = startMJD + 3.0
     val stepSize = 1.0 / 1440.0
     val rawEvents = mutableListOf<RawEvent>()
 
@@ -323,14 +399,26 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
         val moons = listOf("Io", "Europa", "Ganymede", "Callisto")
         for (m in moons) {
             val p = prevState[m]!!; val c = currState[m]!!
-            if (!p.transit && c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m begins transit of Jupiter", m, 0, true))
-            if (p.transit && !c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m ends transit of Jupiter", m, 0, false))
-            if (!p.shadowTransit && c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m's shadow begins to cross Jupiter", m, 1, true))
-            if (p.shadowTransit && !c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m's shadow leaves Jupiter's disk", m, 1, false))
-            if (!p.occultation && c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m enters occultation by Jupiter", m, 2, true))
-            if (p.occultation && !c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m exits occultation by Jupiter", m, 2, false))
-            if (!p.eclipse && c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m eclipsed by Jupiter's shadow", m, 3, true))
-            if (p.eclipse && !c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m exits eclipse by Jupiter's shadow", m, 3, false))
+
+            // Transit events (always visible if Jupiter is visible)
+            if (!p.transit && c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m begins transit", m, 0, true))
+            if (p.transit && !c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m ends transit", m, 0, false))
+
+            // Shadow Transit events
+            if (!p.shadowTransit && c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit begins", m, 1, true))
+            if (p.shadowTransit && !c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit ends", m, 1, false))
+
+            // Occultation events - only if NOT Eclipsed (in shadow)
+            if (!c.eclipse) {
+                if (!p.occultation && c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m enters occultation", m, 2, true))
+                if (p.occultation && !c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m exits occultation", m, 2, false))
+            }
+
+            // Eclipse events - only if NOT Occulted (behind disk)
+            if (!c.occultation) {
+                if (!p.eclipse && c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m enters eclipse", m, 3, true))
+                if (p.eclipse && !c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m exits eclipse", m, 3, false))
+            }
         }
         prevState = currState
         tMJD = nextMJD
@@ -351,7 +439,10 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
             pixelType = JovEventPixel.NEXT
             nextEventFound = true
         }
-        finalItems.add(JovianEventItem(raw.mjd, raw.text, pixelType, false))
+
+        // Append altitude info to the text
+        val altString = " (El %.0f°)".format(jupAlt)
+        finalItems.add(JovianEventItem(raw.mjd, raw.text + altString, pixelType, false))
 
         if (raw.isStart) {
             val checkMJD = raw.mjd + (1.0 / 86400.0)
