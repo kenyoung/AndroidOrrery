@@ -82,7 +82,11 @@ class MainActivity : ComponentActivity() {
 }
 
 // Navigation Enum
-enum class Screen { TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, JOVIAN_MOONS, JOVIAN_EVENTS, SCHEMATIC, SCALE, TIMES, ANALEMMA }
+enum class Screen {
+    TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR,
+    JOVIAN_MOONS, JOVIAN_EVENTS, SCHEMATIC, SCALE, TIMES, ANALEMMA,
+    METEOR_SHOWERS
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,7 +172,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 currentInstant = now
                 if (currentScreen == Screen.TIMES) {
                     delay(100L) // 10Hz
-                } else if (currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA) {
+                } else if (currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA || currentScreen == Screen.METEOR_SHOWERS) {
                     // Update once per hour
                     val currentMillis = now.toEpochMilli()
                     val millisUntilNextHour = 3_600_000 - (currentMillis % 3_600_000)
@@ -292,6 +296,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Analemma" to Screen.ANALEMMA,
+                            "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Schematic Orrery" to Screen.SCHEMATIC,
                             "To-scale Orrery" to Screen.SCALE,
                             "Astronomical Times" to Screen.TIMES
@@ -348,6 +353,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat)
+                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId)
                 }
             }
         }
