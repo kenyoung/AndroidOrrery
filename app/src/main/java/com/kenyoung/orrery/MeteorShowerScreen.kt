@@ -108,11 +108,10 @@ fun MeteorShowerScreen(
                 val isActive = !currentDate.isBefore(startDate) && !currentDate.isAfter(endDate)
 
                 // Strings
-                val dFmt = DateTimeFormatter.ofPattern("dd/MM/yy")
-                val mFmt = DateTimeFormatter.ofPattern("dd/MM")
+                val dFmt = DateTimeFormatter.ofPattern("dd/MM")
                 val startStr = dFmt.format(startDate)
                 val endStr = dFmt.format(endDate)
-                val maxStr = mFmt.format(maxDate)
+                val maxStr = dFmt.format(maxDate)
 
                 // Moon Phase at Max
                 val maxEpoch = maxDate.toEpochDay().toDouble()
@@ -185,10 +184,9 @@ fun MeteorShowerScreen(
             // Table Header
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 HeaderCell("Shower Name", 0.28f, TextAlign.Left)
-                HeaderCell("Abr", 0.06f)
-                HeaderCell("Rate", 0.06f)
-                HeaderCell("Dates", 0.28f)
-                HeaderCell("Max", 0.08f)
+                HeaderCell("Rate", 0.06f, TextAlign.Right)
+                HeaderCell("Dates", 0.24f)
+                HeaderCell("Max", 0.06f)
                 HeaderCell("V", 0.06f)
                 HeaderCell("Moon%", 0.10f)
                 HeaderCell("Dark", 0.08f)
@@ -220,7 +218,7 @@ fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlig
     Text(
         text = text,
         color = Color(0xFF87CEFA),
-        fontSize = 7.sp,
+        fontSize = 8.5.sp,
         fontWeight = FontWeight.Bold,
         textAlign = align,
         modifier = Modifier.weight(weight)
@@ -232,7 +230,7 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double) {
     // Color Logic
     val rowColor = if (data.isActive) {
         if (tonightDarkHours > 2.0) Color(0xFF00FF00) // Bright Green
-        else Color(0xFF006400) // Dark Green
+        else Color(0xFF00A000) // Dark Green
     } else {
         if (data.maxDarkHours > 2.0) Color.White
         else Color.Gray
@@ -240,10 +238,9 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double) {
 
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
         DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor)
-        DataCell(data.shower.abbrev, 0.06f, TextAlign.Center, rowColor)
-        DataCell(data.shower.rate, 0.06f, TextAlign.Center, rowColor)
-        DataCell("${data.startDateStr} → ${data.endDateStr}", 0.28f, TextAlign.Center, rowColor)
-        DataCell(data.maxDateStr, 0.08f, TextAlign.Center, rowColor)
+        DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor)
+        DataCell("${data.startDateStr} → ${data.endDateStr}", 0.24f, TextAlign.Center, rowColor)
+        DataCell(data.maxDateStr, 0.06f, TextAlign.Center, rowColor)
         DataCell(data.shower.velocity, 0.06f, TextAlign.Center, rowColor)
         DataCell("${data.moonPercent}${data.moonTrend}", 0.10f, TextAlign.Center, rowColor)
         DataCell("%.1f".format(data.maxDarkHours), 0.08f, TextAlign.Center, rowColor)
@@ -255,7 +252,7 @@ fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Colo
     Text(
         text = text,
         color = color,
-        fontSize = 6.sp,
+        fontSize = 7.3.sp,
         fontFamily = FontFamily.Monospace,
         textAlign = align,
         modifier = Modifier.weight(weight),

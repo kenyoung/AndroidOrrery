@@ -47,7 +47,7 @@ private data class MoonPosHighPrec(
 @Composable
 fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     val zoneId = ZoneId.of("UTC")
-    val currentDate = LocalDate.ofEpochDay(epochDay.toLong())
+    val currentDate = currentInstant.atZone(zoneId).toLocalDate()
     val monthYearStr = currentDate.format(DateTimeFormatter.ofPattern("MMMM, yyyy"))
 
     // Colors
