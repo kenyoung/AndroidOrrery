@@ -50,7 +50,13 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 (solsticeRise + (24.0 - solsticeSet))
             }
 
-            val pixelsPerHour = drawingWidth / nMaxDuration
+            // Moon figures are placed at sunrise_x + 15f with radius 10f, so need 26f margin.
+            // Reduce drawing width for scale calculation to leave room on the right for moons.
+            // The sunrise side of the night extends further than sunset side from centerX,
+            // so we need extra margin. Using 50f to account for equation of time variations
+            // (latest sunrise can be ~2 weeks after winter solstice).
+            val moonMargin = 50f
+            val pixelsPerHour = (drawingWidth - moonMargin) / nMaxDuration
             val textHeight = 40f
             val textY = 30f
 

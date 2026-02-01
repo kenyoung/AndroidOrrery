@@ -215,9 +215,10 @@ fun ScaleOrrery(epochDay: Double) {
                     val labelDist = 45f
                     val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
                     val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
+                    val yShift = h / 50f
 
-                    canvas.nativeCanvas.drawText(l1, labelX, labelY, labelPaint)
-                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f, labelPaint)
+                    canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
+                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
                 }
             }
 
@@ -325,12 +326,30 @@ fun SchematicOrrery(epochDay: Double) {
         val w = size.width
         val h = size.height
         val cx = w / 2f
-        val cy = h / 2f
-        val minDim = min(w, h)
 
-        val topPadding = 60f
-        val maxRadius = (minDim / 2f) - topPadding
+        val horizontalPadding = 60f
+        val planetRadius = 18f
+        val topTitleSpace = 75f // Space for app title bar at top
+        // Arrow overhead above Neptune orbit: 60 (dist offset) + 80 (arrow) + label space
+        val arrowOverhead = 150f
+        val labelSpace = planetRadius * 2 + 50f // Space below Neptune for bottom label
+
+        // Width constraint: fit horizontally with padding
+        val maxRadiusForWidth = (w / 2f) - horizontalPadding
+
+        // Height constraint: must fit arrows above and label below
+        // Available space for orbits: h - topTitleSpace - arrowOverhead - labelSpace
+        // This space must accommodate 2 * Neptune orbit radius
+        // Neptune radius = orbitStep * 8 = maxRadius * 1.063
+        val availableForOrbits = h - topTitleSpace - arrowOverhead - labelSpace
+        val maxRadiusForHeight = (availableForOrbits / 2f) / 1.063f
+
+        val maxRadius = min(maxRadiusForWidth, maxRadiusForHeight).coerceAtLeast(50f)
         val orbitStep = (maxRadius / 8f) * 1.063f
+        val neptuneOrbitRadius = orbitStep * 8f
+
+        // Position center so Vernal Equinox arrow/label clears the title bar
+        val cy = topTitleSpace + arrowOverhead + neptuneOrbitRadius
 
         drawCircle(color = Color.Yellow, radius = 18f, center = Offset(cx, cy))
         val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
@@ -466,7 +485,9 @@ fun SchematicOrrery(epochDay: Double) {
         drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
         drawIntoCanvas { canvas ->
-            canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, h - 30f, labelPaint)
+            // Position label below Neptune's orbit + planet radius + one planet radius margin
+            val viewLabelY = cy + neptuneOrbitRadius + planetRadius * 2 + 10f
+            canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, viewLabelY, labelPaint)
         }
     }
 }

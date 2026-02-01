@@ -156,8 +156,17 @@ fun CompassCanvas(
 
         // Layout
         val textY = 80f
-        val gap = h * 0.1f
-        val radius = min(w * 0.36f, h * 0.34f)
+        val rowHeight = 38f
+        val numDataRows = 9 // Sun, Moon, 7 planets
+        // Calculate total fixed vertical space needed:
+        // - textY (80) + gap below header (fixed 40f) + 2*radius (circles)
+        // - space below circles to table: 60 + 3*rowHeight = 174
+        // - table: 2 header rows + data rows + margin = 2*38 + 5 + numDataRows*38 + 30 ≈ 425
+        // Total fixed (excluding 2*radius): 80 + 40 + 174 + 425 = 719
+        val fixedVerticalSpace = 719f
+        val maxRadiusForHeight = (h - fixedVerticalSpace) / 2f
+        val radius = min(w * 0.36f, min(h * 0.34f, maxRadiusForHeight)).coerceAtLeast(60f)
+        val gap = 40f // Fixed gap instead of proportional
         val centerY = textY + gap + radius
         val centerRightX = w - radius
         val centerRightOff = Offset(centerRightX, centerY)
@@ -278,7 +287,6 @@ fun CompassCanvas(
             }
 
             // 4. Data Table
-            val rowHeight = 38f
             val tableTop = centerY + radius + 60f + (3 * rowHeight)
             val cols = listOf(20f, w*0.22f, w*0.34f, w*0.44f, w*0.59f, w*0.69f, w*0.84f, w*0.96f)
 
