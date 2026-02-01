@@ -36,8 +36,10 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, onDateChange: (Local
     val darkGrayColor = Color.DarkGray  // For exact New Moon
     val fullMoonRingColor = Color.Red
 
-    // Get the actual system date for the "Today" highlight
-    val systemToday = remember { LocalDate.now() }
+    // Get the actual system date for the "Today" highlight.
+    // Don't use remember {} here - we want this to update if the app
+    // runs past midnight so the yellow "today" box moves to the new day.
+    val systemToday = LocalDate.now()
 
     val textPaint = remember {
         Paint().apply {

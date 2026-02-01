@@ -17,16 +17,27 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun AnalemmaScreen(instant: Instant, lat: Double) {
-    val zoneId = ZoneId.systemDefault()
-    val currentDateTime = instant.atZone(zoneId)
-    val currentYear = currentDateTime.year
-    val todayEpochDay = currentDateTime.toLocalDate().toEpochDay().toDouble()
+fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
+    // Determine the "observing date" based on longitude-derived local time.
+    // Use the longitude-based offset rather than the phone's system timezone
+    // so the display is consistent with the observation location.
+    // If local time is before noon, we're in the morning portion of the
+    // previous night, so use yesterday's date.
+    val offsetHours = round(lon / 15.0)
+    val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
+    val localDateTime = instant.atOffset(currentOffset).toLocalDateTime()
+    val observingDate = if (localDateTime.hour < 12) {
+        localDateTime.toLocalDate().minusDays(1)
+    } else {
+        localDateTime.toLocalDate()
+    }
+    val currentYear = observingDate.year
+    val todayEpochDay = observingDate.toEpochDay().toDouble()
 
     val gridColorInt = 0xFF000080.toInt() // Dark Blue
     val curveColor = Color.Green

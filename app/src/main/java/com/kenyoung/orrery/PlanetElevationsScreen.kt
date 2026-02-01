@@ -25,14 +25,28 @@ import kotlin.math.*
 @Composable
 fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant) {
     // 1. Setup Time and Date
-    val nowDate = LocalDate.ofEpochDay(epochDay.toLong())
     val offsetHours = round(lon / 15.0)
 
+    // Determine the "observing night" date. In astronomy, a night is identified by
+    // its evening date - e.g., the night of June 15 runs from sunset June 15 to
+    // sunrise June 16. If local time is before noon, we're in the morning portion
+    // of the previous night, so use yesterday's date. This keeps the entire night
+    // (sunset through sunrise) using consistent rise/set data.
+    val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
+    val localDateTime = now.atOffset(currentOffset).toLocalDateTime()
+    val observingDate = if (localDateTime.hour < 12) {
+        localDateTime.toLocalDate().minusDays(1)
+    } else {
+        localDateTime.toLocalDate()
+    }
+    val epochDayInt = observingDate.toEpochDay().toDouble()
+    val nowDate = observingDate
+
     // 2. Calculate Sun Times for Windowing
-    val (riseToday, sunsetToday) = calculateSunTimes(epochDay, lat, lon, offsetHours)
-    val (sunriseTomorrow, setTomorrow) = calculateSunTimes(epochDay + 1.0, lat, lon, offsetHours)
-    val (_, astroSetToday) = calculateSunTimes(epochDay, lat, lon, offsetHours, -18.0)
-    val (astroRiseTomorrow, _) = calculateSunTimes(epochDay + 1.0, lat, lon, offsetHours, -18.0)
+    val (riseToday, sunsetToday) = calculateSunTimes(epochDayInt, lat, lon, offsetHours)
+    val (sunriseTomorrow, setTomorrow) = calculateSunTimes(epochDayInt + 1.0, lat, lon, offsetHours)
+    val (_, astroSetToday) = calculateSunTimes(epochDayInt, lat, lon, offsetHours, -18.0)
+    val (astroRiseTomorrow, _) = calculateSunTimes(epochDayInt + 1.0, lat, lon, offsetHours, -18.0)
 
     val centerTime = if (!sunsetToday.isNaN() && !sunriseTomorrow.isNaN()) {
         val sSet = if (sunsetToday < 12.0) sunsetToday + 24.0 else sunsetToday
@@ -278,23 +292,23 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val sunY = chartTop + (chartH * 0.12f)
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val transitToday = (riseToday + sunsetToday) / 2.0
-            val sunDecToday = Math.toDegrees(calculateSunDeclination(epochDay))
+            val sunDecToday = Math.toDegrees(calculateSunDeclination(epochDayInt))
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED, sunRed)
         }
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
             val transitTomorrow = (sunriseTomorrow + setTomorrow) / 2.0
-            val sunDecTomorrow = Math.toDegrees(calculateSunDeclination(epochDay + 1.0))
+            val sunDecTomorrow = Math.toDegrees(calculateSunDeclination(epochDayInt + 1.0))
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED, sunRed)
         }
 
         // --- DRAW MOON (Row 2) ---
         // Use Standard Calculator (matches TransitsScreen)
-        val moonEv = calculateMoonEvents(epochDay, lat, lon, offsetHours)
+        val moonEv = calculateMoonEvents(epochDayInt, lat, lon, offsetHours)
 
         // Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
-        var moonDec = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + 0.5).dec
+        var moonDec = AstroEngine.getBodyState("Moon", epochDayInt + 2440587.5 + 0.5).dec
         if (!moonEv.transit.isNaN()) {
-            val transitJD = epochDay + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
+            val transitJD = epochDayInt + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
             val mTrans = AstroEngine.getBodyState("Moon", transitJD)
             // LST at Transit
             val transitInstant = Instant.ofEpochMilli(((transitJD - 2440587.5) * 86400000.0).toLong())
@@ -317,13 +331,13 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- DRAW PLANETS (Rows 3+) ---
         val rowsStartY = chartTop + (chartH * 0.28f)
-        val jd = epochDay + 2440587.5
+        val jd = epochDayInt + 2440587.5
         val rowHeight = (chartH * 0.72f) / (planetList.size + 1)
 
         planetList.forEachIndexed { i, p ->
             val yPos = rowsStartY + ((i + 1) * rowHeight)
             // Use Standard Calculator (matches TransitsScreen)
-            val ev = calculatePlanetEvents(epochDay, lat, lon, offsetHours, p)
+            val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
             val state = AstroEngine.getBodyState(p.name, jd)
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
@@ -352,7 +366,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val lstStr = calculateLST(now, lon)
             val parts = lstStr.split(":")
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
-            val mGeo = AstroEngine.getBodyState("Moon", epochDay + 2440587.5 + (currentH/24.0))
+            // Use 'now' directly to get the JD, avoiding issues with epochDay
+            // potentially containing a time fraction in manual time mode
+            val jdNow = now.epochSecond / 86400.0 + 2440587.5
+            val mGeo = AstroEngine.getBodyState("Moon", jdNow)
             val mTopo = toTopocentric(mGeo.ra, mGeo.dec, mGeo.distGeo, lat, lon, lstVal)
             val (_, currAlt) = calculateAzAlt(lstVal, lat, mTopo.ra/15.0, mTopo.dec)
             if (currAlt > 0) {

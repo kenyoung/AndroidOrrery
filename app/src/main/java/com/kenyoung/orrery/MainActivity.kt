@@ -352,7 +352,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
-                    Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat)
+                    Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId)
                 }
             }

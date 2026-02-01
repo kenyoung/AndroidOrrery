@@ -38,10 +38,23 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
 
             val offsetHours = round(lon / 15.0)
 
-            val year = ZonedDateTime.ofInstant(now, zoneId).year
+            // Determine the "observing date" based on longitude-derived local time.
+            // Use the longitude-based offset rather than the phone's system timezone
+            // so the display is consistent with the observation location.
+            // If local time is before noon, we're in the morning portion of the
+            // previous night, so use yesterday's date.
+            val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
+            val localDateTime = now.atOffset(currentOffset).toLocalDateTime()
+            val observingDate = if (localDateTime.hour < 12) {
+                localDateTime.toLocalDate().minusDays(1)
+            } else {
+                localDateTime.toLocalDate()
+            }
+
+            val year = observingDate.year
             val solsticeMonth = if (lat >= 0) 12 else 6
             val solsticeDay = 21
-            val solsticeDate = ZonedDateTime.of(year, solsticeMonth, solsticeDay, 12, 0, 0, 0, zoneId)
+            val solsticeDate = ZonedDateTime.of(year, solsticeMonth, solsticeDay, 12, 0, 0, 0, ZoneOffset.UTC)
             val (solsticeRise, solsticeSet) = calculateSunTimes(solsticeDate.toLocalDate().toEpochDay().toDouble(), lat, lon, offsetHours)
 
             val nMaxDuration = if (solsticeRise.isNaN() || solsticeSet.isNaN()) {
@@ -60,8 +73,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val textHeight = 40f
             val textY = 30f
 
-            val nowZoned = ZonedDateTime.ofInstant(now, zoneId)
-            val nowDate = nowZoned.toLocalDate()
+            val nowDate = observingDate
             val nowEpochDay = nowDate.toEpochDay().toDouble()
 
             // Helper for Date lines
@@ -115,8 +127,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val twilightPaint = Paint().apply { strokeWidth = 1f; style = Paint.Style.STROKE }
             val greyPaint = Paint().apply { color = android.graphics.Color.GRAY; strokeWidth = 1f; style = Paint.Style.FILL }
 
-            val targetOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
-            val localTime = now.atOffset(targetOffset).toLocalTime()
+            val localTime = localDateTime.toLocalTime()
             val currentHour = localTime.hour + (localTime.minute / 60.0) + (localTime.second / 3600.0)
             val xNow = centerX + (normalizeGraphTime(currentHour) * pixelsPerHour)
 
