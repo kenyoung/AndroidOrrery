@@ -165,7 +165,7 @@ object JovianPrecision {
                 0.0000030 * sinD(2.0 * l2 - 3.0 * L[3] + 4.03 * Sigma3 + om2) -
                 0.0000021 * sinD(2.0 * l2 - 3.0 * L[3] + 4.03 * Sigma3 + om3)
 
-        val tanB4 = -0.0073546 * sinD(L[4] - psi) + // Corrected constant from -0.0076579 (typo in earlier Kotlin?) - checked C code 0.0076579 wait... C code says -0.0076579. Okay leaving it.
+        val tanB4 = -0.0076579 * sinD(L[4] - psi) +
                 0.0044134 * sinD(L[4] - om4) -
                 0.0005112 * sinD(L[4] - om3) +
                 0.0000773 * sinD(L[4] + psi - 2.0 * Pi - 2.0 * G) +
