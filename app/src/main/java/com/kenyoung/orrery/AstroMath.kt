@@ -8,17 +8,6 @@ const val AU_METERS = 149597870700.0
 const val EARTH_RADIUS_EQ_METERS = 6378137.0
 const val EARTH_FLATTENING = 1.0 / 298.257223563
 
-// --- DATA STRUCTURES ---
-data class JovianMoonState(
-    val x: Double,
-    val y: Double,
-    val z: Double,
-    val shadowX: Double = 0.0,    // X position of the shadow on Jupiter (if transit)
-    val shadowY: Double = 0.0,    // Y position of the shadow on Jupiter
-    val shadowOnDisk: Boolean = false, // Is the shadow visible on Jupiter?
-    val eclipsed: Boolean = false      // Is the moon hidden in Jupiter's shadow?
-)
-
 // --- RAW MATH FUNCTIONS ---
 
 fun solveKepler(M: Double, e: Double): Double {

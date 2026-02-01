@@ -36,6 +36,16 @@ data class BodyState(
 
 data class Vector3(val x: Double, val y: Double, val z: Double)
 
+data class JovianMoonState(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val shadowX: Double = 0.0,
+    val shadowY: Double = 0.0,
+    val shadowOnDisk: Boolean = false,
+    val eclipsed: Boolean = false
+)
+
 // --- CACHE CLASS ---
 class AstroCache(
     val startEpochDay: Double,
