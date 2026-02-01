@@ -21,7 +21,6 @@ import kotlin.math.*
 @Composable
 fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     // 1. Time Calculations
-    val epochMillis = instant.toEpochMilli()
     val epochDay = instant.toEpochMilli() / 86400000.0
     // JD = (Millis / 86400000) + 2440587.5
     val jd = epochDay + 2440587.5

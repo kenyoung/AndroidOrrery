@@ -217,13 +217,6 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val J_vec = jupState.helioPos // Sun -> Jupiter
     val E_vec = earthState.helioPos // Sun -> Earth
 
-    // Vector Earth -> Jupiter (Line of Sight)
-    // val obsVec = Vector3(J_vec.x - E_vec.x, J_vec.y - E_vec.y, J_vec.z - E_vec.z)
-
-    // val earthLon = Math.toRadians(earthState.eclipticLon)
-    val jupLon = Math.toRadians(jupState.eclipticLon)
-    val sunLon = Math.toRadians(jupState.eclipticLon + 180.0) // From Jup, Sun is opposite
-
     val r = earthState.distSun
     val R = jupState.distSun
     val Delta = jupState.distGeo
