@@ -1,5 +1,6 @@
 package com.kenyoung.orrery
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -88,6 +90,10 @@ fun MeteorShowerScreen(
     var isCalculating by remember { mutableStateOf(true) }
 
     val activeYear = LocalDate.ofEpochDay(currentEpochDay.toLong()).year
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val fontScale = if (isLandscape) 1.55f else 1.0f
 
     LaunchedEffect(currentEpochDay, lat, lon) {
         isCalculating = true
@@ -175,7 +181,7 @@ fun MeteorShowerScreen(
             Text(
                 "Meteor Shower Information for $activeYear",
                 color = Color.White,
-                fontSize = 16.sp,
+                fontSize = (16 * fontScale).sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 textAlign = TextAlign.Center
@@ -183,29 +189,38 @@ fun MeteorShowerScreen(
 
             // Table Header
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                HeaderCell("Shower Name", 0.28f, TextAlign.Left)
-                HeaderCell("Rate", 0.06f, TextAlign.Right)
-                HeaderCell("Dates", 0.24f)
-                HeaderCell("Max", 0.06f)
-                HeaderCell("V", 0.06f)
-                HeaderCell("Moon%", 0.10f)
-                HeaderCell("Dark", 0.08f)
+                HeaderCell("Shower Name", 0.28f, TextAlign.Left, fontScale)
+                HeaderCell("Rate", 0.06f, TextAlign.Right, fontScale)
+                HeaderCell("Dates", 0.24f, TextAlign.Center, fontScale)
+                HeaderCell("Max", 0.06f, TextAlign.Center, fontScale)
+                HeaderCell("V", 0.06f, TextAlign.Center, fontScale)
+                HeaderCell("Moon%", 0.10f, TextAlign.Center, fontScale)
+                HeaderCell("Dark", 0.08f, TextAlign.Center, fontScale)
             }
             HorizontalDivider(color = Color.Gray)
 
             // List
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(rowData!!) { row ->
-                    ShowerRow(row, tonightDarkHours)
+                    ShowerRow(row, tonightDarkHours, fontScale)
                 }
             }
 
+            if (!isLandscape) {
+                Text(
+                    "This table may be more legible in landscape mode",
+                    color = Color(0xFF87CEFA),
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
             HorizontalDivider(color = Color.Gray)
             // Footer
             Text(
                 "The sky will be very dark for %.1f hours %s tonight.".format(tonightDarkHours, tonightRangeStr),
                 color = Color.White,
-                fontSize = 14.sp,
+                fontSize = (14 * fontScale).sp,
                 modifier = Modifier.padding(8.dp),
                 textAlign = TextAlign.Center
             )
@@ -214,11 +229,11 @@ fun MeteorShowerScreen(
 }
 
 @Composable
-fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlign.Center) {
+fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlign.Center, fontScale: Float = 1.0f) {
     Text(
         text = text,
         color = Color(0xFF87CEFA),
-        fontSize = 8.5.sp,
+        fontSize = (8.5f * fontScale).sp,
         fontWeight = FontWeight.Bold,
         textAlign = align,
         modifier = Modifier.weight(weight)
@@ -226,7 +241,7 @@ fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlig
 }
 
 @Composable
-fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double) {
+fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double, fontScale: Float = 1.0f) {
     // Color Logic
     val rowColor = if (data.isActive) {
         if (tonightDarkHours > 2.0) Color(0xFF00FF00) // Bright Green
@@ -237,22 +252,22 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double) {
     }
 
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
-        DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor)
-        DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor)
-        DataCell("${data.startDateStr} → ${data.endDateStr}", 0.24f, TextAlign.Center, rowColor)
-        DataCell(data.maxDateStr, 0.06f, TextAlign.Center, rowColor)
-        DataCell(data.shower.velocity, 0.06f, TextAlign.Center, rowColor)
-        DataCell("${data.moonPercent}${data.moonTrend}", 0.10f, TextAlign.Center, rowColor)
-        DataCell("%.1f".format(data.maxDarkHours), 0.08f, TextAlign.Center, rowColor)
+        DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor, fontScale)
+        DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor, fontScale)
+        DataCell("${data.startDateStr} → ${data.endDateStr}", 0.24f, TextAlign.Center, rowColor, fontScale)
+        DataCell(data.maxDateStr, 0.06f, TextAlign.Center, rowColor, fontScale)
+        DataCell(data.shower.velocity, 0.06f, TextAlign.Center, rowColor, fontScale)
+        DataCell("${data.moonPercent}${data.moonTrend}", 0.10f, TextAlign.Center, rowColor, fontScale)
+        DataCell("%.1f".format(data.maxDarkHours), 0.08f, TextAlign.Center, rowColor, fontScale)
     }
 }
 
 @Composable
-fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Color) {
+fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Color, fontScale: Float = 1.0f) {
     Text(
         text = text,
         color = color,
-        fontSize = 7.3.sp,
+        fontSize = (7.3f * fontScale).sp,
         fontFamily = FontFamily.Monospace,
         textAlign = align,
         modifier = Modifier.weight(weight),
