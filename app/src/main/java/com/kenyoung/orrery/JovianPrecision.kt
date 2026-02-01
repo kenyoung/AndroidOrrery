@@ -174,12 +174,6 @@ object JovianPrecision {
                 0.0000088 * sinD(L[4] + psi - 2.0 * Pi - 3.0 * G) -
                 0.0000038 * sinD(L[4] + psi - 2.0 * Pi - G)
 
-        // C Code has -0.0076579. My code above had -0.0073546? Let me re-verify.
-        // C: tanB4 = -0.0076579*sinD...
-        // Kotlin above: -0.0076579.
-        // Wait, looking at the block above, I see -0.0076579.
-        // Okay, assume previous kotlin was correct or corrected.
-
         val B = DoubleArray(5)
         B[1] = atanD(tanB1); B[2] = atanD(tanB2); B[3] = atanD(tanB3); B[4] = atanD(tanB4)
 

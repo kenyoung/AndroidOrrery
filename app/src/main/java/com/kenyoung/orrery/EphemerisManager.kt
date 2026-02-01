@@ -187,10 +187,4 @@ object EphemerisManager {
         while (d < -180.0) d += 360.0
         return reference + d
     }
-
-    private fun normalizeDegrees(deg: Double): Double {
-        var v = deg % 360.0
-        if (v < 0) v += 360.0
-        return v
-    }
 }
