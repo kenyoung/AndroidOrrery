@@ -485,8 +485,8 @@ fun SchematicOrrery(epochDay: Double) {
         drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
         drawIntoCanvas { canvas ->
-            // Position label below Neptune's orbit + planet radius + one planet radius margin
-            val viewLabelY = cy + neptuneOrbitRadius + planetRadius * 2 + 10f
+            // Position label 2 font heights above the bottom (just above the year buttons)
+            val viewLabelY = h - 2 * labelPaint.textSize
             canvas.nativeCanvas.drawText("View from above the Sun's north pole", cx, viewLabelY, labelPaint)
         }
     }
