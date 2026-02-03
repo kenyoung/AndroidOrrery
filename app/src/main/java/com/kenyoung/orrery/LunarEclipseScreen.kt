@@ -607,29 +607,15 @@ private fun sunPosition(tJD: Double): SunPositionResult {
     return SunPositionResult(ra, dec, sunR * AU_KM)
 }
 
-// Check if Moon is above horizon - uses same formula as calculateAzAlt in AstroMath.kt
+// Check if Moon is above horizon - uses shared calculateAltitude from AstroMath.kt
 // Parameters: tJD = Julian Date, latDeg/lonDeg = observer position in DEGREES
 private fun moonAboveHorizon(tJD: Double, latDeg: Double, lonDeg: Double): Boolean {
-    // Get Moon position (returns RA and Dec in radians)
     val moon = moonPosition(tJD)
-
-    // Convert Moon RA to hours and Dec to degrees
-    val moonRaHours = Math.toDegrees(moon.ra) / 15.0  // radians -> degrees -> hours
+    val moonRaHours = Math.toDegrees(moon.ra) / 15.0
     val moonDecDeg = Math.toDegrees(moon.dec)
-
-    // Calculate LST in hours (same formula as calculateLST in AstroMath.kt)
     val lstHours = lstHoursAtTJD(tJD, lonDeg)
-
-    // Calculate hour angle in radians (same as calculateAzAlt)
-    val haRad = Math.toRadians((lstHours - moonRaHours) * 15.0)
-
-    // Calculate altitude using the same formula as calculateAzAlt
-    val latRad = Math.toRadians(latDeg)
-    val decRad = Math.toRadians(moonDecDeg)
-    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-    val altDeg = Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
-
-    // Moon is above horizon if altitude > 0.125 degrees (refraction allowance)
+    val haHours = lstHours - moonRaHours
+    val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
 }
 
@@ -642,11 +628,8 @@ private fun moonAboveHorizonCached(
     moonDecDeg: Double
 ): Boolean {
     val lstHours = lstHoursAtTJD(tJD, lonDeg)
-    val haRad = Math.toRadians((lstHours - moonRaHours) * 15.0)
-    val latRad = Math.toRadians(latDeg)
-    val decRad = Math.toRadians(moonDecDeg)
-    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-    val altDeg = Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    val haHours = lstHours - moonRaHours
+    val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
 }
 
@@ -663,17 +646,12 @@ private fun moonAboveHorizonInterpolated(
     endRaHours: Double,
     endDecDeg: Double
 ): Boolean {
-    // Linear interpolation factor
     val t = ((tJD - startTJD) / (endTJD - startTJD)).coerceIn(0.0, 1.0)
     val moonRaHours = startRaHours + t * (endRaHours - startRaHours)
     val moonDecDeg = startDecDeg + t * (endDecDeg - startDecDeg)
-
     val lstHours = lstHoursAtTJD(tJD, lonDeg)
-    val haRad = Math.toRadians((lstHours - moonRaHours) * 15.0)
-    val latRad = Math.toRadians(latDeg)
-    val decRad = Math.toRadians(moonDecDeg)
-    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-    val altDeg = Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    val haHours = lstHours - moonRaHours
+    val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
 }
 

@@ -208,11 +208,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         fun getAlt(haHours: Double, decDeg: Double): Double {
-            val haRad = Math.toRadians(haHours * 15.0)
-            val latRad = Math.toRadians(lat)
-            val decRad = Math.toRadians(decDeg)
-            val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-            return Math.toDegrees(asin(sinAlt))
+            return calculateAltitude(haHours, lat, decDeg)
         }
 
         val tickIncrements = listOf(0, 20, 40, 60, 80)

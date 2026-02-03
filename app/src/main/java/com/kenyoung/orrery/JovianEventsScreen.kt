@@ -573,12 +573,8 @@ private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
 fun getAltAz(jd: Double, body: String, lat: Double, lon: Double): Triple<Double, Double, Double> {
     val state = AstroEngine.getBodyState(body, jd)
     val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
-    val ha = (lst - state.ra/15.0) * 15.0
-    val latRad = Math.toRadians(lat)
-    val decRad = Math.toRadians(state.dec)
-    val haRad = Math.toRadians(ha)
-    val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
-    val alt = Math.toDegrees(asin(sinAlt))
+    val haHours = lst - state.ra/15.0
+    val alt = calculateAltitude(haHours, lat, state.dec)
     return Triple(0.0, 0.0, alt)
 }
 

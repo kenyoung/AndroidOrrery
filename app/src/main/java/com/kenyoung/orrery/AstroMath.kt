@@ -123,6 +123,17 @@ fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Do
     return Pair(azDeg, Math.toDegrees(altRad))
 }
 
+// Calculate altitude only (when azimuth is not needed)
+// haHours: hour angle in hours, latDeg: latitude in degrees, decDeg: declination in degrees
+// Returns altitude in degrees
+fun calculateAltitude(haHours: Double, latDeg: Double, decDeg: Double): Double {
+    val haRad = Math.toRadians(haHours * 15.0)
+    val latRad = Math.toRadians(latDeg)
+    val decRad = Math.toRadians(decDeg)
+    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
+    return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+}
+
 fun normalizeTime(t: Double): Double {
     var v = t
     while (v < 0) v += 24.0
@@ -369,10 +380,8 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val state = calculatePlanetStateKeplerian(t + 2440587.5, p)
         val jd = t + 2440587.5
         val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
-        val raHours = state.ra / 15.0; val haHours = lst - raHours
-        val haRad = Math.toRadians(haHours * 15.0); val latRad = Math.toRadians(lat); val decRad = Math.toRadians(state.dec)
-        val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
-        return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+        val haHours = lst - state.ra / 15.0
+        return calculateAltitude(haHours, lat, state.dec)
     }
     val targetAlt = -0.5667
     var tRise = tTransit - 0.25
@@ -422,9 +431,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
         val jd = t + 2440587.5
         val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
         val haHours = lst - pos.ra
-        val haRad = Math.toRadians(haHours * 15.0); val latRad = Math.toRadians(lat); val decRad = Math.toRadians(pos.dec)
-        val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
-        return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+        return calculateAltitude(haHours, lat, pos.dec)
     }
     val targetAlt = 0.125
     var tRise = tTransit - 0.25

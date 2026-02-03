@@ -334,17 +334,8 @@ fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
 fun getAltitude(raDeg: Double, decDeg: Double, epochDay: Double, lat: Double, lon: Double): Double {
     val jd = epochDay + 2440587.5
     val lst = (calculateGMST(jd) + lon / 15.0 + 24.0) % 24.0
-
-    // HA = LST - RA
-    // LST is Hours. RA must be Hours.
-    // raDeg is Degrees.
     val haHours = lst - (raDeg / 15.0)
-
-    val haRad = Math.toRadians(haHours * 15.0)
-    val latRad = Math.toRadians(lat)
-    val decRad = Math.toRadians(decDeg)
-    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
-    return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    return calculateAltitude(haHours, lat, decDeg)
 }
 
 fun toLocalTimeStr(epochDay: Double): String {
