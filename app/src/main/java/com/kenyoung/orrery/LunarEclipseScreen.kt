@@ -86,7 +86,7 @@ data class LunarEclipse(
     }
 
     fun formatDate(): String = "%02d-%02d-%04d".format(day, month, abs(year)) +
-            if (year < 0) " BC" else " AD"
+            if (year < 0) " BC" else ""
 
     fun formatListEntry(): String = "${formatDate()} $typeString"
 }
@@ -642,6 +642,33 @@ private fun moonAboveHorizonCached(
     return altDeg > 0.125
 }
 
+// Fast version using linearly interpolated Moon position between two cached endpoints
+// This avoids expensive moonPosition calls - moon RA/Dec change slowly during an eclipse
+private fun moonAboveHorizonInterpolated(
+    tJD: Double,
+    latDeg: Double,
+    lonDeg: Double,
+    startTJD: Double,
+    endTJD: Double,
+    startRaHours: Double,
+    startDecDeg: Double,
+    endRaHours: Double,
+    endDecDeg: Double
+): Boolean {
+    // Linear interpolation factor
+    val t = ((tJD - startTJD) / (endTJD - startTJD)).coerceIn(0.0, 1.0)
+    val moonRaHours = startRaHours + t * (endRaHours - startRaHours)
+    val moonDecDeg = startDecDeg + t * (endDecDeg - startDecDeg)
+
+    val lstHours = lstHoursAtTJD(tJD, lonDeg)
+    val haRad = Math.toRadians((lstHours - moonRaHours) * 15.0)
+    val latRad = Math.toRadians(latDeg)
+    val decRad = Math.toRadians(moonDecDeg)
+    val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
+    val altDeg = Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+    return altDeg > 0.125
+}
+
 // Build cache of Moon positions for key eclipse times
 private fun buildMoonCache(
     penStartTJD: Double,
@@ -722,16 +749,18 @@ private fun isEclipseVisible(eclipse: LunarEclipse, latitude: Double, longitude:
     val penEclipseStartTJD = eclipseTJD - eclipse.penDur / 2880.0
     val penEclipseEndTJD = eclipseTJD + eclipse.penDur / 2880.0
 
-    // moonAboveHorizon now takes lat/lon in DEGREES
-    val trackStep = 1.0 / 2880.0  // 30 seconds
+    // Check if moon is above horizon at key points during eclipse
+    // If up at start or end, it's visible
+    if (moonAboveHorizon(penEclipseStartTJD, latitude, longitude)) return true
+    if (moonAboveHorizon(penEclipseEndTJD, latitude, longitude)) return true
 
-    var tJD = penEclipseStartTJD
-    while (tJD <= penEclipseEndTJD) {
-        if (moonAboveHorizon(tJD, latitude, longitude)) {
-            return true
-        }
-        tJD += trackStep
-    }
+    // If down at both start and end, check intermediate points to catch
+    // the case where moon rises and sets during the eclipse
+    val duration = penEclipseEndTJD - penEclipseStartTJD
+    if (moonAboveHorizon(penEclipseStartTJD + duration * 0.25, latitude, longitude)) return true
+    if (moonAboveHorizon(penEclipseStartTJD + duration * 0.50, latitude, longitude)) return true
+    if (moonAboveHorizon(penEclipseStartTJD + duration * 0.75, latitude, longitude)) return true
+
     return false
 }
 
@@ -860,7 +889,7 @@ private fun EclipseSelectionView(
     }
 
     fun formatYear(year: Int): String {
-        return if (year <= 0) "${abs(year - 1)} BC" else "$year AD"
+        return if (year <= 0) "${abs(year - 1)} BC" else "$year"
     }
 
     Column(
@@ -894,15 +923,16 @@ private fun EclipseSelectionView(
                     containerColor = Color.DarkGray,
                     disabledContainerColor = Color(0xFF333333)
                 ),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
+                contentPadding = PaddingValues(0.dp)
             ) {
-                Text("-", fontSize = 20.sp, color = if (canGoBack) Color.White else Color.Gray)
+                Text("-", fontSize = 40.sp, color = if (canGoBack) Color.White else Color.Gray)
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
             Text(
-                text = "${formatYear(decadeStart)} > ${formatYear(decadeEnd)}",
+                text = "${formatYear(decadeStart)} → ${formatYear(decadeEnd)}",
                 color = Color.Yellow,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -918,9 +948,10 @@ private fun EclipseSelectionView(
                     containerColor = Color.DarkGray,
                     disabledContainerColor = Color(0xFF333333)
                 ),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp),
+                contentPadding = PaddingValues(0.dp)
             ) {
-                Text("+", fontSize = 20.sp, color = if (canGoForward) Color.White else Color.Gray)
+                Text("+", fontSize = 40.sp, color = if (canGoForward) Color.White else Color.Gray)
             }
         }
 
@@ -1205,49 +1236,47 @@ private fun renderEclipse(
         return Pair(px, py)
     }
 
-    // Calculate visibility - moonAboveHorizon takes lat/lon in DEGREES
-    var neverWasUp = true
-    var alwaysWasUp = true
-    var willSeePar = false
-    var willSeeTot = false
-    var nPenSeen = 0
-    var nParSeen = 0
-    var nTotSeen = 0
-    val trackStep = 1.0 / 2880.0
-
-    var tJD = penEclipseStartTJD
-    while (tJD <= penEclipseEndTJD) {
-        val up = moonAboveHorizon(tJD, userLatitude, userLongitude)
-        if (up) {
-            neverWasUp = false
-            when {
-                eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && tJD >= totEclipseStartTJD && tJD <= totEclipseEndTJD -> {
-                    willSeeTot = true
-                    nTotSeen++
-                }
-                eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE && tJD >= parEclipseStartTJD && tJD <= parEclipseEndTJD -> {
-                    willSeePar = true
-                    nParSeen++
-                }
-                else -> nPenSeen++
-            }
-        } else {
-            alwaysWasUp = false
-        }
-        tJD += trackStep
-    }
-
-    // Find moonrise/moonset during eclipse
-    var moonsetTJD: Double? = null
-    var moonriseTJD: Double? = null
+    // Calculate visibility using interpolated moon positions (major optimization)
+    // Moon RA/Dec change slowly during an eclipse, so we compute positions at the
+    // search boundaries and interpolate for all intermediate times
     val searchStart = penEclipseStartTJD - 0.01
     val searchEnd = penEclipseEndTJD + 0.01
-    val searchStep = 1.0 / 1440.0
-    var prevUp = moonAboveHorizon(searchStart, userLatitude, userLongitude)
 
-    tJD = searchStart + searchStep
+    // Compute moon positions at search boundaries (only 2 expensive moonPosition calls)
+    val moonAtStart = moonPosition(searchStart)
+    val moonAtEnd = moonPosition(searchEnd)
+    val interpStartRaHours = Math.toDegrees(moonAtStart.ra) / 15.0
+    val interpStartDecDeg = Math.toDegrees(moonAtStart.dec)
+    val interpEndRaHours = Math.toDegrees(moonAtEnd.ra) / 15.0
+    val interpEndDecDeg = Math.toDegrees(moonAtEnd.dec)
+
+    // Determine initial moon state at eclipse start
+    val moonUpAtStart = moonAboveHorizonInterpolated(
+        penEclipseStartTJD, userLatitude, userLongitude,
+        searchStart, searchEnd,
+        interpStartRaHours, interpStartDecDeg,
+        interpEndRaHours, interpEndDecDeg
+    )
+
+    // Find moonrise/moonset during eclipse using interpolated positions
+    var moonsetTJD: Double? = null
+    var moonriseTJD: Double? = null
+    val searchStep = 1.0 / 1440.0
+    var prevUp = moonAboveHorizonInterpolated(
+        searchStart, userLatitude, userLongitude,
+        searchStart, searchEnd,
+        interpStartRaHours, interpStartDecDeg,
+        interpEndRaHours, interpEndDecDeg
+    )
+
+    var tJD = searchStart + searchStep
     while (tJD <= searchEnd) {
-        val currUp = moonAboveHorizon(tJD, userLatitude, userLongitude)
+        val currUp = moonAboveHorizonInterpolated(
+            tJD, userLatitude, userLongitude,
+            searchStart, searchEnd,
+            interpStartRaHours, interpStartDecDeg,
+            interpEndRaHours, interpEndDecDeg
+        )
 
         if (prevUp && !currUp && moonsetTJD == null) {
             // Moon setting - refine
@@ -1255,7 +1284,12 @@ private fun renderEclipse(
             var hi = tJD
             for (i in 0 until 10) {
                 val mid = (lo + hi) / 2.0
-                if (moonAboveHorizon(mid, userLatitude, userLongitude)) lo = mid else hi = mid
+                if (moonAboveHorizonInterpolated(
+                        mid, userLatitude, userLongitude,
+                        searchStart, searchEnd,
+                        interpStartRaHours, interpStartDecDeg,
+                        interpEndRaHours, interpEndDecDeg
+                    )) lo = mid else hi = mid
             }
             val refinedTime = (lo + hi) / 2.0
             if (refinedTime >= penEclipseStartTJD && refinedTime <= penEclipseEndTJD) {
@@ -1269,7 +1303,12 @@ private fun renderEclipse(
             var hi = tJD
             for (i in 0 until 10) {
                 val mid = (lo + hi) / 2.0
-                if (moonAboveHorizon(mid, userLatitude, userLongitude)) hi = mid else lo = mid
+                if (moonAboveHorizonInterpolated(
+                        mid, userLatitude, userLongitude,
+                        searchStart, searchEnd,
+                        interpStartRaHours, interpStartDecDeg,
+                        interpEndRaHours, interpEndDecDeg
+                    )) hi = mid else lo = mid
             }
             val refinedTime = (lo + hi) / 2.0
             if (refinedTime >= penEclipseStartTJD && refinedTime <= penEclipseEndTJD) {
@@ -1280,6 +1319,79 @@ private fun renderEclipse(
         prevUp = currUp
         tJD += searchStep
     }
+
+    // Analytical calculation of visible eclipse durations
+    // Build list of moon-up intervals during the eclipse
+    val upIntervals = mutableListOf<Pair<Double, Double>>()
+    if (moonUpAtStart) {
+        val intervalEnd = moonsetTJD ?: penEclipseEndTJD
+        if (intervalEnd > penEclipseStartTJD) {
+            upIntervals.add(Pair(penEclipseStartTJD, minOf(intervalEnd, penEclipseEndTJD)))
+        }
+        // Check for moonrise after moonset (moon sets then rises again)
+        if (moonsetTJD != null && moonriseTJD != null && moonriseTJD!! > moonsetTJD!!) {
+            upIntervals.add(Pair(moonriseTJD!!, penEclipseEndTJD))
+        }
+    } else {
+        if (moonriseTJD != null) {
+            val intervalEnd = if (moonsetTJD != null && moonsetTJD!! > moonriseTJD!!) moonsetTJD!! else penEclipseEndTJD
+            upIntervals.add(Pair(moonriseTJD!!, minOf(intervalEnd, penEclipseEndTJD)))
+        }
+    }
+
+    // Helper to calculate visible duration within a time window
+    fun calcVisibleDuration(windowStart: Double, windowEnd: Double): Double {
+        if (windowEnd <= windowStart) return 0.0
+        var totalVisible = 0.0
+        for ((intStart, intEnd) in upIntervals) {
+            val overlapStart = maxOf(intStart, windowStart)
+            val overlapEnd = minOf(intEnd, windowEnd)
+            if (overlapEnd > overlapStart) {
+                totalVisible += overlapEnd - overlapStart
+            }
+        }
+        return totalVisible
+    }
+
+    // Calculate visible durations for each phase (mutually exclusive)
+    // Total phase
+    val totVisibleDays = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
+        calcVisibleDuration(totEclipseStartTJD, totEclipseEndTJD)
+    } else 0.0
+
+    // Partial phase (exclusive of total)
+    val parVisibleDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
+        if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
+            // Two segments: before total and after total
+            calcVisibleDuration(parEclipseStartTJD, totEclipseStartTJD) +
+            calcVisibleDuration(totEclipseEndTJD, parEclipseEndTJD)
+        } else {
+            // Partial-only eclipse: entire partial phase
+            calcVisibleDuration(parEclipseStartTJD, parEclipseEndTJD)
+        }
+    } else 0.0
+
+    // Penumbral phase (exclusive of partial)
+    val penVisibleDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
+        // Two segments: before partial and after partial
+        calcVisibleDuration(penEclipseStartTJD, parEclipseStartTJD) +
+        calcVisibleDuration(parEclipseEndTJD, penEclipseEndTJD)
+    } else {
+        // Penumbral-only eclipse: entire penumbral phase
+        calcVisibleDuration(penEclipseStartTJD, penEclipseEndTJD)
+    }
+
+    // Derive the flags and counts used by the rest of the code
+    val willSeeTot = totVisibleDays > 0
+    val willSeePar = parVisibleDays > 0
+    val totalVisibleDays = totVisibleDays + parVisibleDays + penVisibleDays
+    val neverWasUp = totalVisibleDays == 0.0
+    val alwaysWasUp = moonsetTJD == null && moonriseTJD == null && moonUpAtStart
+
+    // Convert to minutes (these replace the old nPenSeen/nParSeen/nTotSeen * trackStep * 1440)
+    val minutesTot = (totVisibleDays * 1440.0 + 0.5).toInt()
+    val minutesPar = (parVisibleDays * 1440.0 + 0.5).toInt()
+    val minutesPen = (penVisibleDays * 1440.0 + 0.5).toInt()
 
     // Calculate Moon positions at phase times
     val phaseTimes = doubleArrayOf(
@@ -1614,7 +1726,7 @@ private fun renderEclipse(
         // Title
         textPaint.color = colorCream.toArgb()
         textPaint.textSize = largeTextSize
-        val yearStr = if (eclipse.year <= 0) "${abs(eclipse.year - 1)} BC" else "${eclipse.year} AD"
+        val yearStr = if (eclipse.year <= 0) "${abs(eclipse.year - 1)} BC" else "${eclipse.year}"
         val title = "${eclipse.typeString} Lunar Eclipse ${monthNames[eclipse.month - 1]} ${eclipse.day}, $yearStr"
         canvas.nativeCanvas.drawText(title, width / 2, titleY, textPaint)
 
@@ -1635,9 +1747,6 @@ private fun renderEclipse(
 
         // Duration info
         textPaint.color = colorCream.toArgb()
-        val minutesPen = (nPenSeen * trackStep * 1440.0 + 0.5).toInt()
-        val minutesPar = (nParSeen * trackStep * 1440.0 + 0.5).toInt()
-        val minutesTot = (nTotSeen * trackStep * 1440.0 + 0.5).toInt()
         val durationStr = "Visible for penumbral: $minutesPen partial: $minutesPar total: $minutesTot minutes."
         canvas.nativeCanvas.drawText(durationStr, width / 2, durationY, textPaint)
 

@@ -29,15 +29,23 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
     // Determine the "observing night" date. In astronomy, a night is identified by
     // its evening date - e.g., the night of June 15 runs from sunset June 15 to
-    // sunrise June 16. If local time is before noon, we're in the morning portion
+    // sunrise June 16. If local time is before sunrise, we're in the morning portion
     // of the previous night, so use yesterday's date. This keeps the entire night
     // (sunset through sunrise) using consistent rise/set data.
     val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
     val localDateTime = now.atOffset(currentOffset).toLocalDateTime()
-    val observingDate = if (localDateTime.hour < 12) {
-        localDateTime.toLocalDate().minusDays(1)
+    val todayDate = localDateTime.toLocalDate()
+    val todayEpochDay = todayDate.toEpochDay().toDouble()
+
+    // Calculate today's sunrise to determine if we should show yesterday's "observing night"
+    val (todaySunrise, _) = calculateSunTimes(todayEpochDay, lat, lon, offsetHours)
+    val currentLocalHours = localDateTime.hour + localDateTime.minute / 60.0
+
+    // If before today's sunrise, we're still on last night's "observing night"
+    val observingDate = if (!todaySunrise.isNaN() && currentLocalHours < todaySunrise) {
+        todayDate.minusDays(1)
     } else {
-        localDateTime.toLocalDate()
+        todayDate
     }
     val epochDayInt = observingDate.toEpochDay().toDouble()
     val nowDate = observingDate
