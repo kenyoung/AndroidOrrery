@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
     JOVIAN_MOONS, JOVIAN_EVENTS, SCHEMATIC, SCALE, TIMES, ANALEMMA,
     METEOR_SHOWERS
 }
@@ -293,6 +293,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             "Planet Compass" to Screen.COMPASS,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Moon Calendar" to Screen.MOON_CALENDAR,
+                            "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Analemma" to Screen.ANALEMMA,
@@ -349,6 +350,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
+                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon)
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
