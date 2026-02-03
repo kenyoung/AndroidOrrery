@@ -75,8 +75,7 @@ fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     val gmst = calculateGMST(jd)
 
     // Mean LST = GMST + Lon (hours)
-    var meanLST = gmst + (lon / 15.0)
-    meanLST %= 24.0; if (meanLST < 0) meanLST += 24.0
+    val meanLST = calculateLSTHours(jd, lon)
 
     // Apparent LST = Mean LST + EqEquinoxes (converted from seconds to hours)
     var appLST = meanLST + (eqEquinoxSec / 3600.0)

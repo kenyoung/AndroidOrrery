@@ -35,6 +35,15 @@ fun calculateGMST(jd: Double): Double {
     return gmst
 }
 
+// Calculate Local Sidereal Time from Julian Date and longitude
+// Returns LST in hours (0-24)
+fun calculateLSTHours(jd: Double, lonDeg: Double): Double {
+    var lst = calculateGMST(jd) + lonDeg / 15.0
+    lst %= 24.0
+    if (lst < 0) lst += 24.0
+    return lst
+}
+
 // Convert Spherical (Helio) to Cartesian (Vector3)
 fun sphericalToCartesian(dist: Double, lonDeg: Double, latDeg: Double): Vector3 {
     val lonRad = Math.toRadians(lonDeg)
@@ -369,8 +378,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val state = calculatePlanetStateKeplerian(tGuess + 2440587.5, p)
         val raHours = state.ra / 15.0
         val jd = tGuess + 2440587.5
-        var lst = calculateGMST(jd) + (lon / 15.0)
-        while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
+        val lst = calculateLSTHours(jd, lon)
         var ha = lst - raHours
         while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
         tGuess -= (ha / 24.0) * 0.99727
@@ -378,8 +386,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
         val state = calculatePlanetStateKeplerian(t + 2440587.5, p)
-        val jd = t + 2440587.5
-        val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
+        val lst = calculateLSTHours(t + 2440587.5, lon)
         val haHours = lst - state.ra / 15.0
         return calculateAltitude(haHours, lat, state.dec)
     }
@@ -418,9 +425,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
         val pos = calculateMoonPosition(tGuess); val raHours = pos.ra
-        val jd = tGuess + 2440587.5
-        var lst = calculateGMST(jd) + (lon / 15.0)
-        while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
+        val lst = calculateLSTHours(tGuess + 2440587.5, lon)
         var ha = lst - raHours
         while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
         tGuess -= (ha / 24.0) * 1.035
@@ -428,8 +433,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
         val pos = calculateMoonPosition(t)
-        val jd = t + 2440587.5
-        val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
+        val lst = calculateLSTHours(t + 2440587.5, lon)
         val haHours = lst - pos.ra
         return calculateAltitude(haHours, lat, pos.dec)
     }
@@ -489,9 +493,7 @@ fun calculateMoonPosition(epochDay: Double): RaDec {
     return RaDec(ra, dec)
 }
 fun calculateLST(instant: Instant, lon: Double): String {
-    val epochSeconds = instant.epochSecond
-    val jd = epochSeconds / 86400.0 + 2440587.5
-    var lst = calculateGMST(jd) + (lon / 15.0)
-    lst %= 24.0; if (lst < 0) lst += 24.0
+    val jd = instant.epochSecond / 86400.0 + 2440587.5
+    val lst = calculateLSTHours(jd, lon)
     return "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 }

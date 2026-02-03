@@ -263,14 +263,6 @@ private fun doubleNormalizeMinusPiToPi(angle: Double): Double {
     return a
 }
 
-// Calculate LST in hours - uses shared calculateGMST from AstroMath.kt
-private fun lstHoursAtTJD(tJD: Double, lonDeg: Double): Double {
-    var lst = calculateGMST(tJD) + (lonDeg / 15.0)
-    lst %= 24.0
-    if (lst < 0) lst += 24.0
-    return lst
-}
-
 // Nutation coefficients
 private val nutSinCoef = arrayOf(
     floatArrayOf(-171996.0f, -174.2f), floatArrayOf(-13187.0f, -1.6f), floatArrayOf(-2274.0f, -0.2f),
@@ -613,7 +605,7 @@ private fun moonAboveHorizon(tJD: Double, latDeg: Double, lonDeg: Double): Boole
     val moon = moonPosition(tJD)
     val moonRaHours = Math.toDegrees(moon.ra) / 15.0
     val moonDecDeg = Math.toDegrees(moon.dec)
-    val lstHours = lstHoursAtTJD(tJD, lonDeg)
+    val lstHours = calculateLSTHours(tJD, lonDeg)
     val haHours = lstHours - moonRaHours
     val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
@@ -627,7 +619,7 @@ private fun moonAboveHorizonCached(
     moonRaHours: Double,
     moonDecDeg: Double
 ): Boolean {
-    val lstHours = lstHoursAtTJD(tJD, lonDeg)
+    val lstHours = calculateLSTHours(tJD, lonDeg)
     val haHours = lstHours - moonRaHours
     val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
@@ -649,7 +641,7 @@ private fun moonAboveHorizonInterpolated(
     val t = ((tJD - startTJD) / (endTJD - startTJD)).coerceIn(0.0, 1.0)
     val moonRaHours = startRaHours + t * (endRaHours - startRaHours)
     val moonDecDeg = startDecDeg + t * (endDecDeg - startDecDeg)
-    val lstHours = lstHoursAtTJD(tJD, lonDeg)
+    val lstHours = calculateLSTHours(tJD, lonDeg)
     val haHours = lstHours - moonRaHours
     val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
     return altDeg > 0.125
@@ -1794,7 +1786,7 @@ private fun renderEclipse(
     }
 
     // Sub-lunar point line
-    val myLST = lstHoursAtTJD(eclipseTJD, userLongitude) * (Math.PI / 12.0)  // hours to radians
+    val myLST = calculateLSTHours(eclipseTJD, userLongitude) * (Math.PI / 12.0)  // hours to radians
     val sublunarLat = moon.dec
     var sublunarLon = userLongitude * DEGREES_TO_RADIANS - myLST + moon.ra
     sublunarLon = doubleNormalizeMinusPiToPi(sublunarLon)
