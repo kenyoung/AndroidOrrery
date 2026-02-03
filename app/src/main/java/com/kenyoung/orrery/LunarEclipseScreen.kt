@@ -100,7 +100,19 @@ data class ShoreSegment(
 // Cached Moon positions for key eclipse times (optimization to avoid recalculating)
 data class CachedMoonPosition(
     val raHours: Double,   // Right ascension in hours
-    val decDeg: Double     // Declination in degrees
+    val decDeg: Double,    // Declination in degrees
+    val sinDec: Double,    // Precomputed sin(declination)
+    val cosDec: Double     // Precomputed cos(declination)
+)
+
+data class EclipseGMSTCache(
+    val penStart: Double,
+    val penEnd: Double,
+    val parStart: Double,
+    val parEnd: Double,
+    val totStart: Double,
+    val totMid: Double,
+    val totEnd: Double
 )
 
 data class EclipseMoonCache(
@@ -681,9 +693,13 @@ private fun buildMoonCache(
 ): EclipseMoonCache {
     fun cacheMoon(tJD: Double): CachedMoonPosition {
         val moon = moonPosition(tJD)
+        val decDeg = Math.toDegrees(moon.dec)
+        val decRad = moon.dec
         return CachedMoonPosition(
             raHours = Math.toDegrees(moon.ra) / 15.0,
-            decDeg = Math.toDegrees(moon.dec)
+            decDeg = decDeg,
+            sinDec = sin(decRad),
+            cosDec = cos(decRad)
         )
     }
 
@@ -696,6 +712,156 @@ private fun buildMoonCache(
         totMid = if (eclipseType == TOTAL_LUNAR_ECLIPSE) cacheMoon((totStartTJD + totEndTJD) / 2.0) else null,
         totEnd = if (eclipseType == TOTAL_LUNAR_ECLIPSE) cacheMoon(totEndTJD) else null
     )
+}
+
+// Build cache of GMST values for key eclipse times
+private fun buildGMSTCache(
+    penStartTJD: Double,
+    penEndTJD: Double,
+    parStartTJD: Double,
+    parEndTJD: Double,
+    totStartTJD: Double,
+    totEndTJD: Double
+): EclipseGMSTCache {
+    fun gmstAt(tJD: Double): Double {
+        val d = tJD - 2451545.0
+        var gmst = 18.697374558 + 24.06570982441908 * d
+        gmst %= 24.0
+        if (gmst < 0) gmst += 24.0
+        return gmst
+    }
+
+    return EclipseGMSTCache(
+        penStart = gmstAt(penStartTJD),
+        penEnd = gmstAt(penEndTJD),
+        parStart = gmstAt(parStartTJD),
+        parEnd = gmstAt(parEndTJD),
+        totStart = gmstAt(totStartTJD),
+        totMid = gmstAt((totStartTJD + totEndTJD) / 2.0),
+        totEnd = gmstAt(totEndTJD)
+    )
+}
+
+// Optimized horizon check using precomputed values
+private fun moonAboveHorizonOptimized(
+    gmst: Double,
+    lonDeg: Double,
+    sinLat: Double,
+    cosLat: Double,
+    moonRaHours: Double,
+    sinDec: Double,
+    cosDec: Double
+): Boolean {
+    var lst = gmst + lonDeg / 15.0
+    if (lst >= 24.0) lst -= 24.0
+    if (lst < 0.0) lst += 24.0
+    val haRad = Math.toRadians((lst - moonRaHours) * 15.0)
+    val sinAlt = sinLat * sinDec + cosLat * cosDec * cos(haRad)
+    return sinAlt > 0.00218  // sin(0.125°) ≈ 0.00218
+}
+
+// Optimized visibility level check using all precomputed values
+private fun getVisibilityLevelOptimized(
+    lonDeg: Double,
+    sinLat: Double,
+    cosLat: Double,
+    eclipseType: Int,
+    moonCache: EclipseMoonCache,
+    gmstCache: EclipseGMSTCache
+): Int {
+    if (eclipseType == TOTAL_LUNAR_ECLIPSE && moonCache.totStart != null && moonCache.totMid != null && moonCache.totEnd != null) {
+        if (moonAboveHorizonOptimized(gmstCache.totStart, lonDeg, sinLat, cosLat, moonCache.totStart.raHours, moonCache.totStart.sinDec, moonCache.totStart.cosDec) ||
+            moonAboveHorizonOptimized(gmstCache.totEnd, lonDeg, sinLat, cosLat, moonCache.totEnd.raHours, moonCache.totEnd.sinDec, moonCache.totEnd.cosDec) ||
+            moonAboveHorizonOptimized(gmstCache.totMid, lonDeg, sinLat, cosLat, moonCache.totMid.raHours, moonCache.totMid.sinDec, moonCache.totMid.cosDec)) {
+            return 3
+        }
+    }
+
+    if (eclipseType >= PARTIAL_LUNAR_ECLIPSE && moonCache.parStart != null && moonCache.parEnd != null) {
+        if (moonAboveHorizonOptimized(gmstCache.parStart, lonDeg, sinLat, cosLat, moonCache.parStart.raHours, moonCache.parStart.sinDec, moonCache.parStart.cosDec) ||
+            moonAboveHorizonOptimized(gmstCache.parEnd, lonDeg, sinLat, cosLat, moonCache.parEnd.raHours, moonCache.parEnd.sinDec, moonCache.parEnd.cosDec)) {
+            return 2
+        }
+    }
+
+    if (moonAboveHorizonOptimized(gmstCache.penStart, lonDeg, sinLat, cosLat, moonCache.penStart.raHours, moonCache.penStart.sinDec, moonCache.penStart.cosDec) ||
+        moonAboveHorizonOptimized(gmstCache.penEnd, lonDeg, sinLat, cosLat, moonCache.penEnd.raHours, moonCache.penEnd.sinDec, moonCache.penEnd.cosDec)) {
+        return 1
+    }
+
+    return 0
+}
+
+// Represents a longitude range where moon is visible (can wrap around ±180°)
+private data class LonRange(val lon1: Double, val lon2: Double, val alwaysUp: Boolean, val neverUp: Boolean)
+
+// Calculate longitude range where moon is above horizon for given latitude and eclipse time
+private fun getMoonVisibleLonRange(
+    sinLat: Double,
+    cosLat: Double,
+    gmst: Double,
+    moonRaHours: Double,
+    sinDec: Double,
+    cosDec: Double
+): LonRange {
+    // cos(HA) = -tan(lat) * tan(dec) = -sinLat/cosLat * sinDec/cosDec
+    // Avoid division by zero
+    if (abs(cosLat) < 1e-10 || abs(cosDec) < 1e-10) {
+        // At poles or moon at celestial pole - check if moon is up
+        val sinAlt = sinLat * sinDec
+        return if (sinAlt > 0) LonRange(0.0, 0.0, alwaysUp = true, neverUp = false)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+    }
+
+    val cosHA = -(sinLat * sinDec) / (cosLat * cosDec)
+
+    if (cosHA <= -1.0) {
+        // Moon is always above horizon at this latitude (circumpolar)
+        return LonRange(0.0, 0.0, alwaysUp = true, neverUp = false)
+    }
+    if (cosHA >= 1.0) {
+        // Moon never rises at this latitude
+        return LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+    }
+
+    // Two horizon crossings
+    val ha = Math.toDegrees(acos(cosHA)) / 15.0  // HA in hours
+
+    // HA = LST - RA = (GMST + lon/15) - RA
+    // lon = (HA + RA - GMST) * 15
+    // Rising: HA = -ha (moon moving up), Setting: HA = +ha (moon moving down)
+    // Moon is UP when -ha < HA < +ha
+
+    val lonRising = ((-ha + moonRaHours - gmst) * 15.0)
+    val lonSetting = ((ha + moonRaHours - gmst) * 15.0)
+
+    // Normalize to -180 to 180
+    fun normLon(lon: Double): Double {
+        var l = lon
+        while (l > 180.0) l -= 360.0
+        while (l < -180.0) l += 360.0
+        return l
+    }
+
+    return LonRange(normLon(lonRising), normLon(lonSetting), alwaysUp = false, neverUp = false)
+}
+
+// Check if a longitude is within the visible range
+private fun lonInRange(lonDeg: Double, range: LonRange): Boolean {
+    if (range.alwaysUp) return true
+    if (range.neverUp) return false
+
+    // Range goes from lon1 (rising) to lon2 (setting)
+    // Moon is up when longitude is between rising and setting
+    val lon1 = range.lon1
+    val lon2 = range.lon2
+
+    return if (lon1 <= lon2) {
+        lonDeg >= lon1 && lonDeg <= lon2
+    } else {
+        // Range wraps around ±180°
+        lonDeg >= lon1 || lonDeg <= lon2
+    }
 }
 
 // Fast visibility check using cached Moon positions
@@ -1130,6 +1296,7 @@ private fun renderEclipse(
     val colorLightGrey = Color(0xFFC0C0C0)
     val colorRed = Color.Red
     val colorGreen = Color.Green
+    val colorMediumGrey = Color(0xFF757575)  // For connecting lines
     val colorBlue = Color(0xFF0080FF)
     val colorYellow = Color.Yellow
     val colorCream = Color(0xFFFFFDD0)
@@ -1553,106 +1720,90 @@ private fun renderEclipse(
     drawScope.drawRect(colorDarkGrey, Offset(margin, earthMapTop),
         androidx.compose.ui.geometry.Size(mapWidth, earthMapHeight))
 
-    // Visibility shading with edge refinement
-    val coarseStep = 4
-    val gridWidth = (mapWidth / coarseStep).toInt()
-    val gridHeight = (earthMapHeight / coarseStep).toInt()
-
-    // Pre-compute Moon positions for all key times (major optimization)
+    // Analytical visibility shading - compute longitude ranges per row
+    // Pre-compute Moon positions and GMST for all key times
     val moonCache = buildMoonCache(
         penEclipseStartTJD, penEclipseEndTJD,
         parEclipseStartTJD, parEclipseEndTJD,
         totEclipseStartTJD, totEclipseEndTJD,
         eclipse.eclipseType
     )
+    val gmstCache = buildGMSTCache(
+        penEclipseStartTJD, penEclipseEndTJD,
+        parEclipseStartTJD, parEclipseEndTJD,
+        totEclipseStartTJD, totEclipseEndTJD
+    )
 
-    // First pass: calculate visibility levels
-    val grid = Array(gridHeight) { IntArray(gridWidth) }
-    for (gy in 0 until gridHeight) {
-        for (gx in 0 until gridWidth) {
-            val px = gx * coarseStep
-            val py = gy * coarseStep
-            val lon = ((px.toFloat() / mapWidth) - 0.5f) * M_2PI.toFloat()
-            val lat = -(((py.toFloat() / earthMapHeight) - 0.5f) * Math.PI.toFloat())
-            grid[gy][gx] = getVisibilityLevelCached(
-                lat.toDouble(), lon.toDouble(),
-                penEclipseStartTJD, penEclipseEndTJD,
-                parEclipseStartTJD, parEclipseEndTJD,
-                totEclipseStartTJD, totEclipseEndTJD,
-                eclipse.eclipseType,
-                moonCache
-            )
-        }
-    }
+    // Process each row analytically
+    val pixelHeight = earthMapHeight.toInt()
+    val pixelWidth = mapWidth.toInt()
 
-    // Second pass: draw with edge refinement
-    for (gy in 0 until gridHeight) {
-        for (gx in 0 until gridWidth) {
-            val px = gx * coarseStep
-            val py = gy * coarseStep
-            val level = grid[gy][gx]
+    for (py in 0 until pixelHeight) {
+        val lat = -(((py.toFloat() / earthMapHeight) - 0.5f) * Math.PI)
+        val sinLat = sin(lat)
+        val cosLat = cos(lat)
+        val screenY = earthMapTop + py
 
-            // Check if this is an edge cell
-            var isEdge = false
-            for (dy in -1..1) {
-                for (dx in -1..1) {
-                    if (dx == 0 && dy == 0) continue
-                    val nx = gx + dx
-                    val ny = gy + dy
-                    if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                        if (grid[ny][nx] != level) {
-                            isEdge = true
-                            break
-                        }
-                    }
-                }
-                if (isEdge) break
+        // Calculate longitude ranges for each eclipse time
+        val penStartRange = getMoonVisibleLonRange(sinLat, cosLat, gmstCache.penStart,
+            moonCache.penStart.raHours, moonCache.penStart.sinDec, moonCache.penStart.cosDec)
+        val penEndRange = getMoonVisibleLonRange(sinLat, cosLat, gmstCache.penEnd,
+            moonCache.penEnd.raHours, moonCache.penEnd.sinDec, moonCache.penEnd.cosDec)
+
+        val parStartRange = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE && moonCache.parStart != null)
+            getMoonVisibleLonRange(sinLat, cosLat, gmstCache.parStart,
+                moonCache.parStart.raHours, moonCache.parStart.sinDec, moonCache.parStart.cosDec)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+
+        val parEndRange = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE && moonCache.parEnd != null)
+            getMoonVisibleLonRange(sinLat, cosLat, gmstCache.parEnd,
+                moonCache.parEnd.raHours, moonCache.parEnd.sinDec, moonCache.parEnd.cosDec)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+
+        val totStartRange = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && moonCache.totStart != null)
+            getMoonVisibleLonRange(sinLat, cosLat, gmstCache.totStart,
+                moonCache.totStart.raHours, moonCache.totStart.sinDec, moonCache.totStart.cosDec)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+
+        val totMidRange = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && moonCache.totMid != null)
+            getMoonVisibleLonRange(sinLat, cosLat, gmstCache.totMid,
+                moonCache.totMid.raHours, moonCache.totMid.sinDec, moonCache.totMid.cosDec)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+
+        val totEndRange = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && moonCache.totEnd != null)
+            getMoonVisibleLonRange(sinLat, cosLat, gmstCache.totEnd,
+                moonCache.totEnd.raHours, moonCache.totEnd.sinDec, moonCache.totEnd.cosDec)
+        else LonRange(0.0, 0.0, alwaysUp = false, neverUp = true)
+
+        // For each x position, determine highest visibility level and draw segments
+        var currentLevel = -1
+        var segmentStart = 0
+
+        for (px in 0..pixelWidth) {
+            val lonDeg = ((px.toFloat() / mapWidth) - 0.5f) * 360.0
+
+            // Determine visibility level: highest applicable level wins
+            val level = when {
+                lonInRange(lonDeg, totStartRange) || lonInRange(lonDeg, totMidRange) || lonInRange(lonDeg, totEndRange) -> 3
+                lonInRange(lonDeg, parStartRange) || lonInRange(lonDeg, parEndRange) -> 2
+                lonInRange(lonDeg, penStartRange) || lonInRange(lonDeg, penEndRange) -> 1
+                else -> 0
             }
 
-            if (!isEdge) {
-                // Interior cell - draw as single block
-                if (level > 0) {
-                    val color = when (level) {
+            // Draw segment when level changes or at end of row
+            if (level != currentLevel || px == pixelWidth) {
+                if (currentLevel > 0 && px > segmentStart) {
+                    val color = when (currentLevel) {
                         1 -> colorGrey
                         2 -> colorLightGrey
                         else -> colorWhite
                     }
                     drawScope.drawRect(color,
-                        Offset(margin + px, earthMapTop + py),
-                        androidx.compose.ui.geometry.Size(coarseStep.toFloat(), coarseStep.toFloat()))
+                        Offset(margin + segmentStart, screenY),
+                        androidx.compose.ui.geometry.Size((px - segmentStart).toFloat(), 1f))
                 }
-            } else {
-                // Edge cell - refine with pixel-level sampling
-                for (fy in 0 until coarseStep) {
-                    for (fx in 0 until coarseStep) {
-                        val fpx = px + fx
-                        val fpy = py + fy
-                        if (fpx >= mapWidth || fpy >= earthMapHeight) continue
-
-                        val lon = ((fpx / mapWidth) - 0.5f) * M_2PI.toFloat()
-                        val lat = -(((fpy / earthMapHeight) - 0.5f) * Math.PI.toFloat())
-
-                        val fineLevel = getVisibilityLevelCached(
-                            lat.toDouble(), lon.toDouble(),
-                            penEclipseStartTJD, penEclipseEndTJD,
-                            parEclipseStartTJD, parEclipseEndTJD,
-                            totEclipseStartTJD, totEclipseEndTJD,
-                            eclipse.eclipseType,
-                            moonCache
-                        )
-
-                        if (fineLevel > 0) {
-                            val color = when (fineLevel) {
-                                1 -> colorGrey
-                                2 -> colorLightGrey
-                                else -> colorWhite
-                            }
-                            drawScope.drawRect(color,
-                                Offset(margin + fpx, earthMapTop + fpy),
-                                androidx.compose.ui.geometry.Size(1f, 1f))
-                        }
-                    }
-                }
+                currentLevel = level
+                segmentStart = px
             }
         }
     }
@@ -1862,23 +2013,23 @@ private fun renderEclipse(
 
         // Helper to draw arrowhead pointing down
         fun drawDownArrow(x: Float, y: Float) {
-            drawLine(colorGreen, Offset(x, y), Offset(x - arrowSize * 0.5f, y - arrowSize), 1.5f)
-            drawLine(colorGreen, Offset(x, y), Offset(x + arrowSize * 0.5f, y - arrowSize), 1.5f)
+            drawLine(colorMediumGrey, Offset(x, y), Offset(x - arrowSize * 0.5f, y - arrowSize), 1.5f)
+            drawLine(colorMediumGrey, Offset(x, y), Offset(x + arrowSize * 0.5f, y - arrowSize), 1.5f)
         }
 
-        // Green connecting lines
+        // Connecting lines (medium grey for visibility against white background)
         // Total phase lines
         if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
             // Tot end (left) to Moon position
             val totEndY = moonPosY[5] - moonRadiusPixels - 2
-            drawLine(colorGreen, Offset(margin, lineY), Offset(moonPosX[5], lineY), 1f)
-            drawLine(colorGreen, Offset(moonPosX[5], lineY), Offset(moonPosX[5], totEndY), 1f)
+            drawLine(colorMediumGrey, Offset(margin, lineY), Offset(moonPosX[5], lineY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[5], lineY), Offset(moonPosX[5], totEndY), 1f)
             verticalLineXPositions.add(moonPosX[5])
             drawDownArrow(moonPosX[5], totEndY)
             // Tot start (right) to Moon position
             val totStartY = moonPosY[4] - moonRadiusPixels - 2
-            drawLine(colorGreen, Offset(moonPosX[4], lineY), Offset(width - margin, lineY), 1f)
-            drawLine(colorGreen, Offset(moonPosX[4], lineY), Offset(moonPosX[4], totStartY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[4], lineY), Offset(width - margin, lineY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[4], lineY), Offset(moonPosX[4], totStartY), 1f)
             verticalLineXPositions.add(moonPosX[4])
             drawDownArrow(moonPosX[4], totStartY)
             lineY += phaseLineHeight
@@ -1887,13 +2038,13 @@ private fun renderEclipse(
         // Partial phase lines
         if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
             val parEndY = moonPosY[3] - moonRadiusPixels - 2
-            drawLine(colorGreen, Offset(margin, lineY), Offset(moonPosX[3], lineY), 1f)
-            drawLine(colorGreen, Offset(moonPosX[3], lineY), Offset(moonPosX[3], parEndY), 1f)
+            drawLine(colorMediumGrey, Offset(margin, lineY), Offset(moonPosX[3], lineY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[3], lineY), Offset(moonPosX[3], parEndY), 1f)
             verticalLineXPositions.add(moonPosX[3])
             drawDownArrow(moonPosX[3], parEndY)
             val parStartY = moonPosY[2] - moonRadiusPixels - 2
-            drawLine(colorGreen, Offset(moonPosX[2], lineY), Offset(width - margin, lineY), 1f)
-            drawLine(colorGreen, Offset(moonPosX[2], lineY), Offset(moonPosX[2], parStartY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[2], lineY), Offset(width - margin, lineY), 1f)
+            drawLine(colorMediumGrey, Offset(moonPosX[2], lineY), Offset(moonPosX[2], parStartY), 1f)
             verticalLineXPositions.add(moonPosX[2])
             drawDownArrow(moonPosX[2], parStartY)
             lineY += phaseLineHeight
@@ -1901,22 +2052,22 @@ private fun renderEclipse(
 
         // Penumbral phase lines
         val penEndY = moonPosY[1] - moonRadiusPixels - 2
-        drawLine(colorGreen, Offset(margin, lineY), Offset(moonPosX[1], lineY), 1f)
-        drawLine(colorGreen, Offset(moonPosX[1], lineY), Offset(moonPosX[1], penEndY), 1f)
+        drawLine(colorMediumGrey, Offset(margin, lineY), Offset(moonPosX[1], lineY), 1f)
+        drawLine(colorMediumGrey, Offset(moonPosX[1], lineY), Offset(moonPosX[1], penEndY), 1f)
         verticalLineXPositions.add(moonPosX[1])
         drawDownArrow(moonPosX[1], penEndY)
         val penStartY = moonPosY[0] - moonRadiusPixels - 2
-        drawLine(colorGreen, Offset(moonPosX[0], lineY), Offset(width - margin, lineY), 1f)
-        drawLine(colorGreen, Offset(moonPosX[0], lineY), Offset(moonPosX[0], penStartY), 1f)
+        drawLine(colorMediumGrey, Offset(moonPosX[0], lineY), Offset(width - margin, lineY), 1f)
+        drawLine(colorMediumGrey, Offset(moonPosX[0], lineY), Offset(moonPosX[0], penStartY), 1f)
         verticalLineXPositions.add(moonPosX[0])
         drawDownArrow(moonPosX[0], penStartY)
 
         // Maximum eclipse connecting line - spans full "Maximum Eclipse at HH:MM:SS UT" label
         val maxLineY = maxEclipseY + 5f * scaleFactor
         val maxArrowY = shadowPy - moonRadiusPixels - 2
-        drawLine(colorGreen, Offset(maxEclipseLabelLeft, maxLineY),
+        drawLine(colorMediumGrey, Offset(maxEclipseLabelLeft, maxLineY),
             Offset(maxEclipseLabelRight, maxLineY), 1f)
-        drawLine(colorGreen, Offset(shadowPx, maxLineY), Offset(shadowPx, maxArrowY), 1f)
+        drawLine(colorMediumGrey, Offset(shadowPx, maxLineY), Offset(shadowPx, maxArrowY), 1f)
         verticalLineXPositions.add(shadowPx)
         drawDownArrow(shadowPx, maxArrowY)
     }
