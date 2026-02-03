@@ -25,6 +25,16 @@ fun normalizeDegrees(deg: Double): Double {
     return v
 }
 
+// Calculate Greenwich Mean Sidereal Time from Julian Date
+// Returns GMST in hours (0-24)
+fun calculateGMST(jd: Double): Double {
+    val d = jd - 2451545.0
+    var gmst = 18.697374558 + 24.06570982441908 * d
+    gmst %= 24.0
+    if (gmst < 0) gmst += 24.0
+    return gmst
+}
+
 // Convert Spherical (Helio) to Cartesian (Vector3)
 fun sphericalToCartesian(dist: Double, lonDeg: Double, latDeg: Double): Vector3 {
     val lonRad = Math.toRadians(lonDeg)
@@ -347,10 +357,8 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     for (i in 0..4) {
         val state = calculatePlanetStateKeplerian(tGuess + 2440587.5, p)
         val raHours = state.ra / 15.0
-        val jd = tGuess + 2440587.5; val n = jd - 2451545.0
-        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
-        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
-        var lst = gmstFixed + (lon / 15.0)
+        val jd = tGuess + 2440587.5
+        var lst = calculateGMST(jd) + (lon / 15.0)
         while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
         var ha = lst - raHours
         while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
@@ -359,10 +367,8 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
         val state = calculatePlanetStateKeplerian(t + 2440587.5, p)
-        val jd = t + 2440587.5; val n = jd - 2451545.0
-        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
-        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
-        val lst = (gmstFixed + lon/15.0 + 24.0) % 24.0
+        val jd = t + 2440587.5
+        val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
         val raHours = state.ra / 15.0; val haHours = lst - raHours
         val haRad = Math.toRadians(haHours * 15.0); val latRad = Math.toRadians(lat); val decRad = Math.toRadians(state.dec)
         val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
@@ -403,10 +409,8 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
         val pos = calculateMoonPosition(tGuess); val raHours = pos.ra
-        val jd = tGuess + 2440587.5; val n = jd - 2451545.0
-        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
-        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
-        var lst = gmstFixed + (lon / 15.0)
+        val jd = tGuess + 2440587.5
+        var lst = calculateGMST(jd) + (lon / 15.0)
         while(lst < 0) lst += 24.0; while(lst >= 24.0) lst -= 24.0
         var ha = lst - raHours
         while (ha < -12) ha += 24.0; while (ha > 12) ha -= 24.0
@@ -415,10 +419,8 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
         val pos = calculateMoonPosition(t)
-        val jd = t + 2440587.5; val n = jd - 2451545.0
-        val GMST = (18.697374558 + 24.06570982441908 * n) % 24.0
-        val gmstFixed = if (GMST < 0) GMST + 24.0 else GMST
-        val lst = (gmstFixed + lon/15.0 + 24.0) % 24.0
+        val jd = t + 2440587.5
+        val lst = (calculateGMST(jd) + lon/15.0 + 24.0) % 24.0
         val haHours = lst - pos.ra
         val haRad = Math.toRadians(haHours * 15.0); val latRad = Math.toRadians(lat); val decRad = Math.toRadians(pos.dec)
         val sinAlt = sin(latRad)*sin(decRad) + cos(latRad)*cos(decRad)*cos(haRad)
@@ -482,10 +484,7 @@ fun calculateMoonPosition(epochDay: Double): RaDec {
 fun calculateLST(instant: Instant, lon: Double): String {
     val epochSeconds = instant.epochSecond
     val jd = epochSeconds / 86400.0 + 2440587.5
-    val d = jd - 2451545.0
-    var gmst = 18.697374558 + 24.06570982441908 * d
-    gmst %= 24.0; if (gmst < 0) gmst += 24.0
-    var lst = gmst + (lon / 15.0)
+    var lst = calculateGMST(jd) + (lon / 15.0)
     lst %= 24.0; if (lst < 0) lst += 24.0
     return "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 }

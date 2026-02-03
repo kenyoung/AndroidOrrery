@@ -263,13 +263,9 @@ private fun doubleNormalizeMinusPiToPi(angle: Double): Double {
     return a
 }
 
-// Calculate LST in hours - matches calculateLST in AstroMath.kt exactly
+// Calculate LST in hours - uses shared calculateGMST from AstroMath.kt
 private fun lstHoursAtTJD(tJD: Double, lonDeg: Double): Double {
-    val d = tJD - 2451545.0  // days from J2000
-    var gmst = 18.697374558 + 24.06570982441908 * d
-    gmst %= 24.0
-    if (gmst < 0) gmst += 24.0
-    var lst = gmst + (lonDeg / 15.0)  // longitude in degrees, /15 converts to hours
+    var lst = calculateGMST(tJD) + (lonDeg / 15.0)
     lst %= 24.0
     if (lst < 0) lst += 24.0
     return lst
@@ -723,22 +719,14 @@ private fun buildGMSTCache(
     totStartTJD: Double,
     totEndTJD: Double
 ): EclipseGMSTCache {
-    fun gmstAt(tJD: Double): Double {
-        val d = tJD - 2451545.0
-        var gmst = 18.697374558 + 24.06570982441908 * d
-        gmst %= 24.0
-        if (gmst < 0) gmst += 24.0
-        return gmst
-    }
-
     return EclipseGMSTCache(
-        penStart = gmstAt(penStartTJD),
-        penEnd = gmstAt(penEndTJD),
-        parStart = gmstAt(parStartTJD),
-        parEnd = gmstAt(parEndTJD),
-        totStart = gmstAt(totStartTJD),
-        totMid = gmstAt((totStartTJD + totEndTJD) / 2.0),
-        totEnd = gmstAt(totEndTJD)
+        penStart = calculateGMST(penStartTJD),
+        penEnd = calculateGMST(penEndTJD),
+        parStart = calculateGMST(parStartTJD),
+        parEnd = calculateGMST(parEndTJD),
+        totStart = calculateGMST(totStartTJD),
+        totMid = calculateGMST((totStartTJD + totEndTJD) / 2.0),
+        totEnd = calculateGMST(totEndTJD)
     )
 }
 
