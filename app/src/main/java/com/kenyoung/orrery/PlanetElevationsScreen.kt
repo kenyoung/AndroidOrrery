@@ -328,13 +328,23 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         val moonY = chartTop + (chartH * 0.28f)
-        var moonIsUp = false
-        var mRiseNorm = moonEv.rise; var mSetNorm = moonEv.set
-        if (mSetNorm < mRiseNorm) mSetNorm += 24.0
-        var cNorm = currentH
-        while (cNorm < mRiseNorm) cNorm += 24.0
-        if (cNorm < mSetNorm) moonIsUp = true
         val isNightNow = (xNow >= xSS && xNow <= xSR)
+        // Determine if Moon is up at current time (handles midnight wrap correctly)
+        var moonIsUp = false
+        for (shift in listOf(-24.0, 0.0, 24.0)) {
+            val r = moonEv.rise + shift
+            var sFinal = moonEv.set + shift
+            if (sFinal < r) sFinal += 24.0
+            // Check if this window overlaps with the visible chart range
+            if (min(endHour, sFinal) > max(startHour, r)) {
+                var c = currentH
+                while (c < r) c += 24.0
+                if (c <= sFinal) {
+                    moonIsUp = true
+                    break
+                }
+            }
+        }
         val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
 
         drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb(), Color.Gray)
@@ -372,16 +382,29 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- MOON CURRENT ELEVATION (Precise) ---
-        if (isNightNow && moonIsUp) {
-            val lstStr = calculateLST(now, lon)
-            val parts = lstStr.split(":")
-            val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
-            // Use 'now' directly to get the JD, avoiding issues with epochDay
-            // potentially containing a time fraction in manual time mode
-            val jdNow = now.epochSecond / 86400.0 + 2440587.5
-            val mGeo = AstroEngine.getBodyState("Moon", jdNow)
-            val mTopo = toTopocentric(mGeo.ra, mGeo.dec, mGeo.distGeo, lat, lon, lstVal)
-            val (_, currAlt) = calculateAzAlt(lstVal, lat, mTopo.ra/15.0, mTopo.dec)
+        // Check if xNow intersects the Moon's drawn line segment
+        var moonLineAtXNow = false
+        for (shift in listOf(-24.0, 0.0, 24.0)) {
+            val r = moonEv.rise + shift
+            var sFinal = moonEv.set + shift
+            if (sFinal < r) sFinal += 24.0
+            val overlapStart = max(startHour, r)
+            val overlapEnd = min(endHour, sFinal)
+            if (overlapEnd > overlapStart) {
+                val x1 = timeToX(overlapStart)
+                val x2 = timeToX(overlapEnd)
+                if (xNow >= x1 && xNow <= x2) {
+                    moonLineAtXNow = true
+                    break
+                }
+            }
+        }
+        if (isNightNow && moonLineAtXNow) {
+            // Use same approach as tick marks: hour angle from transit time, with moonDec
+            var tT = moonEv.transit; var tT_adj = tT
+            while (tT_adj < currentH - 12.0) tT_adj += 24.0
+            while (tT_adj > currentH + 12.0) tT_adj -= 24.0
+            val currAlt = getAlt(currentH - tT_adj, moonDec)
             if (currAlt > 0) {
                 drawIntoCanvas { it.nativeCanvas.drawText(currAlt.toInt().toString(), xNow + 5f, moonY + 57f, currentElevationPaint) }
             }
