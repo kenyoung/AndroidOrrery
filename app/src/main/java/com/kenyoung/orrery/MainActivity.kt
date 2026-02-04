@@ -336,8 +336,18 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (currentScreen == Screen.TRANSITS) {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(text = "Lat %.3f Lon %.4f".format(effectiveLat, effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    Text(text = "UT $utString  LST $lstString", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    Row {
+                        Text(text = "Lat ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "%.3f ".format(effectiveLat), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "Lon ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "%.4f".format(effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    }
+                    Row {
+                        Text(text = "UT ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = utString, style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "  LST ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = lstString, style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                    }
                 }
             }
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {

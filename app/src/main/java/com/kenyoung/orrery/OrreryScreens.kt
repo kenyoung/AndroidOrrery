@@ -56,7 +56,7 @@ fun ScaleOrrery(epochDay: Double) {
 
     val labelPaint = remember {
         Paint().apply {
-            color = android.graphics.Color.WHITE
+            color = 0xFF87CEFA.toInt()  // Light blue
             textSize = 40f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
@@ -182,7 +182,8 @@ fun ScaleOrrery(epochDay: Double) {
             // --- HELPER FOR DIRECTION ARROWS ---
             val arrowDistAU = 36.0
             val distPx = arrowDistAU * currentPixelsPerAU
-            val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+            val lightBlue = 0xFF87CEFA.toInt()
+            val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
             val arrowLen = 80f
 
             fun drawArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
@@ -194,7 +195,8 @@ fun ScaleOrrery(epochDay: Double) {
                 val tipX = cx - ((distPx + arrowLen) * cos(angleRad)).toFloat()
                 val tipY = cy - ((distPx + arrowLen) * sin(angleRad)).toFloat()
 
-                drawLine(color = Color.White, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
+                val lightBlueColor = Color(0xFF87CEFA)
+                drawLine(color = lightBlueColor, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
 
                 val headSize = 10f
                 val arrowHeadPath = Path().apply {
@@ -210,7 +212,7 @@ fun ScaleOrrery(epochDay: Double) {
                 }
 
                 drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                    canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
 
                     val labelDist = 45f
                     val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
@@ -229,7 +231,8 @@ fun ScaleOrrery(epochDay: Double) {
                 val tipX = baseX + (arrowLen * vecX)
                 val tipY = baseY + (arrowLen * vecY)
 
-                drawLine(color = Color.White, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
+                val lightBlueColor = Color(0xFF87CEFA)
+                drawLine(color = lightBlueColor, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
 
                 val headSize = 10f
                 val arrowHeadPath = Path().apply {
@@ -245,7 +248,7 @@ fun ScaleOrrery(epochDay: Double) {
                 }
 
                 drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                    canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
                     val labelDist = 45f
                     val labelX = tipX + (labelDist * vecX) + labelOffset.x
                     val labelY = tipY + (labelDist * vecY) + labelOffset.y
@@ -314,7 +317,7 @@ fun SchematicOrrery(epochDay: Double) {
     }
     val labelPaint = remember {
         Paint().apply {
-            color = android.graphics.Color.WHITE
+            color = 0xFF87CEFA.toInt()  // Light blue
             textSize = 40f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
@@ -396,7 +399,8 @@ fun SchematicOrrery(epochDay: Double) {
         // --- HELPER FOR DIRECTION ARROWS ---
         val outerRadius = orbitStep * 8f
         val dist = outerRadius + 60f
-        val paintWhite = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        val lightBlue = 0xFF87CEFA.toInt()
+        val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
         val arrowLen = 80f
 
         fun drawSchematicArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
@@ -407,7 +411,8 @@ fun SchematicOrrery(epochDay: Double) {
             val tipX = cx - ((dist + arrowLen) * cos(angleRad)).toFloat()
             val tipY = cy - ((dist + arrowLen) * sin(angleRad)).toFloat()
 
-            drawLine(color = Color.White, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
+            val lightBlueColor = Color(0xFF87CEFA)
+            drawLine(color = lightBlueColor, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
 
             val headSize = 10f
             val arrowHeadPath = Path().apply {
@@ -423,7 +428,7 @@ fun SchematicOrrery(epochDay: Double) {
             }
 
             drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
                 val labelDist = 45f
                 val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
                 val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
@@ -440,7 +445,8 @@ fun SchematicOrrery(epochDay: Double) {
             val tipX = baseX + (arrowLen * vecX)
             val tipY = baseY + (arrowLen * vecY)
 
-            drawLine(color = Color.White, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
+            val lightBlueColor = Color(0xFF87CEFA)
+            drawLine(color = lightBlueColor, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
 
             val headSize = 10f
             val arrowHeadPath = Path().apply {
@@ -456,7 +462,7 @@ fun SchematicOrrery(epochDay: Double) {
             }
 
             drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawPath(arrowHeadPath, paintWhite)
+                canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
                 val labelDist = 45f
                 val labelX = tipX + (labelDist * vecX) + labelOffset.x
                 val labelY = tipY + (labelDist * vecY) + labelOffset.y

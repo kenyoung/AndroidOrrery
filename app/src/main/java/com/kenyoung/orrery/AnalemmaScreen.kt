@@ -42,6 +42,8 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
     val gridColorInt = 0xFF000080.toInt() // Dark Blue
     val curveColor = Color.Green
     val markerColorInt = Color.Yellow.toArgb()
+    val lightBlueInt = 0xFF87CEFA.toInt()
+    val lightBlueColor = Color(0xFF87CEFA)
     val textColorInt = Color.White.toArgb()
     val nowColor = Color.Red
 
@@ -153,16 +155,24 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
 
         // Axis Titles
         drawIntoCanvas {
-            textPaint.textAlign = Paint.Align.CENTER
-            // Title
+            // Title - year in white, " Analemma" in yellow
             textPaint.textSize = 100f
-            textPaint.color = markerColorInt
             textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            it.nativeCanvas.drawText("$currentYear Analemma", w / 2f, paddingY - 40f, textPaint)
+            textPaint.textAlign = Paint.Align.LEFT
+            val titlePart1 = "$currentYear"
+            val titlePart2 = " Analemma"
+            val totalTitleWidth = textPaint.measureText(titlePart1) + textPaint.measureText(titlePart2)
+            var titleX = (w - totalTitleWidth) / 2f
+            textPaint.color = textColorInt
+            it.nativeCanvas.drawText(titlePart1, titleX, paddingY - 40f, textPaint)
+            titleX += textPaint.measureText(titlePart1)
+            textPaint.color = markerColorInt
+            it.nativeCanvas.drawText(titlePart2, titleX, paddingY - 40f, textPaint)
+            textPaint.textAlign = Paint.Align.CENTER
 
             // X-Axis Label
             textPaint.textSize = 70f
-            textPaint.color = textColorInt
+            textPaint.color = 0xFF87CEFA.toInt()  // Light blue
             textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             it.nativeCanvas.drawText("Equation of Time (minutes)", w / 2f, h - 20f, textPaint)
 
@@ -249,8 +259,10 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             drawCircle(Color(markerColorInt), radius = 12f, center = Offset(x, y))
             drawIntoCanvas {
                 markerTextPaint.textAlign = Paint.Align.CENTER
+                markerTextPaint.color = lightBlueInt
                 val yOffset = if (date.monthValue == 6) -35f else 55f
                 it.nativeCanvas.drawText("Solstice", x, y + yOffset, markerTextPaint)
+                markerTextPaint.color = markerColorInt
             }
         }
 
@@ -283,8 +295,8 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
         val arrowREnd = xCurveRight - equinoxFontWidth
 
         // Draw Lines
-        drawLine(Color(markerColorInt), start = Offset(arrowLStart, yEq), end = Offset(arrowLEnd, yEq), strokeWidth = 4f)
-        drawLine(Color(markerColorInt), start = Offset(arrowRStart, yEq), end = Offset(arrowREnd, yEq), strokeWidth = 4f)
+        drawLine(lightBlueColor, start = Offset(arrowLStart, yEq), end = Offset(arrowLEnd, yEq), strokeWidth = 4f)
+        drawLine(lightBlueColor, start = Offset(arrowRStart, yEq), end = Offset(arrowREnd, yEq), strokeWidth = 4f)
 
         // Draw Arrowheads
         val pathArrowL = androidx.compose.ui.graphics.Path().apply {
@@ -293,7 +305,7 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             lineTo(arrowLEnd + 25f, yEq + 15f)
             close()
         }
-        drawPath(pathArrowL, Color(markerColorInt))
+        drawPath(pathArrowL, lightBlueColor)
 
         val pathArrowR = androidx.compose.ui.graphics.Path().apply {
             moveTo(arrowREnd, yEq)
@@ -301,13 +313,15 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             lineTo(arrowREnd - 25f, yEq + 15f)
             close()
         }
-        drawPath(pathArrowR, Color(markerColorInt))
+        drawPath(pathArrowR, lightBlueColor)
 
         // Draw Text Label
         drawIntoCanvas {
             markerTextPaint.textAlign = Paint.Align.CENTER
             markerTextPaint.textSize = equinoxFontWidth
+            markerTextPaint.color = lightBlueInt
             it.nativeCanvas.drawText(labelStr, centerX, yEq + (equinoxFontWidth / 3f), markerTextPaint)
+            markerTextPaint.color = markerColorInt
         }
 
         // --- ARIES SYMBOL (UPDATED) ---
@@ -321,8 +335,8 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             markerTextPaint.textAlign = Paint.Align.CENTER
             // Set font size to 48f (same as month labels)
             markerTextPaint.textSize = 48f
-            // Set color to White
-            markerTextPaint.color = Color.White.toArgb()
+            // Set color to light blue
+            markerTextPaint.color = lightBlueInt
 
             // Vertical centering
             val textCenterOffset = (markerTextPaint.descent() + markerTextPaint.ascent()) / 2

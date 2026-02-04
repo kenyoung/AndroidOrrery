@@ -86,7 +86,8 @@ fun MeteorShowerScreen(
 ) {
     var rowData by remember { mutableStateOf<List<ShowerRowData>?>(null) }
     var tonightDarkHours by remember { mutableStateOf(0.0) }
-    var tonightRangeStr by remember { mutableStateOf("") }
+    var tonightStartTime by remember { mutableStateOf("") }
+    var tonightEndTime by remember { mutableStateOf("") }
     var isCalculating by remember { mutableStateOf(true) }
 
     val activeYear = LocalDate.ofEpochDay(currentEpochDay.toLong()).year
@@ -160,8 +161,9 @@ fun MeteorShowerScreen(
             }
 
             val dhResult = calculateDarkHoursDetails(searchBase, lat, lon)
-            tonightDarkHours = dhResult.first
-            tonightRangeStr = dhResult.second
+            tonightDarkHours = dhResult.totalHours
+            tonightStartTime = dhResult.startTime
+            tonightEndTime = dhResult.endTime
         }
         isCalculating = false
     }
@@ -178,14 +180,13 @@ fun MeteorShowerScreen(
             }
         } else {
             // Header
-            Text(
-                "Meteor Shower Information for $activeYear",
-                color = Color.White,
-                fontSize = (16 * fontScale).sp,
-                fontWeight = FontWeight.Bold,
+            Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                textAlign = TextAlign.Center
-            )
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("Meteor Shower Information for ", color = Color.Yellow, fontSize = (16 * fontScale).sp, fontWeight = FontWeight.Bold)
+                Text("$activeYear", color = Color.White, fontSize = (16 * fontScale).sp, fontWeight = FontWeight.Bold)
+            }
 
             // Table Header
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -216,14 +217,24 @@ fun MeteorShowerScreen(
                 )
             }
             HorizontalDivider(color = Color.Gray)
-            // Footer
-            Text(
-                "The sky will be very dark for %.1f hours %s tonight.".format(tonightDarkHours, tonightRangeStr),
-                color = Color.White,
-                fontSize = (14 * fontScale).sp,
-                modifier = Modifier.padding(8.dp),
-                textAlign = TextAlign.Center
-            )
+            // Footer - two lines
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(horizontalArrangement = Arrangement.Center) {
+                    Text("The sky will be very dark for ", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text("%.2f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
+                    Text(" hours", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                }
+                Row(horizontalArrangement = Arrangement.Center) {
+                    Text("(", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
+                    Text(" → ", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
+                    Text(" UT) tonight.", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                }
+            }
         }
     }
 }
@@ -278,15 +289,22 @@ fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Colo
 // --- CALCULATION HELPERS ---
 
 fun calculateDarkHoursForNight(epochDay: Double, lat: Double, lon: Double): Double {
-    return calculateDarkHoursDetails(epochDay, lat, lon).first
+    return calculateDarkHoursDetails(epochDay, lat, lon).totalHours
 }
 
-// Returns Pair(TotalHours, TimeString)
-fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): Pair<Double, String> {
-    // We scan at 15 min resolution from Noon (epochDay+0.5) to Noon (epochDay+1.5)
+// Data class for dark hours result
+data class DarkHoursResult(
+    val totalHours: Double,
+    val startTime: String,
+    val endTime: String
+)
+
+// Returns DarkHoursResult with total hours and start/end time strings
+fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkHoursResult {
+    // We scan at 1 min resolution from Noon (epochDay+0.5) to Noon (epochDay+1.5)
     val startSearch = epochDay + 0.5
     val endSearch = epochDay + 1.5
-    val step = 15.0 / 1440.0 // 15 minutes in days
+    val step = 1.0 / 1440.0 // 1 minute in days
     var totalDays = 0.0
 
     var firstDark: Double? = null
@@ -303,14 +321,9 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): Pair<
     }
 
     val totalHours = totalDays * 24.0
-    val rangeStr = if (firstDark != null && lastDark != null) {
-        val fLocal = toLocalTimeStr(firstDark)
-        val lLocal = toLocalTimeStr(lastDark!! + step)  // End of last dark interval
-        "($fLocal → $lLocal UT)"
-    } else {
-        ""
-    }
-    return Pair(totalHours, rangeStr)
+    val startTime = if (firstDark != null) toLocalTimeStr(firstDark) else ""
+    val endTime = if (lastDark != null) toLocalTimeStr(lastDark + step) else ""
+    return DarkHoursResult(totalHours, startTime, endTime)
 }
 
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {

@@ -130,11 +130,10 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
 
     Column(modifier = Modifier.fillMaxSize().background(bgColor)) {
         // 1. Header
-        Text(
-            text = "Jovian Moons for $monthYearStr",
-            color = Color(0xFFFFFFE0),
-            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
-        )
+        Row(modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)) {
+            Text(text = "Jovian Moons for ", color = Color.Yellow)
+            Text(text = monthYearStr, color = Color.White)
+        }
 
         // 2. Legend
         Row(

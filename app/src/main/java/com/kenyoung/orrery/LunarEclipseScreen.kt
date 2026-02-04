@@ -1025,7 +1025,7 @@ private fun EclipseSelectionView(
         // Title
         Text(
             text = "Lunar Eclipses",
-            color = Color(0xFFFFFDD0), // Cream
+            color = Color.Yellow,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
@@ -1055,13 +1055,29 @@ private fun EclipseSelectionView(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Text(
-                text = "${formatYear(decadeStart)} → ${formatYear(decadeEnd)}",
-                color = Color.Yellow,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
+            Row {
+                Text(
+                    text = formatYear(decadeStart),
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = " → ",
+                    color = Color.Yellow,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = formatYear(decadeEnd),
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -1149,19 +1165,34 @@ private fun EclipseSelectionView(
             modifier = Modifier.fillMaxSize()
         ) {
             items(filteredEclipses) { eclipse ->
-                EclipseListItem(eclipse = eclipse, onClick = { onEclipseSelected(eclipse) })
+                EclipseListItem(
+                    eclipse = eclipse,
+                    localOnly = localOnly,
+                    latitude = latitude,
+                    longitude = longitude,
+                    onClick = { onEclipseSelected(eclipse) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun EclipseListItem(eclipse: LunarEclipse, onClick: () -> Unit) {
+private fun EclipseListItem(
+    eclipse: LunarEclipse,
+    localOnly: Boolean,
+    latitude: Double,
+    longitude: Double,
+    onClick: () -> Unit
+) {
     val typeColor = when (eclipse.eclipseType) {
-        TOTAL_LUNAR_ECLIPSE -> Color(0xFFFF6B6B)
+        TOTAL_LUNAR_ECLIPSE -> Color(0xFF00FF00)  // Green - most desirable to observe
         PARTIAL_LUNAR_ECLIPSE -> Color(0xFFFFD93D)
         else -> Color(0xFFAAAAAA)
     }
+
+    // Check visibility only when localOnly filter is off
+    val isVisible = localOnly || isEclipseVisible(eclipse, latitude, longitude)
 
     Row(
         modifier = Modifier
@@ -1176,6 +1207,14 @@ private fun EclipseListItem(eclipse: LunarEclipse, onClick: () -> Unit) {
             fontSize = 16.sp,
             fontFamily = FontFamily.Monospace
         )
+        if (!isVisible) {
+            Text(
+                text = " (not visible)",
+                color = Color.Red,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
     }
     HorizontalDivider(color = Color(0xFF333333), thickness = 1.dp)
 }

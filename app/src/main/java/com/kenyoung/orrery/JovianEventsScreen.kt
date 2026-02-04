@@ -214,8 +214,9 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                         val w = size.width
 
                         // Paints
-                        val titlePaint = Paint().apply { color = headerYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
-                        val timeHeaderPaint = Paint().apply { color = headerYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
+                        val titlePaint = Paint().apply { color = Color.Yellow.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+                        val timeHeaderYellow = Paint().apply { color = Color.Yellow.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
+                        val timeHeaderWhite = Paint().apply { color = Color.White.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
                         val dateHeaderPaint = Paint().apply { color = dateYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
 
                         val paintGray = Paint().apply { color = textGray.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }
@@ -230,9 +231,18 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                             currentY += 45f
 
                             // 2. Current Time (Centered below title)
-                            val nowFormatter = DateTimeFormatter.ofPattern("'It is now 'HH:mm")
-                            val nowStr = currentInstant.atZone(zoneId).format(nowFormatter) + timeLabel
-                            canvas.nativeCanvas.drawText(nowStr, w/2, currentY, timeHeaderPaint)
+                            val timeOnlyFormatter = DateTimeFormatter.ofPattern("HH:mm")
+                            val timeOnly = currentInstant.atZone(zoneId).format(timeOnlyFormatter)
+                            val part1 = "It is now "
+                            val part2 = timeOnly
+                            val part3 = timeLabel
+                            val totalWidth = timeHeaderYellow.measureText(part1) + timeHeaderWhite.measureText(part2) + timeHeaderYellow.measureText(part3)
+                            var timeX = (w - totalWidth) / 2f
+                            canvas.nativeCanvas.drawText(part1, timeX, currentY, timeHeaderYellow)
+                            timeX += timeHeaderYellow.measureText(part1)
+                            canvas.nativeCanvas.drawText(part2, timeX, currentY, timeHeaderWhite)
+                            timeX += timeHeaderWhite.measureText(part2)
+                            canvas.nativeCanvas.drawText(part3, timeX, currentY, timeHeaderYellow)
                             currentY += 45f
 
                             var lastEpochDay = -99999L

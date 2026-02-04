@@ -56,7 +56,8 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
 
         Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
             val w = size.width
-            val titlePaint = Paint().apply { color = headerYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val titlePaintYellow = Paint().apply { color = headerYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val titlePaintWhite = Paint().apply { color = textWhite.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val colHeaderPaint = Paint().apply { color = eventBlue.toArgb(); textSize = 40f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val planetNamePaint = Paint().apply { color = planetYellow.toArgb(); textSize = 42f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val eventNamePaint = Paint().apply { color = eventBlue.toArgb(); textSize = 34f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
@@ -76,7 +77,13 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
             val dateStr = nowLocalDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 
             drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawText("Planet Phenomena for $dateStr", w/2, currentY, titlePaint)
+                // Draw title with yellow text and white date
+                val titlePart1 = "Planet Phenomena for "
+                val totalTitleWidth = titlePaintYellow.measureText(titlePart1) + titlePaintWhite.measureText(dateStr)
+                var titleX = (w - totalTitleWidth) / 2f
+                canvas.nativeCanvas.drawText(titlePart1, titleX, currentY, titlePaintYellow)
+                titleX += titlePaintYellow.measureText(titlePart1)
+                canvas.nativeCanvas.drawText(dateStr, titleX, currentY, titlePaintWhite)
                 currentY += 60f
                 canvas.nativeCanvas.drawText("Last", colLastDateX + 100f, currentY, colHeaderPaint)
                 canvas.nativeCanvas.drawText("Next", colNextDateX + 100f, currentY, colHeaderPaint)

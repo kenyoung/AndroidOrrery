@@ -106,7 +106,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         // Native Paints
         val axisTextPaint = Paint().apply { color = brightBlue.toArgb(); textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
         val whiteAxisTextPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
-        val titlePaint = Paint().apply { color = textYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
+        val titlePaintYellow = Paint().apply { color = textYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
+        val titlePaintWhite = Paint().apply { color = android.graphics.Color.WHITE; textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
         val subTitlePaint = Paint().apply { color = textYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
         val labelPaint = Paint().apply { color = standardGray.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
         val objectLabelPaint = Paint().apply { textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
@@ -140,8 +141,13 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- DRAW HEADER ---
         val dateStr = nowDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
+        val titlePart1 = "Planet Elevations for "
         drawIntoCanvas {
-            it.nativeCanvas.drawText("Planet Elevations for $dateStr", w/2, 60f, titlePaint)
+            val totalTitleWidth = titlePaintYellow.measureText(titlePart1) + titlePaintWhite.measureText(dateStr)
+            var titleX = (w - totalTitleWidth) / 2f
+            it.nativeCanvas.drawText(titlePart1, titleX, 60f, titlePaintYellow)
+            titleX += titlePaintYellow.measureText(titlePart1)
+            it.nativeCanvas.drawText(dateStr, titleX, 60f, titlePaintWhite)
             it.nativeCanvas.drawText("Universal Time", w/2, 101f, subTitlePaint)
             it.nativeCanvas.drawText("Local Sidereal Time", w/2, h - 20f, subTitlePaint)
         }
