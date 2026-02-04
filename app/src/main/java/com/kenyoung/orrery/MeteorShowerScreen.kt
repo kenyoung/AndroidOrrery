@@ -305,7 +305,7 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): Pair<
     val totalHours = totalDays * 24.0
     val rangeStr = if (firstDark != null && lastDark != null) {
         val fLocal = toLocalTimeStr(firstDark)
-        val lLocal = toLocalTimeStr(lastDark!!)
+        val lLocal = toLocalTimeStr(lastDark!! + step)  // End of last dark interval
         "($fLocal → $lLocal UT)"
     } else {
         ""
