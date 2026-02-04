@@ -261,7 +261,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                                 // --- INTERIOR TICKS (20, 40, 60, 80) ---
                                 val ha = getHA(alt.toDouble(), dec)
                                 if (!ha.isNaN()) {
-                                    val tTransit = ev.transit + shift
+                                    var tTransit = ev.transit + shift
+                                    // Adjust transit to fall between r and sFinal (handles midnight wrap)
+                                    while (tTransit < r) tTransit += 24.0
+                                    while (tTransit > sFinal) tTransit -= 24.0
                                     val times = listOf(tTransit - ha, tTransit + ha)
                                     times.forEach { tTick ->
                                         if (tTick >= overlapStart && tTick <= overlapEnd) {
@@ -278,7 +281,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                         }
                         // Max Alt Tick (Transit)
                         val maxAlt = 90.0 - abs(lat - dec)
-                        val tTransit = ev.transit + shift
+                        var tTransit = ev.transit + shift
+                        // Adjust transit to fall between r and sFinal (handles midnight wrap)
+                        while (tTransit < r) tTransit += 24.0
+                        while (tTransit > sFinal) tTransit -= 24.0
                         if (tTransit >= overlapStart && tTransit <= overlapEnd) {
                             val xTick = timeToX(tTransit)
                             val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
