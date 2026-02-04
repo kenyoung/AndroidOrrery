@@ -61,17 +61,14 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             // Events: Standard Low Precision (Math) - Matches TransitsScreen
             // We manually reconstruct the event logic here since AstroMath doesn't have a direct "getSunEvents" returning a triplet.
             val sunKepler = calculateSunPositionKepler(jdStart + 0.5) // Noon
-            val (sunRise, sunSet) = calculateRiseSet(sunKepler.ra, sunKepler.dec, lat, lon, offset, -0.833, epochDay)
+            val (sunRise, sunSet) = calculateRiseSet(sunKepler.ra, sunKepler.dec, lat, lon, offset, HORIZON_REFRACTED, epochDay)
 
             // Calculate Sun Transit (Local Apparent Noon)
             val nSun = (jdStart + 0.5) - 2451545.0
             val gmstSun = (6.697374558 + 0.06570982441908 * nSun) % 24.0
             val gmstFixedSun = if (gmstSun < 0) gmstSun + 24.0 else gmstSun
-            var sunTransitUT = (sunKepler.ra / 15.0) - (lon / 15.0) - gmstFixedSun
-            while (sunTransitUT < 0) sunTransitUT += 24.0
-            while (sunTransitUT >= 24) sunTransitUT -= 24.0
-            var sunTransit = sunTransitUT + offset
-            while (sunTransit < 0) sunTransit += 24.0; while (sunTransit >= 24) sunTransit -= 24.0
+            val sunTransitUT = normalizeTime((sunKepler.ra / 15.0) - (lon / 15.0) - gmstFixedSun)
+            val sunTransit = normalizeTime(sunTransitUT + offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents))
@@ -327,9 +324,7 @@ fun CompassCanvas(
             for(obj in plotData) {
                 val raHours = obj.ra / 15.0
                 val (currAz, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
-                val ha = lst - raHours
-                var haNorm = ha
-                while(haNorm < -12) haNorm += 24.0; while(haNorm > 12) haNorm -= 24.0
+                val haNorm = normalizeHourAngle(lst - raHours)
 
                 // Name
                 paints.tableDataLeft.color = if(currAlt > 0) paints.greenInt else paints.redInt

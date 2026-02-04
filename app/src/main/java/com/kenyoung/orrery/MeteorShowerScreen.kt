@@ -154,7 +154,7 @@ fun MeteorShowerScreen(
             val frac = currentEpochDay - epochFloor
 
             // Determine Start of "Night Block" (Noon to Noon)
-            val searchBase = if (sunAltNow > -0.833 || frac > 0.5) {
+            val searchBase = if (sunAltNow > HORIZON_REFRACTED || frac > 0.5) {
                 epochFloor // Start from Today Noon
             } else {
                 epochFloor - 1.0 // Start from Yesterday Noon (we are in the early morning tail)
@@ -327,11 +327,11 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkH
 }
 
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
-    // 1. Sun Alt < -12
+    // 1. Sun below nautical twilight
     val sunState = calculateSunPositionKepler(epochDay + 2440587.5)
     // sunState.ra is in DEGREES (from AstroMath BodyState)
     val sunAlt = getAltitude(sunState.ra, sunState.dec, epochDay, lat, lon)
-    if (sunAlt >= -12.0) return false
+    if (sunAlt >= NAUTICAL_TWILIGHT) return false
 
     // 2. Moon Alt < -10
     val moonPos = calculateMoonPosition(epochDay)

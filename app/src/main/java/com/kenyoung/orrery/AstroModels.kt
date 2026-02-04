@@ -93,7 +93,7 @@ fun getOrreryPlanets(): List<PlanetElements> {
         PlanetElements("Jupiter", "♃", Color(0xFFFFA500), 34.40, 0.08308, 5.20260, 0.04849, 1.305,  14.75, 100.46),
         PlanetElements("Saturn",  "♄", Color.Yellow,  49.94, 0.03346, 9.55490, 0.05555, 2.485,  92.43, 113.71),
         PlanetElements("Uranus",  "⛢", Color(0xFF20B2AA), 313.23, 0.01173, 19.1817, 0.04731, 0.773, 170.96,  74.00),
-        PlanetElements("Neptune", "♆", Color(0xFF4D4DFF), 304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
+        PlanetElements("Neptune", "♆", Color(0xFF6699FF), 304.88, 0.00598, 30.0582, 0.00860, 1.770,  44.97, 131.78)
     )
 }
 

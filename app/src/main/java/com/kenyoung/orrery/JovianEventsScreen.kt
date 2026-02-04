@@ -442,7 +442,7 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
         val jd = raw.mjd + 2400000.5
         val (_, _, sunAlt) = getAltAz(jd, "Sun", lat, lon)
         val (_, _, jupAlt) = getAltAz(jd, "Jupiter", lat, lon)
-        val isVisible = (sunAlt < -0.833) && (jupAlt > 0.0)
+        val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > 0.0)
         var pixelType = if (isVisible) JovEventPixel.VISIBLE else JovEventPixel.HIDDEN
 
         if (raw.mjd > nowMJD && isVisible && !nextEventFound) {

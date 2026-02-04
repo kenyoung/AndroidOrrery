@@ -45,7 +45,7 @@ private const val TOTAL_LUNAR_ECLIPSE = 2
 private const val M_2PI = 2.0 * Math.PI
 private const val M_HALF_PI = 0.5 * Math.PI
 private const val DEGREES_TO_RADIANS = Math.PI / 180.0
-private const val HOURS_TO_DEGREES = 15.0
+// HOURS_TO_DEGREES now in AstroMath.kt
 
 // Physical constants (CGS units)
 private const val AU_KM = 149597870.691

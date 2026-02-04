@@ -393,7 +393,7 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId)
         // Use Compatibility Function
         val (rise, set) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours)
         sunRise[i] = rise; sunSet[i] = set
-        val (aRise, aSet) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours, -18.0)
+        val (aRise, aSet) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours, ASTRONOMICAL_TWILIGHT)
         astroRise[i] = aRise; astroSet[i] = aSet
         for (p in planets) {
             val ev = calculatePlanetEvents(currentEpochDay, lat, lon, offsetHours, p)

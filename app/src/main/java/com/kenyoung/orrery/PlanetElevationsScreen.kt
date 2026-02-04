@@ -53,8 +53,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     // 2. Calculate Sun Times for Windowing
     val (riseToday, sunsetToday) = calculateSunTimes(epochDayInt, lat, lon, offsetHours)
     val (sunriseTomorrow, setTomorrow) = calculateSunTimes(epochDayInt + 1.0, lat, lon, offsetHours)
-    val (_, astroSetToday) = calculateSunTimes(epochDayInt, lat, lon, offsetHours, -18.0)
-    val (astroRiseTomorrow, _) = calculateSunTimes(epochDayInt + 1.0, lat, lon, offsetHours, -18.0)
+    val (_, astroSetToday) = calculateSunTimes(epochDayInt, lat, lon, offsetHours, ASTRONOMICAL_TWILIGHT)
+    val (astroRiseTomorrow, _) = calculateSunTimes(epochDayInt + 1.0, lat, lon, offsetHours, ASTRONOMICAL_TWILIGHT)
 
     val centerTime = if (!sunsetToday.isNaN() && !sunriseTomorrow.isNaN()) {
         val sSet = if (sunsetToday < 12.0) sunsetToday + 24.0 else sunsetToday
@@ -177,8 +177,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val lstStr = calculateLST(now, lon)
                 val parts = lstStr.split(":")
                 val currentLST = parts[0].toDouble() + parts[1].toDouble() / 60.0
-                var lst = currentLST + ((hourVal - currentH) * 1.0027379)
-                while (lst < 0) lst += 24.0; while (lst >= 24.0) lst -= 24.0
+                val lst = normalizeTime(currentLST + ((hourVal - currentH) * 1.0027379))
                 val lstInt = lst.toInt()
 
                 val paintToUse = if (lstInt % 6 == 0) whiteAxisTextPaint else axisTextPaint

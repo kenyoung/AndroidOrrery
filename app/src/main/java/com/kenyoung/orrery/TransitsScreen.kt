@@ -105,14 +105,21 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 bestLabels["${p.name}_s"] = LabelPosition()
             }
 
-            // --- SUPERIOR PLANET SEGMENT TRACKING ---
-            // Data structure to track the "best" label candidate for the current visible segment
-            data class SegmentState(var bestX: Float, var bestY: Float, var minDist: Float, var lastX: Float, val type: String)
+            // --- SUPERIOR PLANET SEGMENT TRACKING (Two-Pass) ---
+            // Collect ALL candidate positions per segment, then optimize placement in pass 2
+            data class SegmentCandidate(val x: Float, val y: Float)
+            data class SegmentState(val candidates: ArrayList<SegmentCandidate>, var lastX: Float, val type: String)
             val superiorSegments = HashMap<String, SegmentState>() // Key: "Planet_Type" e.g. "Saturn_s"
 
-            data class SuperiorLabel(val x: Float, val y: Float, val type: String)
-            val superiorLabels = HashMap<String, ArrayList<SuperiorLabel>>()
-            for (p in superiorPlanets) superiorLabels[p] = ArrayList()
+            // Completed segments with all their candidates
+            data class CompletedSegment(val planet: String, val type: String, val candidates: List<SegmentCandidate>)
+            val completedSegments = ArrayList<CompletedSegment>()
+
+            // All curve points for soft obstacle detection
+            val allCurvePoints = ArrayList<Offset>()
+
+            // Store sunset/sunrise x-coordinates for each y position
+            val nightBounds = HashMap<Int, Pair<Float, Float>>() // y -> (sunsetX, sunriseX)
 
             // --- MERCURY PEAK DETECTION STATE ---
             data class MercuryPeak(val x: Float, val y: Float, val type: String)
@@ -156,7 +163,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     val sunDec = calculateSunDeclination(targetEpochDay)
                     val altNoon = 90.0 - abs(lat - Math.toDegrees(sunDec))
 
-                    if (altNoon < -0.833) {
+                    if (altNoon < HORIZON_REFRACTED) {
                         drawPlanets = true
                         effectiveXSunset = 0.0
                         effectiveXSunrise = w.toDouble()
@@ -186,6 +193,11 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     if (validSunset) sunPoints.add(Offset(xSunset.toFloat(), y.toFloat()))
                     if (validSunrise) sunPoints.add(Offset(xSunrise.toFloat(), y.toFloat()))
 
+                    // Store night bounds for label placement
+                    if (drawPlanets && validSunset && validSunrise) {
+                        nightBounds[y] = Pair(xSunset.toFloat(), xSunrise.toFloat())
+                    }
+
                     // Draw gray pixel at the current time if it is night time on this specific day
                     if (drawPlanets) {
                         if (xNow >= effectiveXSunset && xNow <= effectiveXSunrise) {
@@ -213,38 +225,37 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                                 if (planet.name == "Mercury") {
                                     // Mercury Handled Separately via Peak Detection
                                 } else if (planet.name in superiorPlanets) {
-                                    // SUPERIOR PLANETS: Find the gaps
+                                    // SUPERIOR PLANETS: Collect all candidates per segment
                                     val key = "${planet.name}_$keySuffix"
                                     var state = superiorSegments[key]
 
                                     if (isVisible) {
                                         // 1. Check for Discontinuity (Wrap-around jump > 6 hours)
-                                        // If the curve jumps significantly, treat it as a new segment
                                         if (state != null && abs(xPos - state.lastX) > (pixelsPerHour * 6f)) {
-                                            // Commit previous segment
-                                            superiorLabels[planet.name]?.add(SuperiorLabel(state.bestX, state.bestY, state.type))
-                                            state = null // Force new start
+                                            // Commit previous segment with all its candidates
+                                            if (state.candidates.isNotEmpty()) {
+                                                completedSegments.add(CompletedSegment(planet.name, state.type, state.candidates.toList()))
+                                            }
+                                            state = null
                                         }
 
-                                        val dist = abs(xPos - targetX)
                                         if (state == null) {
-                                            // Start tracking a new visible segment
-                                            state = SegmentState(xPos.toFloat(), yPos, dist.toFloat(), xPos.toFloat(), keySuffix)
+                                            // Start new segment
+                                            state = SegmentState(ArrayList(), xPos.toFloat(), keySuffix)
                                             superiorSegments[key] = state
-                                        } else {
-                                            // Update existing segment if this point is closer to target
-                                            if (dist.toFloat() < state.minDist) {
-                                                state.minDist = dist.toFloat()
-                                                state.bestX = xPos.toFloat()
-                                                state.bestY = yPos
-                                            }
-                                            state.lastX = xPos.toFloat()
                                         }
+
+                                        // Sample candidates every ~20 pixels vertically to avoid too many
+                                        if (state.candidates.isEmpty() || abs(yPos - state.candidates.last().y) >= 20f) {
+                                            state.candidates.add(SegmentCandidate(xPos.toFloat(), yPos))
+                                        }
+                                        state.lastX = xPos.toFloat()
                                     } else {
-                                        // 2. Not Visible (Daylight Gap)
-                                        // If we were tracking a segment and it went invisible, the segment ended. Commit it.
+                                        // Segment ended - commit it
                                         if (state != null) {
-                                            superiorLabels[planet.name]?.add(SuperiorLabel(state.bestX, state.bestY, state.type))
+                                            if (state.candidates.isNotEmpty()) {
+                                                completedSegments.add(CompletedSegment(planet.name, state.type, state.candidates.toList()))
+                                            }
                                             superiorSegments.remove(key)
                                         }
                                     }
@@ -270,8 +281,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                             if (planet.name == "Mercury") {
                                 // 1. RISING (Morning / GWE)
                                 if (!events.rise.isNaN() && !riseTimeCurr.isNaN()) {
-                                    var rDiff = riseTimeCurr - events.rise
-                                    while(rDiff < -12) rDiff += 24.0; while(rDiff > 12) rDiff -= 24.0
+                                    val rDiff = normalizeHourAngle(riseTimeCurr - events.rise)
 
                                     if (rDiff > 0) {
                                         val mx = centerX + (normalizeGraphTime(events.rise) * pixelsPerHour).toFloat()
@@ -292,8 +302,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
 
                                 // 2. SETTING (Evening / GEE)
                                 if (!events.set.isNaN() && !setTimePrev.isNaN()) {
-                                    var sDiff = events.set - setTimePrev
-                                    while(sDiff < -12) sDiff += 24.0; while(sDiff > 12) sDiff -= 24.0
+                                    val sDiff = normalizeHourAngle(events.set - setTimePrev)
 
                                     if (sDiff > 0) {
                                         val mx = centerX + (normalizeGraphTime(events.set) * pixelsPerHour).toFloat()
@@ -319,8 +328,18 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 // End of Drawing Loop: Commit any active superior segments that run to the bottom of the screen
                 for ((key, state) in superiorSegments.entries) {
                     val pName = key.substringBefore("_")
-                    superiorLabels[pName]?.add(SuperiorLabel(state.bestX, state.bestY, state.type))
+                    if (state.candidates.isNotEmpty()) {
+                        completedSegments.add(CompletedSegment(pName, state.type, state.candidates.toList()))
+                    }
                 }
+            }
+
+            // Collect all curve points for soft obstacle detection
+            allCurvePoints.addAll(sunPoints)
+            for (planet in planets) {
+                allCurvePoints.addAll(planetTransits[planet.name]!!)
+                allCurvePoints.addAll(planetRises[planet.name]!!)
+                allCurvePoints.addAll(planetSets[planet.name]!!)
             }
 
             drawPoints(points = sunPoints, pointMode = PointMode.Points, color = Color.White, strokeWidth = 2f)
@@ -424,6 +443,16 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                 val mainTextPaint = Paint().apply { textSize = 42f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) }
                 val subTextPaint = Paint().apply { textSize = 27f; textAlign = Paint.Align.LEFT; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL) }
 
+                // Label dimensions for collision detection based on font metrics
+                val fontMetrics = mainTextPaint.fontMetrics
+                val maxCharHeight = fontMetrics.descent - fontMetrics.ascent
+                // Measure a wide character to get max width (M is typically widest)
+                val maxCharWidth = mainTextPaint.measureText("M")
+                val labelWidth = 2f * maxCharWidth
+                val labelHeight = maxCharHeight
+                val labelMargin = 10f  // Margin from screen edges
+                val curveProximityThreshold = 30f  // Soft obstacle distance
+
                 fun drawLabel(x: Float, y: Float, sym: String, sub: String, col: Int) {
                     val sw = mainTextPaint.measureText(sym); val subw = subTextPaint.measureText(sub)
                     val sx = x + sw; val subx = sx + (sw/2f) + (subw * (if (sub == "s") 0.375f else 0.75f))
@@ -437,34 +466,130 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
                     canvas.nativeCanvas.drawText(sub, subx, y+8f, subTextPaint)
                 }
 
-                for (p in planets) {
-                    val col = p.color.toArgb()
-                    val sym = p.symbol
+                // --- TWO-PASS LABEL PLACEMENT ---
+                // Track placed label centers for spacing calculations
+                data class PlacedLabel(val x: Float, val y: Float)
+                val placedLabels = ArrayList<PlacedLabel>()
 
-                    if (p.name == "Mercury") {
-                        // Skip main loop, handled below
-                    } else if (p.name in superiorPlanets) {
-                        // Draw ALL collected superior labels
-                        superiorLabels[p.name]?.forEach { label ->
-                            drawLabel(label.x, label.y, sym, label.type, col)
-                        }
-                    } else {
-                        // VENUS/Others: Standard loop
-                        bestLabels["${p.name}_t"]?.let { if(it.found) drawLabel(it.x, it.y, sym, "t", col) }
-                        bestLabels["${p.name}_r"]?.let { if(it.found) drawLabel(it.x, it.y, sym, "r", col) }
-                        bestLabels["${p.name}_s"]?.let { if(it.found) drawLabel(it.x, it.y, sym, "s", col) }
-                    }
+                // Helper: minimum distance to any placed label
+                fun minDistToPlaced(x: Float, y: Float): Float {
+                    if (placedLabels.isEmpty()) return Float.MAX_VALUE
+                    return placedLabels.minOf { sqrt((it.x - x) * (it.x - x) + (it.y - y) * (it.y - y)) }
                 }
 
-                // --- DRAW MERCURY PEAK LABELS ---
+                // Helper: soft penalty for curve proximity (returns 0 to 1, lower is better)
+                fun curveProximityPenalty(x: Float, y: Float): Float {
+                    var minDist = Float.MAX_VALUE
+                    // Sample every 10th point for performance
+                    for (i in allCurvePoints.indices step 10) {
+                        val pt = allCurvePoints[i]
+                        val d = sqrt((pt.x - x) * (pt.x - x) + (pt.y - y) * (pt.y - y))
+                        if (d < minDist) minDist = d
+                    }
+                    return if (minDist < curveProximityThreshold) 1f - (minDist / curveProximityThreshold) else 0f
+                }
+
+                // Helper: get night bounds for a y position
+                fun getNightBounds(y: Float): Pair<Float, Float>? {
+                    val yInt = y.toInt()
+                    return nightBounds[yInt] ?: nightBounds[yInt - 1] ?: nightBounds[yInt + 1]
+                }
+
+                // Helper: check if position is within valid bounds
+                // Label bounding box: x to x+labelWidth horizontally, y-labelHeight/2 to y+labelHeight/2 vertically
+                fun isValidPosition(x: Float, y: Float): Boolean {
+                    val halfHeight = labelHeight / 2f
+
+                    // Check vertical bounds (top and bottom of plot)
+                    if (y - halfHeight < textHeight) return false
+                    if (y + halfHeight > h) return false
+
+                    // Check horizontal screen bounds
+                    if (x < paddingLeft) return false
+                    if (x + labelWidth > w - paddingRight) return false
+
+                    // Check sunset/sunrise bounds
+                    val bounds = getNightBounds(y)
+                    if (bounds != null) {
+                        val (sunsetX, sunriseX) = bounds
+                        if (x < sunsetX) return false  // Left edge past sunset
+                        if (x + labelWidth > sunriseX) return false  // Right edge past sunrise
+                    }
+
+                    return true
+                }
+
+                // Helper: score a candidate position (higher is better)
+                fun scoreCandidate(x: Float, y: Float): Float {
+                    if (!isValidPosition(x, y)) return -1f
+                    val distScore = minDistToPlaced(x, y)
+                    val curvePenalty = curveProximityPenalty(x, y) * 50f  // Scale penalty
+                    return distScore - curvePenalty
+                }
+
+                // 1. Place Mercury labels first (unchanged strategy)
                 val mercury = planets.find { it.name == "Mercury" }
                 if (mercury != null) {
                     val col = mercury.color.toArgb()
                     val sym = mercury.symbol
                     for (peak in mercuryPeaks) {
-                        // Offset: -10f for Setting (GEE), -60f for Rising (GWE)
                         val offsetX = if (peak.type == "s") -10f else -60f
-                        drawLabel(peak.x + offsetX, peak.y, sym, peak.type, col)
+                        val lx = peak.x + offsetX
+                        val ly = peak.y
+                        if (isValidPosition(lx, ly)) {
+                            drawLabel(lx, ly, sym, peak.type, col)
+                            placedLabels.add(PlacedLabel(lx, ly))
+                        }
+                    }
+                }
+
+                // 2. Place Venus labels (unchanged strategy)
+                val venus = planets.find { it.name == "Venus" }
+                if (venus != null) {
+                    val col = venus.color.toArgb()
+                    val sym = venus.symbol
+                    for (suffix in listOf("t", "r", "s")) {
+                        bestLabels["Venus_$suffix"]?.let {
+                            if (it.found && isValidPosition(it.x, it.y)) {
+                                drawLabel(it.x, it.y, sym, suffix, col)
+                                placedLabels.add(PlacedLabel(it.x, it.y))
+                            }
+                        }
+                    }
+                }
+
+                // 3. Place superior planet labels using greedy max-min algorithm
+                val superiorOrder = listOf("Mars", "Jupiter", "Saturn", "Uranus", "Neptune")
+                val typeOrder = listOf("t", "r", "s")
+
+                for (planetName in superiorOrder) {
+                    val planet = planets.find { it.name == planetName } ?: continue
+                    val col = planet.color.toArgb()
+                    val sym = planet.symbol
+
+                    for (type in typeOrder) {
+                        // Get all segments for this planet/type
+                        val segments = completedSegments.filter { it.planet == planetName && it.type == type }
+
+                        for (segment in segments) {
+                            // Find best candidate in this segment using greedy max-min
+                            var bestCandidate: SegmentCandidate? = null
+                            var bestScore = Float.MIN_VALUE
+
+                            for (candidate in segment.candidates) {
+                                val score = scoreCandidate(candidate.x, candidate.y)
+                                if (score > bestScore) {
+                                    bestScore = score
+                                    bestCandidate = candidate
+                                }
+                            }
+
+                            // Draw the best candidate if valid
+                            if (bestCandidate != null && bestScore >= 0) {
+                                drawLabel(bestCandidate.x, bestCandidate.y, sym, type, col)
+                                placedLabels.add(PlacedLabel(bestCandidate.x, bestCandidate.y))
+                            }
+                        }
                     }
                 }
 
