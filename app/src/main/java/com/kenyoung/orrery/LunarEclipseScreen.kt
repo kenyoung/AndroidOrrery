@@ -1803,6 +1803,41 @@ private fun renderEclipse(
                 segmentStart = px
             }
         }
+
+        // Draw black pixels at Moon rise/set longitudes for eclipse phase boundaries
+        fun drawBlackPixelAtLon(lonDeg: Double) {
+            val px = ((lonDeg / 360.0 + 0.5) * mapWidth).toInt()
+            if (px in 0 until pixelWidth) {
+                drawScope.drawRect(colorBlack,
+                    Offset(margin + px, screenY),
+                    androidx.compose.ui.geometry.Size(1f, 1f))
+            }
+        }
+
+        // Moon sets when total phase ends
+        if (!totEndRange.neverUp && !totEndRange.alwaysUp) {
+            drawBlackPixelAtLon(totEndRange.lon2)
+        }
+        // Moon sets when partial eclipse ends
+        if (!parEndRange.neverUp && !parEndRange.alwaysUp) {
+            drawBlackPixelAtLon(parEndRange.lon2)
+        }
+        // Moon sets when penumbral eclipse ends
+        if (!penEndRange.neverUp && !penEndRange.alwaysUp) {
+            drawBlackPixelAtLon(penEndRange.lon2)
+        }
+        // Moon rises when penumbral eclipse starts
+        if (!penStartRange.neverUp && !penStartRange.alwaysUp) {
+            drawBlackPixelAtLon(penStartRange.lon1)
+        }
+        // Moon rises when partial eclipse starts
+        if (!parStartRange.neverUp && !parStartRange.alwaysUp) {
+            drawBlackPixelAtLon(parStartRange.lon1)
+        }
+        // Moon rises when total eclipse starts
+        if (!totStartRange.neverUp && !totStartRange.alwaysUp) {
+            drawBlackPixelAtLon(totStartRange.lon1)
+        }
     }
 
     // Shorelines
