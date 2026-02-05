@@ -2030,7 +2030,7 @@ private fun renderEclipse(
         if (moonriseTJD != null) {
             textPaint.color = colorRed.toArgb()
             textPaint.textSize = smallTextSize
-            canvas.nativeCanvas.drawText("Moon rises here", moonrisePx, umbraMapTop + 12f * scaleFactor, textPaint)
+            canvas.nativeCanvas.drawText("Moon rises here", moonrisePx, umbraMapTop + 12f * scaleFactor + smallTextSize / 2f, textPaint)
         }
     }
 
