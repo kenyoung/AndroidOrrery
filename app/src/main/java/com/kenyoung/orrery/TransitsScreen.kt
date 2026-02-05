@@ -22,7 +22,6 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import kotlin.math.*
 
 @Composable
@@ -410,7 +409,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
 
             var prevElong = calculateMoonPhaseAngle(startScan)
             var scanD = startScan + 1.0
-            while(scanD <= endScan) {
+            while (scanD <= endScan) {
                 val currElong = calculateMoonPhaseAngle(scanD)
                 fun norm(a: Double): Double { var v = a % 360.0; if (v > 180) v -= 360; if (v <= -180) v += 360; return v }
                 fun checkCrossing(targetAngle: Double, list: ArrayList<Offset>) {

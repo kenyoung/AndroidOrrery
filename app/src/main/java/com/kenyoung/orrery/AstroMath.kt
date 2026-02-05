@@ -272,8 +272,8 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val jupRA = jupState.ra
 
     var raDiff = sunRA - jupRA
-    while(raDiff < -180) raDiff += 360
-    while(raDiff > 180) raDiff -= 360
+    while (raDiff < -180) raDiff += 360
+    while (raDiff > 180) raDiff -= 360
 
     // If Sun RA > Jup RA, Sun is "East" in sky (Left). Shadow goes West (+X).
     // UPDATED: shadowSign must be -1.0 when Sun is East to produce positive X shift (West)
@@ -409,12 +409,12 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     }
     val targetAlt = -0.5667
     var tRise = tTransit - 0.25
-    for(i in 0..4) {
+    for (i in 0..4) {
         val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tRise -= (diff / rate)
     }
     var tSet = tTransit + 0.25
-    for(i in 0..4) {
+    for (i in 0..4) {
         val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tSet -= (diff / rate)
     }
@@ -451,12 +451,12 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     }
     val targetAlt = 0.125
     var tRise = tTransit - 0.25
-    for(i in 0..4) {
+    for (i in 0..4) {
         val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tRise -= (diff / rate)
     }
     var tSet = tTransit + 0.25
-    for(i in 0..4) {
+    for (i in 0..4) {
         val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tSet -= (diff / rate)
     }

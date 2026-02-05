@@ -265,14 +265,14 @@ fun CompassCanvas(
                 val halfW = textBounds.width()/2; val halfH = textBounds.height()/2
 
                 var iter = 0
-                while(iter < 10) {
+                while (iter < 10) {
                     val dist = radius - currentLineLen - 25f
                     val sx = center.x + dist * cosA; val sy = center.y + dist * sinA + (halfH/2f)
                     val rect = Rect((sx-halfW-5).toInt(), (sy-halfH-5).toInt(), (sx+halfW+5).toInt(), (sy+halfH+5).toInt())
                     var hit = false
-                    for(o in occupied) { if(Rect.intersects(rect, o)) { hit = true; break } }
+                    for (o in occupied) { if (Rect.intersects(rect, o)) { hit = true; break } }
 
-                    if(!hit) {
+                    if (!hit) {
                         paints.line.color = colorInt
                         paints.symbol.color = colorInt
                         val x0 = center.x + radius*cosA; val y0 = center.y + radius*sinA
@@ -287,11 +287,11 @@ fun CompassCanvas(
                 }
             }
 
-            for(obj in plotData) {
+            for (obj in plotData) {
                 // FIXED: obj.ra is in DEGREES. Must convert to HOURS for calculateAzAlt.
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
-                val pColor = if(alt > 0) paints.whiteInt else paints.redInt
+                val pColor = if (alt > 0) paints.whiteInt else paints.redInt
 
                 // Plot Az (Rotate -90)
                 drawMarker(centerRightOff, Math.toRadians(az - 90.0), obj.symbol, pColor, occupiedAz)
@@ -321,22 +321,22 @@ fun CompassCanvas(
             var currY = row2Y + rowHeight + 5f
             val offset = round(lon/15.0)
 
-            for(obj in plotData) {
+            for (obj in plotData) {
                 val raHours = obj.ra / 15.0
                 val (currAz, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val haNorm = normalizeHourAngle(lst - raHours)
 
                 // Name
-                paints.tableDataLeft.color = if(currAlt > 0) paints.greenInt else paints.redInt
+                paints.tableDataLeft.color = if (currAlt > 0) paints.greenInt else paints.redInt
                 nc.drawText(obj.name, cols[0], currY, paints.tableDataLeft)
 
                 // HA
-                paints.tableDataCenter.color = if(currAlt > 0) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (currAlt > 0) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(haNorm, true), cols[1]-15f, currY, paints.tableDataCenter)
 
                 // Rise
                 val riseUT = normalizeTime(obj.events.rise - offset)
-                paints.tableDataCenter.color = if(currAlt <= 0) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (currAlt <= 0) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(riseUT, false), cols[2], currY, paints.tableDataCenter)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
                 paints.tableDataRight.color = paints.tableDataCenter.color
@@ -345,7 +345,7 @@ fun CompassCanvas(
                 // Transit
                 val transUT = normalizeTime(obj.events.transit - offset)
                 val isPre = (currAlt > 0 && haNorm < 0)
-                paints.tableDataCenter.color = if(isPre) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(transUT, false), cols[4], currY, paints.tableDataCenter)
                 val transEl = 90.0 - abs(lat - obj.dec)
                 paints.tableDataRight.color = paints.tableDataCenter.color
@@ -354,7 +354,7 @@ fun CompassCanvas(
                 // Set
                 val setUT = normalizeTime(obj.events.set - offset)
                 val isPost = (currAlt > 0 && haNorm > 0)
-                paints.tableDataCenter.color = if(isPost) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(setUT, false), cols[6], currY, paints.tableDataCenter)
                 val setAz = calculateAzAtRiseSet(lat, obj.dec, false)
                 paints.tableDataRight.color = paints.tableDataCenter.color

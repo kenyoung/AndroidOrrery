@@ -377,8 +377,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             // Planet Current Elevation (Simple)
             if (isNightNow && pIsUp) {
                 var tT = ev.transit; var tT_adj = tT
-                while(tT_adj < currentH - 12.0) tT_adj += 24.0
-                while(tT_adj > currentH + 12.0) tT_adj -= 24.0
+                while (tT_adj < currentH - 12.0) tT_adj += 24.0
+                while (tT_adj > currentH + 12.0) tT_adj -= 24.0
                 val currentAlt = getAlt(currentH - tT_adj, state.dec)
                 if (currentAlt > 0) {
                     drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint) }
