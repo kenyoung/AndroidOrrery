@@ -1778,8 +1778,8 @@ private fun renderEclipse(
 
     // ========== DRAW EARTH MAP ==========
 
-    // Background
-    drawScope.drawRect(colorDarkGrey, Offset(margin, earthMapTop),
+    // Background - white so total visibility regions are pure white
+    drawScope.drawRect(colorWhite, Offset(margin, earthMapTop),
         androidx.compose.ui.geometry.Size(mapWidth, earthMapHeight))
 
     // Analytical visibility shading - compute longitude ranges per row
@@ -1799,6 +1799,15 @@ private fun renderEclipse(
     // Process each row analytically
     val pixelHeight = earthMapHeight.toInt()
     val pixelWidth = mapWidth.toInt()
+
+    // Track previous row positions for terminator lines (null means no valid position)
+    var prevTotEndSetX: Float? = null
+    var prevParEndSetX: Float? = null
+    var prevPenEndSetX: Float? = null
+    var prevPenStartRiseX: Float? = null
+    var prevParStartRiseX: Float? = null
+    var prevTotStartRiseX: Float? = null
+    var prevScreenY: Float = earthMapTop
 
     for (py in 0 until pixelHeight) {
         val lat = -(((py.toFloat() / earthMapHeight) - 0.5f) * Math.PI)
@@ -1853,12 +1862,13 @@ private fun renderEclipse(
             }
 
             // Draw segment when level changes or at end of row
+            // Level 3 (total) uses white background, others draw darker colors on top
             if (level != currentLevel || px == pixelWidth) {
-                if (currentLevel > 0 && px > segmentStart) {
+                if (currentLevel < 3 && px > segmentStart) {
                     val color = when (currentLevel) {
+                        0 -> colorDarkGrey
                         1 -> colorGrey
-                        2 -> colorLightGrey
-                        else -> colorWhite
+                        else -> colorLightGrey
                     }
                     drawScope.drawRect(color,
                         Offset(margin + segmentStart, screenY),
@@ -1869,40 +1879,53 @@ private fun renderEclipse(
             }
         }
 
-        // Draw black pixels at Moon rise/set longitudes for eclipse phase boundaries
-        fun drawBlackPixelAtLon(lonDeg: Double) {
-            val px = ((lonDeg / 360.0 + 0.5) * mapWidth).toInt()
-            if (px in 0 until pixelWidth) {
-                drawScope.drawRect(colorBlack,
-                    Offset(margin + px, screenY),
-                    androidx.compose.ui.geometry.Size(1f, 1f))
-            }
-        }
+        // Calculate x positions for terminator lines and draw lines to previous row
+        fun lonToX(lonDeg: Double): Float = ((lonDeg / 360.0 + 0.5) * mapWidth).toFloat() + margin
+        val maxLineLength = mapWidth / 20
 
         // Moon sets when total phase ends
-        if (!totEndRange.neverUp && !totEndRange.alwaysUp) {
-            drawBlackPixelAtLon(totEndRange.lon2)
+        val curTotEndSetX = if (!totEndRange.neverUp && !totEndRange.alwaysUp) lonToX(totEndRange.lon2) else null
+        if (curTotEndSetX != null && prevTotEndSetX != null && abs(curTotEndSetX - prevTotEndSetX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevTotEndSetX, prevScreenY), Offset(curTotEndSetX, screenY), 1f)
         }
+        prevTotEndSetX = curTotEndSetX
+
         // Moon sets when partial eclipse ends
-        if (!parEndRange.neverUp && !parEndRange.alwaysUp) {
-            drawBlackPixelAtLon(parEndRange.lon2)
+        val curParEndSetX = if (!parEndRange.neverUp && !parEndRange.alwaysUp) lonToX(parEndRange.lon2) else null
+        if (curParEndSetX != null && prevParEndSetX != null && abs(curParEndSetX - prevParEndSetX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevParEndSetX, prevScreenY), Offset(curParEndSetX, screenY), 1f)
         }
+        prevParEndSetX = curParEndSetX
+
         // Moon sets when penumbral eclipse ends
-        if (!penEndRange.neverUp && !penEndRange.alwaysUp) {
-            drawBlackPixelAtLon(penEndRange.lon2)
+        val curPenEndSetX = if (!penEndRange.neverUp && !penEndRange.alwaysUp) lonToX(penEndRange.lon2) else null
+        if (curPenEndSetX != null && prevPenEndSetX != null && abs(curPenEndSetX - prevPenEndSetX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevPenEndSetX, prevScreenY), Offset(curPenEndSetX, screenY), 1f)
         }
+        prevPenEndSetX = curPenEndSetX
+
         // Moon rises when penumbral eclipse starts
-        if (!penStartRange.neverUp && !penStartRange.alwaysUp) {
-            drawBlackPixelAtLon(penStartRange.lon1)
+        val curPenStartRiseX = if (!penStartRange.neverUp && !penStartRange.alwaysUp) lonToX(penStartRange.lon1) else null
+        if (curPenStartRiseX != null && prevPenStartRiseX != null && abs(curPenStartRiseX - prevPenStartRiseX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevPenStartRiseX, prevScreenY), Offset(curPenStartRiseX, screenY), 1f)
         }
+        prevPenStartRiseX = curPenStartRiseX
+
         // Moon rises when partial eclipse starts
-        if (!parStartRange.neverUp && !parStartRange.alwaysUp) {
-            drawBlackPixelAtLon(parStartRange.lon1)
+        val curParStartRiseX = if (!parStartRange.neverUp && !parStartRange.alwaysUp) lonToX(parStartRange.lon1) else null
+        if (curParStartRiseX != null && prevParStartRiseX != null && abs(curParStartRiseX - prevParStartRiseX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevParStartRiseX, prevScreenY), Offset(curParStartRiseX, screenY), 1f)
         }
+        prevParStartRiseX = curParStartRiseX
+
         // Moon rises when total eclipse starts
-        if (!totStartRange.neverUp && !totStartRange.alwaysUp) {
-            drawBlackPixelAtLon(totStartRange.lon1)
+        val curTotStartRiseX = if (!totStartRange.neverUp && !totStartRange.alwaysUp) lonToX(totStartRange.lon1) else null
+        if (curTotStartRiseX != null && prevTotStartRiseX != null && abs(curTotStartRiseX - prevTotStartRiseX) < maxLineLength) {
+            drawScope.drawLine(colorBlack, Offset(prevTotStartRiseX, prevScreenY), Offset(curTotStartRiseX, screenY), 1f)
         }
+        prevTotStartRiseX = curTotStartRiseX
+
+        prevScreenY = screenY
     }
 
     // Shorelines
