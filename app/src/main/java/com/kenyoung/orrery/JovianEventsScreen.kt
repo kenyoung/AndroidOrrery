@@ -38,6 +38,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.TimeZone
 import kotlin.math.*
 
 // --- DATA CLASSES ---
@@ -104,7 +105,8 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
     // --- TIME ZONE STATE ---
     var useLocalTime by remember { mutableStateOf(false) }
     val zoneId = if (useLocalTime) ZoneId.systemDefault() else ZoneId.of("UTC")
-    val timeLabel = if (useLocalTime) "" else " UT" // Standard time usually implies local without suffix, or we can use zone ID
+    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
+    val timeLabel = if (useLocalTime) " $timeZoneAbbreviation" else " UT"
 
     // Calculate start MJD based on the "Today" of the selected zone
     val zonedDateTime = currentInstant.atZone(zoneId)
