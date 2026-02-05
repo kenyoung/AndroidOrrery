@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.TimeZone
 import kotlin.math.*
 
 // ============================================================================
@@ -221,8 +222,8 @@ private fun buildTJD(year: Int, month: Int, day: Int, hour: Int, minute: Int, se
     return (b + c + dd).toDouble() + d + 1720994.5
 }
 
-private fun tJDToHHMMSS(tJD: Double): Triple<Int, Int, Int> {
-    var dayFrac = tJD - tJD.toInt() + 0.5
+private fun tJDToHHMMSS(tJD: Double, offsetHours: Double = 0.0): Triple<Int, Int, Int> {
+    var dayFrac = tJD - tJD.toInt() + 0.5 + offsetHours / 24.0
     while (dayFrac < 0.0) dayFrac += 1.0
     while (dayFrac > 1.0) dayFrac -= 1.0
 
@@ -1228,6 +1229,14 @@ private fun EclipseDetailView(
     onBack: () -> Unit
 ) {
     var showCanvas by remember { mutableStateOf(false) }
+    var useStandardTime by remember { mutableStateOf(false) }
+
+    // Calculate standard timezone offset from longitude (15° per hour)
+    val standardTimeOffsetHours = kotlin.math.round(longitude / 15.0)
+
+    // Get timezone abbreviation (e.g., "CST", "EST")
+    val timeZone = TimeZone.getDefault()
+    val timeZoneAbbreviation = timeZone.getDisplayName(false, TimeZone.SHORT)
 
     // Delay showing canvas to allow loading indicator to render first
     LaunchedEffect(Unit) {
@@ -1243,17 +1252,56 @@ private fun EclipseDetailView(
         if (showCanvas) {
             // Eclipse visualization canvas (full screen)
             Canvas(modifier = Modifier.fillMaxSize()) {
-                renderEclipse(this, eclipse, shoreline, latitude, longitude)
+                renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation)
             }
 
-            // Back button at bottom-left, only shown when canvas is displayed
-            TextButton(
-                onClick = onBack,
+            // Bottom row with Back button and time zone radio buttons
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 4.dp, bottom = 8.dp)
+                    .padding(start = 4.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("← Back", color = Color(0xFF00BFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                // Back button
+                TextButton(onClick = onBack) {
+                    Text("← Back", color = Color(0xFF00BFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                // UT radio button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { useStandardTime = false }
+                ) {
+                    RadioButton(
+                        selected = !useStandardTime,
+                        onClick = { useStandardTime = false },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = Color(0xFF00BFFF),
+                            unselectedColor = Color.Gray
+                        )
+                    )
+                    Text("UT", color = Color.White, fontSize = 14.sp)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Standard Time radio button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { useStandardTime = true }
+                ) {
+                    RadioButton(
+                        selected = useStandardTime,
+                        onClick = { useStandardTime = true },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = Color(0xFF00BFFF),
+                            unselectedColor = Color.Gray
+                        )
+                    )
+                    Text("Standard Time", color = Color.White, fontSize = 14.sp)
+                }
             }
         } else {
             // "Generating Display" message while preparing to render
@@ -1280,8 +1328,14 @@ private fun renderEclipse(
     eclipse: LunarEclipse,
     shoreline: List<ShoreSegment>,
     userLatitude: Double,
-    userLongitude: Double
+    userLongitude: Double,
+    useStandardTime: Boolean,
+    standardTimeOffsetHours: Double,
+    timeZoneAbbreviation: String
 ) {
+    // Time offset: 0 for UT, standardTimeOffsetHours for standard time
+    val timeOffset = if (useStandardTime) standardTimeOffsetHours else 0.0
+    val timeSuffix = if (useStandardTime) timeZoneAbbreviation else "UT"
     val width = drawScope.size.width
     val height = drawScope.size.height
 
@@ -1343,15 +1397,26 @@ private fun renderEclipse(
     val umbraMapScale = umbraMapHeight / (14.0 * MOON_RADIUS)
     val eta = 23.44 * DEGREES_TO_RADIANS
 
-    // Calculate eclipse times
+    // Calculate eclipse times in UT (for astronomical calculations)
     val eclipseUTHours = (eclipse.tDGE - eclipse.dTMinusUT) / 3600.0
-    var maxHH = eclipseUTHours.toInt()
-    var maxMM = ((eclipseUTHours - maxHH) * 60.0).toInt()
-    var maxSS = ((eclipseUTHours - maxHH - maxMM / 60.0) * 3600.0 + 0.5).toInt()
+    var utHH = eclipseUTHours.toInt()
+    var utMM = ((eclipseUTHours - utHH) * 60.0).toInt()
+    var utSS = ((eclipseUTHours - utHH - utMM / 60.0) * 3600.0 + 0.5).toInt()
+    if (utSS >= 60) { utSS -= 60; utMM++ }
+    if (utMM >= 60) { utMM -= 60; utHH++ }
+
+    val eclipseTJD = buildTJD(eclipse.year, eclipse.month, eclipse.day, utHH, utMM, utSS)
+
+    // Calculate display time (applying time offset)
+    var displayHours = eclipseUTHours + timeOffset
+    while (displayHours < 0) displayHours += 24.0
+    while (displayHours >= 24) displayHours -= 24.0
+    var maxHH = displayHours.toInt()
+    var maxMM = ((displayHours - maxHH) * 60.0).toInt()
+    var maxSS = ((displayHours - maxHH - maxMM / 60.0) * 3600.0 + 0.5).toInt()
     if (maxSS >= 60) { maxSS -= 60; maxMM++ }
     if (maxMM >= 60) { maxMM -= 60; maxHH++ }
-
-    val eclipseTJD = buildTJD(eclipse.year, eclipse.month, eclipse.day, maxHH, maxMM, maxSS)
+    if (maxHH >= 24) { maxHH -= 24 }
 
     // Get Sun and Moon positions
     val sun = sunPosition(eclipseTJD)
@@ -1906,12 +1971,20 @@ private fun renderEclipse(
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
 
-        // Title
-        textPaint.color = colorCream.toArgb()
+        // Title - eclipse type in yellow, date in white
         textPaint.textSize = largeTextSize
+        textPaint.textAlign = Paint.Align.LEFT
         val yearStr = if (eclipse.year <= 0) "${abs(eclipse.year - 1)} BC" else "${eclipse.year}"
-        val title = "${eclipse.typeString} Lunar Eclipse ${monthNames[eclipse.month - 1]} ${eclipse.day}, $yearStr"
-        canvas.nativeCanvas.drawText(title, width / 2, titleY, textPaint)
+        val titlePrefix = "${eclipse.typeString} Lunar Eclipse "
+        val titleDate = "${monthNames[eclipse.month - 1]} ${eclipse.day}, $yearStr"
+        val prefixWidth = textPaint.measureText(titlePrefix)
+        val dateWidth = textPaint.measureText(titleDate)
+        val titleStartX = (width - prefixWidth - dateWidth) / 2
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(titlePrefix, titleStartX, titleY, textPaint)
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(titleDate, titleStartX + prefixWidth, titleY, textPaint)
+        textPaint.textAlign = Paint.Align.CENTER
 
         // Visibility message
         val (visibilityMsg, visibilityColor) = when {
@@ -1928,23 +2001,75 @@ private fun renderEclipse(
         textPaint.textSize = smallTextSize
         canvas.nativeCanvas.drawText(visibilityMsg, width / 2, visibilityY, textPaint)
 
-        // Duration info
-        textPaint.color = colorCream.toArgb()
-        val durationStr = "Visible for penumbral: $minutesPen partial: $minutesPar total: $minutesTot minutes."
-        canvas.nativeCanvas.drawText(durationStr, width / 2, durationY, textPaint)
-
-        // Saros and magnitude
+        // Duration info - labels in yellow, numbers in white
+        textPaint.textAlign = Paint.Align.LEFT
+        val durPart1 = "Visible for penumbral: "
+        val durNum1 = "$minutesPen"
+        val durPart2 = " partial: "
+        val durNum2 = "$minutesPar"
+        val durPart3 = " total: "
+        val durNum3 = "$minutesTot"
+        val durPart4 = " minutes."
+        val durWidth1 = textPaint.measureText(durPart1)
+        val durWidthN1 = textPaint.measureText(durNum1)
+        val durWidth2 = textPaint.measureText(durPart2)
+        val durWidthN2 = textPaint.measureText(durNum2)
+        val durWidth3 = textPaint.measureText(durPart3)
+        val durWidthN3 = textPaint.measureText(durNum3)
+        val durWidth4 = textPaint.measureText(durPart4)
+        val durTotalWidth = durWidth1 + durWidthN1 + durWidth2 + durWidthN2 + durWidth3 + durWidthN3 + durWidth4
+        var durX = (width - durTotalWidth) / 2
         textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(durPart1, durX, durationY, textPaint)
+        durX += durWidth1
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(durNum1, durX, durationY, textPaint)
+        durX += durWidthN1
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(durPart2, durX, durationY, textPaint)
+        durX += durWidth2
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(durNum2, durX, durationY, textPaint)
+        durX += durWidthN2
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(durPart3, durX, durationY, textPaint)
+        durX += durWidth3
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(durNum3, durX, durationY, textPaint)
+        durX += durWidthN3
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(durPart4, durX, durationY, textPaint)
+        textPaint.textAlign = Paint.Align.CENTER
+
+        // Saros and magnitude - labels in yellow, numbers in white
+        textPaint.textAlign = Paint.Align.LEFT
         val mag = if (eclipse.eclipseType == PENUMBRAL_LUNAR_ECLIPSE) eclipse.penMag else eclipse.umbMag
-        val sarosStr = "Saros Number ${eclipse.sarosNum} Umbral Magnitude: %.3f".format(mag)
-        canvas.nativeCanvas.drawText(sarosStr, width / 2, sarosY, textPaint)
+        val sarosLabel = "Saros Number "
+        val sarosNum = "${eclipse.sarosNum}"
+        val magLabel = " Umbral Magnitude: "
+        val magValue = "%.3f".format(mag)
+        val sarosLabelWidth = textPaint.measureText(sarosLabel)
+        val sarosNumWidth = textPaint.measureText(sarosNum)
+        val magLabelWidth = textPaint.measureText(magLabel)
+        val magValueWidth = textPaint.measureText(magValue)
+        val sarosTotalWidth = sarosLabelWidth + sarosNumWidth + magLabelWidth + magValueWidth
+        val sarosStartX = (width - sarosTotalWidth) / 2
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(sarosLabel, sarosStartX, sarosY, textPaint)
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(sarosNum, sarosStartX + sarosLabelWidth, sarosY, textPaint)
+        textPaint.color = colorYellow.toArgb()
+        canvas.nativeCanvas.drawText(magLabel, sarosStartX + sarosLabelWidth + sarosNumWidth, sarosY, textPaint)
+        textPaint.color = colorWhite.toArgb()
+        canvas.nativeCanvas.drawText(magValue, sarosStartX + sarosLabelWidth + sarosNumWidth + magLabelWidth, sarosY, textPaint)
+        textPaint.textAlign = Paint.Align.CENTER
 
         // Maximum eclipse time - label in light blue, time in yellow
         // Use left-aligned paint to precisely control positioning and measure bounding box
         textPaint.textSize = mediumTextSize
         textPaint.textAlign = Paint.Align.LEFT
         val maxEclipseLabel = "Maximum Eclipse at "
-        val maxEclipseTime = "%02d:%02d:%02d UT".format(maxHH, maxMM, maxSS)
+        val maxEclipseTime = "%02d:%02d:%02d $timeSuffix".format(maxHH, maxMM, maxSS)
         val labelWidth = textPaint.measureText(maxEclipseLabel)
         val timeWidth = textPaint.measureText(maxEclipseTime)
         val totalWidth = labelWidth + timeWidth
@@ -1952,7 +2077,7 @@ private fun renderEclipse(
 
         textPaint.color = colorLightBlue.toArgb()
         canvas.nativeCanvas.drawText(maxEclipseLabel, maxLabelStartX, maxEclipseY, textPaint)
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(maxEclipseTime, maxLabelStartX + labelWidth, maxEclipseY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER  // Restore center alignment
 
@@ -1967,17 +2092,17 @@ private fun renderEclipse(
 
         // Total phase times
         if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
-            val (totEndH, totEndM, _) = tJDToHHMMSS(totEclipseEndTJD)
-            val (totStartH, totStartM, _) = tJDToHHMMSS(totEclipseStartTJD)
+            val (totEndH, totEndM, _) = tJDToHHMMSS(totEclipseEndTJD, timeOffset)
+            val (totStartH, totStartM, _) = tJDToHHMMSS(totEclipseStartTJD, timeOffset)
 
             leftTextPaint.color = colorLightBlue.toArgb()
             canvas.nativeCanvas.drawText("Total Eclipse Ends", margin, currentY, leftTextPaint)
-            leftTextPaint.color = colorYellow.toArgb()
+            leftTextPaint.color = colorWhite.toArgb()
             canvas.nativeCanvas.drawText("%02d:%02d".format(totEndH, totEndM), margin + 135f * textScale, currentY, leftTextPaint)
 
             rightTextPaint.color = colorLightBlue.toArgb()
             canvas.nativeCanvas.drawText("Total Eclipse Starts", width - margin - 45f * textScale, currentY, rightTextPaint)
-            rightTextPaint.color = colorYellow.toArgb()
+            rightTextPaint.color = colorWhite.toArgb()
             canvas.nativeCanvas.drawText("%02d:%02d".format(totStartH, totStartM), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
@@ -1985,34 +2110,34 @@ private fun renderEclipse(
 
         // Partial phase times
         if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
-            val (parEndH, parEndM, _) = tJDToHHMMSS(parEclipseEndTJD)
-            val (parStartH, parStartM, _) = tJDToHHMMSS(parEclipseStartTJD)
+            val (parEndH, parEndM, _) = tJDToHHMMSS(parEclipseEndTJD, timeOffset)
+            val (parStartH, parStartM, _) = tJDToHHMMSS(parEclipseStartTJD, timeOffset)
 
             leftTextPaint.color = colorLightBlue.toArgb()
             canvas.nativeCanvas.drawText("Partial Ends", margin, currentY, leftTextPaint)
-            leftTextPaint.color = colorYellow.toArgb()
+            leftTextPaint.color = colorWhite.toArgb()
             canvas.nativeCanvas.drawText("%02d:%02d".format(parEndH, parEndM), margin + 90f * textScale, currentY, leftTextPaint)
 
             rightTextPaint.color = colorLightBlue.toArgb()
             canvas.nativeCanvas.drawText("Partial Starts", width - margin - 45f * textScale, currentY, rightTextPaint)
-            rightTextPaint.color = colorYellow.toArgb()
+            rightTextPaint.color = colorWhite.toArgb()
             canvas.nativeCanvas.drawText("%02d:%02d".format(parStartH, parStartM), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
         }
 
         // Penumbral phase times
-        val (penEndH, penEndM, _) = tJDToHHMMSS(penEclipseEndTJD)
-        val (penStartH, penStartM, _) = tJDToHHMMSS(penEclipseStartTJD)
+        val (penEndH, penEndM, _) = tJDToHHMMSS(penEclipseEndTJD, timeOffset)
+        val (penStartH, penStartM, _) = tJDToHHMMSS(penEclipseStartTJD, timeOffset)
 
         leftTextPaint.color = colorLightBlue.toArgb()
         canvas.nativeCanvas.drawText("Penumbral Ends", margin, currentY, leftTextPaint)
-        leftTextPaint.color = colorYellow.toArgb()
+        leftTextPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText("%02d:%02d".format(penEndH, penEndM), margin + 105f * textScale, currentY, leftTextPaint)
 
         rightTextPaint.color = colorLightBlue.toArgb()
         canvas.nativeCanvas.drawText("Penumbral Starts", width - margin - 60f * textScale, currentY, rightTextPaint)
-        rightTextPaint.color = colorYellow.toArgb()
+        rightTextPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM), width - margin, currentY, rightTextPaint)
 
         // East label (doesn't conflict with lines)
