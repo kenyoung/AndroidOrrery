@@ -161,6 +161,7 @@ fun calculateAltitude(haHours: Double, latDeg: Double, decDeg: Double): Double {
 }
 
 fun normalizeTime(t: Double): Double {
+    if (!t.isFinite()) return Double.NaN
     var v = t
     while (v < 0) v += 24.0
     while (v >= 24) v -= 24.0
@@ -169,6 +170,7 @@ fun normalizeTime(t: Double): Double {
 
 // Normalize hour angle to -12 to +12 range
 fun normalizeHourAngle(ha: Double): Double {
+    if (!ha.isFinite()) return Double.NaN
     var v = ha
     while (v < -12.0) v += 24.0
     while (v > 12.0) v -= 24.0
