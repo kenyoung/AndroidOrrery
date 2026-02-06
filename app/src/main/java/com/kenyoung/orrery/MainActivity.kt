@@ -123,7 +123,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     val zoneId = ZoneId.systemDefault()
 
     fun getInstantFromManual(epochDay: Double): Instant {
-        val days = epochDay.toLong()
+        val days = floor(epochDay).toLong()
         val frac = epochDay - days
         val nanos = (frac * 86_400_000_000_000L).toLong()
         val localDate = LocalDate.ofEpochDay(days)
