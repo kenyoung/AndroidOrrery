@@ -441,34 +441,78 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     return diff
 }
 
-fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double): PlanetEvents {
-    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
-    for (i in 0..4) {
-        val pos = calculateMoonPosition(tGuess); val raHours = pos.ra
-        val lst = calculateLSTHours(tGuess + 2440587.5, lon)
-        val ha = normalizeHourAngle(lst - raHours)
-        tGuess -= (ha / 24.0) * 1.035
-    }
-    val tTransit = tGuess
-    fun getAlt(t: Double): Double {
+fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false): PlanetEvents {
+    // Start of local day in UT (midnight local time)
+    val dayStartUT = epochDay - timezoneOffset / 24.0
+    val targetAlt = 0.125
+    val step = 1.0 / 144.0 // 10-minute steps
+
+    // Combined moon altitude and hour angle at time t
+    fun getMoonState(t: Double): Pair<Double, Double> {
         val pos = calculateMoonPosition(t)
         val lst = calculateLSTHours(t + 2440587.5, lon)
         val haHours = lst - pos.ra
-        return calculateAltitude(haHours, lat, pos.dec)
+        val alt = calculateAltitude(haHours, lat, pos.dec)
+        return Pair(alt - targetAlt, normalizeHourAngle(haHours))
     }
-    val targetAlt = 0.125
-    var tRise = tTransit - 0.25
-    for (i in 0..4) {
-        val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tRise -= (diff / rate)
+
+    fun refineAltCrossing(tLo: Double, tHi: Double, rising: Boolean): Double {
+        var lo = tLo; var hi = tHi
+        for (i in 0..15) {
+            val mid = (lo + hi) / 2.0
+            if ((getMoonState(mid).first < 0) == rising) lo = mid else hi = mid
+        }
+        return (lo + hi) / 2.0
     }
-    var tSet = tTransit + 0.25
-    for (i in 0..4) {
-        val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tSet -= (diff / rate)
+
+    fun refineHACrossing(tLo: Double, tHi: Double): Double {
+        var lo = tLo; var hi = tHi
+        for (i in 0..15) {
+            val mid = (lo + hi) / 2.0
+            if (getMoonState(mid).second < 0) lo = mid else hi = mid
+        }
+        return (lo + hi) / 2.0
     }
+
+    // Scan forward from startUT for up to maxDays, returning the first event of the given type
+    fun findNext(startUT: Double, maxDays: Double, type: String): Double {
+        var (prevAlt, prevHA) = getMoonState(startUT)
+        var t = startUT + step
+        val endUT = startUT + maxDays
+        while (t <= endUT + step / 2) {
+            val (currAlt, currHA) = getMoonState(t)
+            when (type) {
+                "rise" -> if (prevAlt < 0 && currAlt >= 0)
+                    return refineAltCrossing(t - step, t, true)
+                "set" -> if (prevAlt > 0 && currAlt <= 0)
+                    return refineAltCrossing(t - step, t, false)
+                "transit" -> if (prevHA < 0 && currHA >= 0 && abs(currHA - prevHA) < 6)
+                    return refineHACrossing(t - step, t)
+            }
+            prevAlt = currAlt; prevHA = currHA
+            t += step
+        }
+        return Double.NaN
+    }
+
+    val rise: Double
+    val transit: Double
+    val set: Double
+
+    if (pairedRiseSet) {
+        // Find first rise, then the next set and transit after that rise
+        rise = findNext(dayStartUT, 2.0, "rise")
+        set = if (!rise.isNaN()) findNext(rise, 1.5, "set") else Double.NaN
+        transit = if (!rise.isNaN() && !set.isNaN()) findNext(rise, set - rise, "transit") else Double.NaN
+    } else {
+        // Find each event independently within today, falling back to tomorrow
+        rise = findNext(dayStartUT, 2.0, "rise")
+        set = findNext(dayStartUT, 2.0, "set")
+        transit = findNext(dayStartUT, 2.0, "transit")
+    }
+
     fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
-    return PlanetEvents(toLocal(tRise), toLocal(tTransit), toLocal(tSet))
+    return PlanetEvents(toLocal(rise), toLocal(transit), toLocal(set))
 }
 
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {

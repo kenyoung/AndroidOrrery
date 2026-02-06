@@ -5,8 +5,8 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,15 +20,23 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.TimeZone
 import kotlin.math.*
 
 @Composable
 fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant) {
     // Basic setup
     val planets = remember { getOrreryPlanets() }
+
+    // Time zone state
+    var useLocalTime by remember { mutableStateOf(false) }
+    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
+    val timeLabel = if (useLocalTime) timeZoneAbbreviation else "UT"
 
     // State to hold calculated data
     var plotData by remember { mutableStateOf<List<PlotObject>>(emptyList()) }
@@ -107,17 +115,36 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
-        if (plotData.isEmpty()) {
-            Text("Calculating...", color = Color.White, modifier = Modifier.align(Alignment.Center))
-        } else {
-            CompassCanvas(
-                plotData = plotData,
-                lat = lat,
-                lon = lon,
-                now = now,
-                paints = paints
-            )
+    Column(modifier = Modifier.fillMaxSize().background(bgColor)) {
+        Box(modifier = Modifier.weight(1f)) {
+            if (plotData.isEmpty()) {
+                Text("Calculating...", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            } else {
+                CompassCanvas(
+                    plotData = plotData,
+                    lat = lat,
+                    lon = lon,
+                    now = now,
+                    paints = paints,
+                    useLocalTime = useLocalTime,
+                    timeLabel = timeLabel
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = !useLocalTime, onClick = { useLocalTime = false })
+                Text("Universal Time", color = Color.White, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = useLocalTime, onClick = { useLocalTime = true })
+                Text("Standard Time", color = Color.White, fontSize = 14.sp)
+            }
         }
     }
 }
@@ -129,7 +156,9 @@ fun CompassCanvas(
     lat: Double,
     lon: Double,
     now: Instant,
-    paints: CompassPaints
+    paints: CompassPaints,
+    useLocalTime: Boolean,
+    timeLabel: String
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
@@ -140,15 +169,23 @@ fun CompassCanvas(
         val smallTickLength = 12.5f
 
         // Time Strings
-        val utFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("UTC"))
-        val utStr = utFormatter.format(now)
+        val displayZoneId = if (useLocalTime) ZoneId.systemDefault() else ZoneId.of("UTC")
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
+        val displayTimeStr = timeFormatter.format(now)
         val lstStr = calculateLST(now, lon)
         val lstParts = lstStr.split(":")
         val lst = lstParts[0].toDouble() + (lstParts[1].toDouble() / 60.0)
 
+        // Offset in hours to convert UT to display time
+        val displayOffsetHours = if (useLocalTime) {
+            TimeZone.getDefault().getOffset(now.toEpochMilli()).toDouble() / 3600000.0
+        } else {
+            0.0
+        }
+
         // Header text parts for multi-color rendering
-        val headerPart1 = "Planet positions at  UT "
-        val headerPart2 = utStr
+        val headerPart1 = "Planet positions at  $timeLabel "
+        val headerPart2 = displayTimeStr
         val headerPart3 = "  LST "
         val headerPart4 = lstStr
 
@@ -306,11 +343,12 @@ fun CompassCanvas(
             nc.drawText("Transit", cols[4] + (cols[5]-cols[4])*0.4f - 20f, row1Y, paints.tableHeaderCenter)
             nc.drawText("Setting", cols[6] + (cols[7]-cols[6])*0.4f - 20f, row1Y, paints.tableHeaderCenter)
 
+            val timeColHeader = "Time ($timeLabel)"
             nc.drawText("Planet", cols[0], row2Y, paints.tableHeaderLeft)
             nc.drawText("HA", cols[1], row2Y, paints.tableHeaderCenter)
-            nc.drawText("Time (UT)", cols[2], row2Y, paints.tableHeaderCenter)
-            nc.drawText("Time (UT)", cols[4], row2Y, paints.tableHeaderCenter)
-            nc.drawText("Time (UT)", cols[6], row2Y, paints.tableHeaderCenter)
+            nc.drawText(timeColHeader, cols[2], row2Y, paints.tableHeaderCenter)
+            nc.drawText(timeColHeader, cols[4], row2Y, paints.tableHeaderCenter)
+            nc.drawText(timeColHeader, cols[6], row2Y, paints.tableHeaderCenter)
             nc.drawText("Az", cols[3], row2Y, paints.tableHeaderRight)
             nc.drawText("El", cols[5], row2Y, paints.tableHeaderRight)
             nc.drawText("Az", cols[7], row2Y, paints.tableHeaderRight)
@@ -333,26 +371,29 @@ fun CompassCanvas(
 
                 // Rise
                 val riseUT = normalizeTime(obj.events.rise - offset)
+                val riseDisplay = normalizeTime(riseUT + displayOffsetHours)
                 paints.tableDataCenter.color = if (currAlt <= 0) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(riseUT, false), cols[2], currY, paints.tableDataCenter)
+                nc.drawText(formatTimeMM(riseDisplay, false), cols[2], currY, paints.tableDataCenter)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
 
                 // Transit
                 val transUT = normalizeTime(obj.events.transit - offset)
+                val transDisplay = normalizeTime(transUT + displayOffsetHours)
                 val isPre = (currAlt > 0 && haNorm < 0)
                 paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(transUT, false), cols[4], currY, paints.tableDataCenter)
+                nc.drawText(formatTimeMM(transDisplay, false), cols[4], currY, paints.tableDataCenter)
                 val transEl = 90.0 - abs(lat - obj.dec)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(transEl), cols[5], currY, paints.tableDataRight)
 
                 // Set
                 val setUT = normalizeTime(obj.events.set - offset)
+                val setDisplay = normalizeTime(setUT + displayOffsetHours)
                 val isPost = (currAlt > 0 && haNorm > 0)
                 paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(setUT, false), cols[6], currY, paints.tableDataCenter)
+                nc.drawText(formatTimeMM(setDisplay, false), cols[6], currY, paints.tableDataCenter)
                 val setAz = calculateAzAtRiseSet(lat, obj.dec, false)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(setAz), cols[7]+20f, currY, paints.tableDataRight)

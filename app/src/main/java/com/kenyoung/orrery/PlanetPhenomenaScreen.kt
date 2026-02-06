@@ -4,13 +4,13 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -21,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.TimeZone
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
 @Composable
@@ -34,6 +37,13 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 
+    // Time zone state
+    var useLocalTime by remember { mutableStateOf(false) }
+    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
+    val displayOffsetHours = if (useLocalTime) {
+        TimeZone.getDefault().getOffset(System.currentTimeMillis()).toDouble() / 3600000.0
+    } else 0.0
+
     var phenomenaData by remember { mutableStateOf<List<PlanetPhenomenaData>?>(null) }
 
     LaunchedEffect(epochDay) {
@@ -42,12 +52,16 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
-            .verticalScroll(scrollState)
     ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(scrollState)
+        ) {
         val rowHeight = 45f
         val headerHeight = 120f
         val planetHeaderHeight = 60f
@@ -101,8 +115,12 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
                             currentY += rowHeight
                             canvas.nativeCanvas.drawText(row.label, col1X, currentY, eventNamePaint)
                             fun drawEventDetails(ev: PhenomenonEvent, baseX: Float, hourOffset: Float, angleOffset: Float) {
-                                val dateText = ev.date.format(DateTimeFormatter.ofPattern("dd/MM/yy"))
-                                val hourText = "%02dh".format(ev.hour)
+                                var dispHour = ev.hour + displayOffsetHours.roundToInt()
+                                var dispDate = ev.date
+                                if (dispHour >= 24) { dispHour -= 24; dispDate = dispDate.plusDays(1) }
+                                if (dispHour < 0) { dispHour += 24; dispDate = dispDate.minusDays(1) }
+                                val dateText = dispDate.format(DateTimeFormatter.ofPattern("dd/MM/yy"))
+                                val hourText = "%02dh".format(dispHour)
                                 canvas.nativeCanvas.drawText(dateText, baseX, currentY, datePaint)
                                 canvas.nativeCanvas.drawText(hourText, baseX + hourOffset, currentY, datePaint)
                                 if (ev.angle != null) {
@@ -117,6 +135,22 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
                 }
             }
         }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = !useLocalTime, onClick = { useLocalTime = false })
+            Text("Universal Time", color = Color.White, fontSize = 14.sp)
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = useLocalTime, onClick = { useLocalTime = true })
+            Text("Standard Time", color = Color.White, fontSize = 14.sp)
+        }
+    }
     }
 }
 

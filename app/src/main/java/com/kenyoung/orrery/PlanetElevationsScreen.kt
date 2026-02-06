@@ -318,7 +318,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- DRAW MOON (Row 2) ---
         // Use Standard Calculator (matches TransitsScreen)
-        val moonEv = calculateMoonEvents(epochDayInt, lat, lon, offsetHours)
+        val moonEv = calculateMoonEvents(epochDayInt, lat, lon, offsetHours, pairedRiseSet = true)
 
         // Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
         var moonDec = AstroEngine.getBodyState("Moon", epochDayInt + 2440587.5 + 0.5).dec
