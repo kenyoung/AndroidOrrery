@@ -183,8 +183,8 @@ fun formatTimeMM(t: Double, isSigned: Boolean): String {
 
 fun calculateSunPositionKepler(jd: Double): BodyState {
     val n = jd - 2451545.0
-    var L = normalizeDegrees(280.460 + 0.9856474 * n)
-    var g = normalizeDegrees(357.528 + 0.9856003 * n)
+    val L = normalizeDegrees(280.460 + 0.9856474 * n)
+    val g = normalizeDegrees(357.528 + 0.9856003 * n)
     val lambdaRad = Math.toRadians(L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(2 * Math.toRadians(g)))
     val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
     val r = 1.00014 - 0.01671 * cos(Math.toRadians(g)) - 0.00014 * cos(2 * Math.toRadians(g))
@@ -209,7 +209,7 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
     val xe = Re * cos(Le_earth); val ye = Re * sin(Le_earth); val ze = 0.0
 
     val Lp = Math.toRadians((p.L_0 + p.L_rate * d) % 360.0); val Np = Math.toRadians(p.N)
-    val ip = Math.toRadians(p.i); val w_bar_p = Math.toRadians(p.w_bar); var Mp = Lp - w_bar_p
+    val ip = Math.toRadians(p.i); val w_bar_p = Math.toRadians(p.w_bar); val Mp = Lp - w_bar_p
     val Ep = solveKepler(Mp, p.e)
     val xv = p.a * (cos(Ep) - p.e); val yv = p.a * sqrt(1 - p.e*p.e) * sin(Ep)
     val v = atan2(yv, xv); val u = v + w_bar_p - Np

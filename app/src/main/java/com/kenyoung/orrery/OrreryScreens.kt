@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -22,6 +23,45 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
+
+private fun DrawScope.drawArbitraryArrow(
+    baseX: Float, baseY: Float, pointingAngleDeg: Double,
+    l1: String, l2: String, arrowLen: Float, arrowPaint: Paint, labelPaint: Paint,
+    labelOffset: Offset = Offset.Zero
+) {
+    val h = size.height
+    val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
+    val vecX = -cos(angleRad).toFloat()
+    val vecY = -sin(angleRad).toFloat()
+    val tipX = baseX + (arrowLen * vecX)
+    val tipY = baseY + (arrowLen * vecY)
+
+    val lightBlueColor = Color(0xFF87CEFA)
+    drawLine(color = lightBlueColor, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
+
+    val headSize = 10f
+    val arrowHeadPath = Path().apply {
+        val anglePerp = angleRad + (Math.PI / 2.0)
+        val dx = (headSize * cos(anglePerp)).toFloat()
+        val dy = (headSize * sin(anglePerp)).toFloat()
+        moveTo(tipX, tipY)
+        val backX = baseX + ((arrowLen - headSize) * vecX)
+        val backY = baseY + ((arrowLen - headSize) * vecY)
+        lineTo(backX + dx, backY + dy)
+        lineTo(backX - dx, backY - dy)
+        close()
+    }
+
+    drawIntoCanvas { canvas ->
+        canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
+        val labelDist = 45f
+        val labelX = tipX + (labelDist * vecX) + labelOffset.x
+        val labelY = tipY + (labelDist * vecY) + labelOffset.y
+        val yShift = h / 50f
+        canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
+        canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
+    }
+}
 
 // --- COMPOSABLE: TO-SCALE ORRERY ---
 @Composable
@@ -224,40 +264,6 @@ fun ScaleOrrery(epochDay: Double) {
                 }
             }
 
-            fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
-                val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
-                val vecX = -cos(angleRad).toFloat()
-                val vecY = -sin(angleRad).toFloat()
-                val tipX = baseX + (arrowLen * vecX)
-                val tipY = baseY + (arrowLen * vecY)
-
-                val lightBlueColor = Color(0xFF87CEFA)
-                drawLine(color = lightBlueColor, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
-
-                val headSize = 10f
-                val arrowHeadPath = Path().apply {
-                    val anglePerp = angleRad + (Math.PI / 2.0)
-                    val dx = (headSize * cos(anglePerp)).toFloat()
-                    val dy = (headSize * sin(anglePerp)).toFloat()
-                    moveTo(tipX, tipY)
-                    val backX = baseX + ((arrowLen - headSize) * vecX)
-                    val backY = baseY + ((arrowLen - headSize) * vecY)
-                    lineTo(backX + dx, backY + dy)
-                    lineTo(backX - dx, backY - dy)
-                    close()
-                }
-
-                drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
-                    val labelDist = 45f
-                    val labelX = tipX + (labelDist * vecX) + labelOffset.x
-                    val labelY = tipY + (labelDist * vecY) + labelOffset.y
-                    val yShift = h / 50f
-                    canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
-                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
-                }
-            }
-
             // 1. Vernal Equinox
             val vernalShiftX = w / 10f
             drawArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
@@ -270,7 +276,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             val gcLabelX = -0.1272f * w
             val gcLabelY = 0.02554f * h
-            drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
+            drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(gcLabelX, gcLabelY))
 
             // 3. CMB Dipole
             val cmbUnscaledOffsetX = (w * 0.059f) - cx
@@ -280,7 +286,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             val cmbLabelOffsetX = 0.03f * w
             val cmbLabelOffsetY = -0.146f * h
-            drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
+            drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
             drawIntoCanvas { canvas ->
                 val viewLabelDistPx = 36.0 * currentPixelsPerAU
@@ -438,40 +444,6 @@ fun SchematicOrrery(epochDay: Double) {
             }
         }
 
-        fun drawArbitraryArrow(baseX: Float, baseY: Float, pointingAngleDeg: Double, l1: String, l2: String, labelOffset: Offset = Offset.Zero) {
-            val angleRad = Math.toRadians(90.0 - pointingAngleDeg)
-            val vecX = -cos(angleRad).toFloat()
-            val vecY = -sin(angleRad).toFloat()
-            val tipX = baseX + (arrowLen * vecX)
-            val tipY = baseY + (arrowLen * vecY)
-
-            val lightBlueColor = Color(0xFF87CEFA)
-            drawLine(color = lightBlueColor, start = Offset(baseX, baseY), end = Offset(tipX, tipY), strokeWidth = 4f)
-
-            val headSize = 10f
-            val arrowHeadPath = Path().apply {
-                val anglePerp = angleRad + (Math.PI / 2.0)
-                val dx = (headSize * cos(anglePerp)).toFloat()
-                val dy = (headSize * sin(anglePerp)).toFloat()
-                moveTo(tipX, tipY)
-                val backX = baseX + ((arrowLen - headSize) * vecX)
-                val backY = baseY + ((arrowLen - headSize) * vecY)
-                lineTo(backX + dx, backY + dy)
-                lineTo(backX - dx, backY - dy)
-                close()
-            }
-
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
-                val labelDist = 45f
-                val labelX = tipX + (labelDist * vecX) + labelOffset.x
-                val labelY = tipY + (labelDist * vecY) + labelOffset.y
-                val yShift = h / 50f
-                canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
-                canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
-            }
-        }
-
         // 1. Vernal Equinox
         val vernalShiftX = (60f + (w / 10f)) - (0.296f * w) + (0.27f * w)
         drawSchematicArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
@@ -481,14 +453,14 @@ fun SchematicOrrery(epochDay: Double) {
         val gcBaseY = h * 0.8f
         val gcLabelX = -0.1272f * w
         val gcLabelY = 0.02554f * h
-        drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", labelOffset = Offset(gcLabelX, gcLabelY))
+        drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(gcLabelX, gcLabelY))
 
         // 3. CMB Dipole
         val cmbBaseX = w * 0.059f
         val cmbBaseY = h * 0.8492f
         val cmbLabelOffsetX = 0.03f * w
         val cmbLabelOffsetY = -0.146f * h
-        drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
+        drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(cmbLabelOffsetX, cmbLabelOffsetY))
 
         drawIntoCanvas { canvas ->
             // Position label 2 font heights above the bottom (just above the year buttons)
