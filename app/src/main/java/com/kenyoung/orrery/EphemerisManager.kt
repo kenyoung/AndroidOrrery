@@ -2,18 +2,24 @@ package com.kenyoung.orrery
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 
 object EphemerisManager {
 
     // Map Key: BodyName -> (JD Array, Data Array (interleaved))
-    private val dataMap = mutableMapOf<String, Pair<DoubleArray, DoubleArray>>()
-    private val strideMap = mutableMapOf<String, Int>()
+    private val dataMap = ConcurrentHashMap<String, Pair<DoubleArray, DoubleArray>>()
+    private val strideMap = ConcurrentHashMap<String, Int>()
 
+    @Volatile
     var isLoaded = false
         private set
+
+    private val loadMutex = Mutex()
 
     // Data Stride per body (RA, Dec, GeoDist, HelioDist, HelioLon, HelioLat)
     private const val STRIDE = 6
@@ -28,14 +34,17 @@ object EphemerisManager {
 
     suspend fun loadEphemeris(context: Context) {
         if (isLoaded) return
-        withContext(Dispatchers.IO) {
-            try {
-                loadPlanetFile(context)
-                loadMoonFile(context)
-                isLoaded = true
-            } catch (e: Exception) {
-                e.printStackTrace()
-                isLoaded = false
+        loadMutex.withLock {
+            if (isLoaded) return // Double-check after acquiring lock
+            withContext(Dispatchers.IO) {
+                try {
+                    loadPlanetFile(context)
+                    loadMoonFile(context)
+                    isLoaded = true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    isLoaded = false
+                }
             }
         }
     }
