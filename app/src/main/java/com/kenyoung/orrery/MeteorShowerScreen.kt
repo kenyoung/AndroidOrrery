@@ -100,8 +100,9 @@ fun MeteorShowerScreen(
             // 1. Calculate Rows
             val calculatedRows = meteorShowersList.map { shower ->
                 // Date Logic
+                val wrapsYear = shower.endMonth < shower.startMonth
                 val startYear = activeYear
-                val endYear = if (shower.endMonth < shower.startMonth) activeYear + 1 else activeYear
+                val endYear = if (wrapsYear) activeYear + 1 else activeYear
                 val maxYear = if (shower.maxMonth < shower.startMonth) activeYear + 1 else activeYear
 
                 val startDate = LocalDate.of(startYear, shower.startMonth, shower.startDay)
@@ -109,8 +110,15 @@ fun MeteorShowerScreen(
                 val maxDate = LocalDate.of(maxYear, shower.maxMonth, shower.maxDay)
 
                 // Current Date for "Is Active" check
+                // For year-wrapping showers (e.g. Quadrantids: Dec 28 - Jan 12),
+                // also check the previous year's window so early January dates match
                 val currentDate = LocalDate.ofEpochDay(currentEpochDay.toLong())
-                val isActive = !currentDate.isBefore(startDate) && !currentDate.isAfter(endDate)
+                var isActive = !currentDate.isBefore(startDate) && !currentDate.isAfter(endDate)
+                if (!isActive && wrapsYear) {
+                    val prevStartDate = LocalDate.of(activeYear - 1, shower.startMonth, shower.startDay)
+                    val prevEndDate = LocalDate.of(activeYear, shower.endMonth, shower.endDay)
+                    isActive = !currentDate.isBefore(prevStartDate) && !currentDate.isAfter(prevEndDate)
+                }
 
                 // Strings
                 val dFmt = DateTimeFormatter.ofPattern("dd/MM")

@@ -90,9 +90,6 @@ private data class RawEvent(
     val isStart: Boolean
 )
 
-// Helper to decouple from JovianPrecision's Vector3 definition
-private data class LocalVector3(val x: Double, val y: Double, val z: Double)
-
 // --- COMPOSABLE ---
 
 @Composable

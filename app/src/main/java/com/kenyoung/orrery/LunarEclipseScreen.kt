@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -612,20 +611,6 @@ private fun moonAboveHorizon(tJD: Double, latDeg: Double, lonDeg: Double): Boole
     return altDeg > 0.125
 }
 
-// Fast version using pre-cached Moon position (avoids expensive moonPosition call)
-private fun moonAboveHorizonCached(
-    tJD: Double,
-    latDeg: Double,
-    lonDeg: Double,
-    moonRaHours: Double,
-    moonDecDeg: Double
-): Boolean {
-    val lstHours = calculateLSTHours(tJD, lonDeg)
-    val haHours = lstHours - moonRaHours
-    val altDeg = calculateAltitude(haHours, latDeg, moonDecDeg)
-    return altDeg > 0.125
-}
-
 // Fast version using linearly interpolated Moon position between two cached endpoints
 // This avoids expensive moonPosition calls - moon RA/Dec change slowly during an eclipse
 private fun moonAboveHorizonInterpolated(
@@ -701,56 +686,6 @@ private fun buildGMSTCache(
     )
 }
 
-// Optimized horizon check using precomputed values
-private fun moonAboveHorizonOptimized(
-    gmst: Double,
-    lonDeg: Double,
-    sinLat: Double,
-    cosLat: Double,
-    moonRaHours: Double,
-    sinDec: Double,
-    cosDec: Double
-): Boolean {
-    var lst = gmst + lonDeg / 15.0
-    if (lst >= 24.0) lst -= 24.0
-    if (lst < 0.0) lst += 24.0
-    val haRad = Math.toRadians((lst - moonRaHours) * 15.0)
-    val sinAlt = sinLat * sinDec + cosLat * cosDec * cos(haRad)
-    return sinAlt > 0.00218  // sin(0.125°) ≈ 0.00218
-}
-
-// Optimized visibility level check using all precomputed values
-private fun getVisibilityLevelOptimized(
-    lonDeg: Double,
-    sinLat: Double,
-    cosLat: Double,
-    eclipseType: Int,
-    moonCache: EclipseMoonCache,
-    gmstCache: EclipseGMSTCache
-): Int {
-    if (eclipseType == TOTAL_LUNAR_ECLIPSE && moonCache.totStart != null && moonCache.totMid != null && moonCache.totEnd != null) {
-        if (moonAboveHorizonOptimized(gmstCache.totStart, lonDeg, sinLat, cosLat, moonCache.totStart.raHours, moonCache.totStart.sinDec, moonCache.totStart.cosDec) ||
-            moonAboveHorizonOptimized(gmstCache.totEnd, lonDeg, sinLat, cosLat, moonCache.totEnd.raHours, moonCache.totEnd.sinDec, moonCache.totEnd.cosDec) ||
-            moonAboveHorizonOptimized(gmstCache.totMid, lonDeg, sinLat, cosLat, moonCache.totMid.raHours, moonCache.totMid.sinDec, moonCache.totMid.cosDec)) {
-            return 3
-        }
-    }
-
-    if (eclipseType >= PARTIAL_LUNAR_ECLIPSE && moonCache.parStart != null && moonCache.parEnd != null) {
-        if (moonAboveHorizonOptimized(gmstCache.parStart, lonDeg, sinLat, cosLat, moonCache.parStart.raHours, moonCache.parStart.sinDec, moonCache.parStart.cosDec) ||
-            moonAboveHorizonOptimized(gmstCache.parEnd, lonDeg, sinLat, cosLat, moonCache.parEnd.raHours, moonCache.parEnd.sinDec, moonCache.parEnd.cosDec)) {
-            return 2
-        }
-    }
-
-    if (moonAboveHorizonOptimized(gmstCache.penStart, lonDeg, sinLat, cosLat, moonCache.penStart.raHours, moonCache.penStart.sinDec, moonCache.penStart.cosDec) ||
-        moonAboveHorizonOptimized(gmstCache.penEnd, lonDeg, sinLat, cosLat, moonCache.penEnd.raHours, moonCache.penEnd.sinDec, moonCache.penEnd.cosDec)) {
-        return 1
-    }
-
-    return 0
-}
-
 // Represents a longitude range where moon is visible (can wrap around ±180°)
 private data class LonRange(val lon1: Double, val lon2: Double, val alwaysUp: Boolean, val neverUp: Boolean)
 
@@ -821,41 +756,6 @@ private fun lonInRange(lonDeg: Double, range: LonRange): Boolean {
         // Range wraps around ±180°
         lonDeg >= lon1 || lonDeg <= lon2
     }
-}
-
-// Fast visibility check using cached Moon positions
-private fun getVisibilityLevelCached(
-    latRad: Double, lonRad: Double,
-    penStartTJD: Double, penEndTJD: Double,
-    parStartTJD: Double, parEndTJD: Double,
-    totStartTJD: Double, totEndTJD: Double,
-    eclipseType: Int,
-    cache: EclipseMoonCache
-): Int {
-    val latDeg = Math.toDegrees(latRad)
-    val lonDeg = Math.toDegrees(lonRad)
-
-    if (eclipseType == TOTAL_LUNAR_ECLIPSE && cache.totStart != null && cache.totMid != null && cache.totEnd != null) {
-        if (moonAboveHorizonCached(totStartTJD, latDeg, lonDeg, cache.totStart.raHours, cache.totStart.decDeg) ||
-            moonAboveHorizonCached(totEndTJD, latDeg, lonDeg, cache.totEnd.raHours, cache.totEnd.decDeg) ||
-            moonAboveHorizonCached((totStartTJD + totEndTJD) / 2.0, latDeg, lonDeg, cache.totMid.raHours, cache.totMid.decDeg)) {
-            return 3
-        }
-    }
-
-    if (eclipseType >= PARTIAL_LUNAR_ECLIPSE && cache.parStart != null && cache.parEnd != null) {
-        if (moonAboveHorizonCached(parStartTJD, latDeg, lonDeg, cache.parStart.raHours, cache.parStart.decDeg) ||
-            moonAboveHorizonCached(parEndTJD, latDeg, lonDeg, cache.parEnd.raHours, cache.parEnd.decDeg)) {
-            return 2
-        }
-    }
-
-    if (moonAboveHorizonCached(penStartTJD, latDeg, lonDeg, cache.penStart.raHours, cache.penStart.decDeg) ||
-        moonAboveHorizonCached(penEndTJD, latDeg, lonDeg, cache.penEnd.raHours, cache.penEnd.decDeg)) {
-        return 1
-    }
-
-    return 0
 }
 
 // ============================================================================
@@ -2277,7 +2177,6 @@ private fun renderEclipse(
 
         // Try positions from center-right, moving right, then left
         var northX = cx + 20f * scaleFactor
-        val step = 15f * scaleFactor
         var found = false
 
         // Search rightward from center
@@ -2437,39 +2336,4 @@ private fun renderEclipse(
 
         canvas.nativeCanvas.drawText(eclipticText, eclipticLabelX, eclipticLabelY, labelPaint)
     }
-}
-
-private fun getVisibilityLevel(
-    latRad: Double, lonRad: Double,
-    penStartTJD: Double, penEndTJD: Double,
-    parStartTJD: Double, parEndTJD: Double,
-    totStartTJD: Double, totEndTJD: Double,
-    eclipseType: Int
-): Int {
-    // Convert radians to degrees for moonAboveHorizon
-    val latDeg = Math.toDegrees(latRad)
-    val lonDeg = Math.toDegrees(lonRad)
-
-    // Check at key times for each phase
-    if (eclipseType == TOTAL_LUNAR_ECLIPSE) {
-        if (moonAboveHorizon(totStartTJD, latDeg, lonDeg) ||
-            moonAboveHorizon(totEndTJD, latDeg, lonDeg) ||
-            moonAboveHorizon((totStartTJD + totEndTJD) / 2.0, latDeg, lonDeg)) {
-            return 3
-        }
-    }
-
-    if (eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
-        if (moonAboveHorizon(parStartTJD, latDeg, lonDeg) ||
-            moonAboveHorizon(parEndTJD, latDeg, lonDeg)) {
-            return 2
-        }
-    }
-
-    if (moonAboveHorizon(penStartTJD, latDeg, lonDeg) ||
-        moonAboveHorizon(penEndTJD, latDeg, lonDeg)) {
-        return 1
-    }
-
-    return 0
 }

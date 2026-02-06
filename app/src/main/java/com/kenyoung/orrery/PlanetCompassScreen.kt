@@ -32,8 +32,6 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
     // State to hold calculated data
     var plotData by remember { mutableStateOf<List<PlotObject>>(emptyList()) }
-    var calculationTime by remember { mutableStateOf(0.0) }
-
     // Colors & Paints
     val bgColor = Color.Black
     val labelColor = Color.Green
@@ -106,7 +104,6 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             }
 
             plotData = newList
-            calculationTime = epochDay
         }
     }
 
