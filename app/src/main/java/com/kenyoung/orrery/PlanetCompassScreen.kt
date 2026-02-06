@@ -64,16 +64,15 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             // Visual Position: High Precision (Engine)
             val sunState = AstroEngine.getBodyState("Sun", jdStart)
 
-            // Events: Standard Low Precision (Math) - Matches TransitsScreen
-            // We manually reconstruct the event logic here since AstroMath doesn't have a direct "getSunEvents" returning a triplet.
-            val sunKepler = calculateSunPositionKepler(jdStart + 0.5) // Noon
-            val (sunRise, sunSet) = calculateRiseSet(sunKepler.ra, sunKepler.dec, lat, lon, offset, HORIZON_REFRACTED, epochDay)
+            // Events: Use ephemeris data via AstroEngine for Sun position at noon
+            val sunNoon = AstroEngine.getBodyState("Sun", jdStart + 0.5)
+            val (sunRise, sunSet) = calculateRiseSet(sunNoon.ra, sunNoon.dec, lat, lon, offset, HORIZON_REFRACTED, epochDay)
 
             // Calculate Sun Transit (Local Apparent Noon)
             val nSun = (jdStart + 0.5) - 2451545.0
             val gmstSun = (6.697374558 + 0.06570982441908 * nSun) % 24.0
             val gmstFixedSun = if (gmstSun < 0) gmstSun + 24.0 else gmstSun
-            val sunTransitUT = normalizeTime((sunKepler.ra / 15.0) - (lon / 15.0) - gmstFixedSun)
+            val sunTransitUT = normalizeTime((sunNoon.ra / 15.0) - (lon / 15.0) - gmstFixedSun)
             val sunTransit = normalizeTime(sunTransitUT + offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)

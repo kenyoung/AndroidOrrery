@@ -155,7 +155,7 @@ fun MeteorShowerScreen(
 
             // 2. Calculate "Tonight's" Dark Hours
             // Only update if sun is below horizon, or never calculated, or stale (>24h)
-            val sunStateNow = calculateSunPositionKepler(currentEpochDay + 2440587.5)
+            val sunStateNow = AstroEngine.getBodyState("Sun", currentEpochDay + 2440587.5)
             val sunAltNow = getAltitude(sunStateNow.ra, sunStateNow.dec, currentEpochDay, lat, lon)
             val sunBelowHorizon = sunAltNow < HORIZON_REFRACTED
             val neverCalculated = lastDarkHoursCalcEpochDay.isNaN()
@@ -342,17 +342,13 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkH
 
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
     // 1. Sun below nautical twilight
-    val sunState = calculateSunPositionKepler(epochDay + 2440587.5)
-    // sunState.ra is in DEGREES (from AstroMath BodyState)
+    val sunState = AstroEngine.getBodyState("Sun", epochDay + 2440587.5)
     val sunAlt = getAltitude(sunState.ra, sunState.dec, epochDay, lat, lon)
     if (sunAlt >= NAUTICAL_TWILIGHT) return false
 
     // 2. Moon Alt < -10
-    val moonPos = calculateMoonPosition(epochDay)
-    // moonPos.ra is in HOURS (from AstroMath calculateMoonPosition)
-    // getAltitude expects DEGREES.
-    // FIX: Multiply RA Hours by 15.0 to get Degrees
-    val moonAlt = getAltitude(moonPos.ra * 15.0, moonPos.dec, epochDay, lat, lon)
+    val moonState = AstroEngine.getBodyState("Moon", epochDay + 2440587.5)
+    val moonAlt = getAltitude(moonState.ra, moonState.dec, epochDay, lat, lon)
     if (moonAlt >= -10.0) return false
 
     return true

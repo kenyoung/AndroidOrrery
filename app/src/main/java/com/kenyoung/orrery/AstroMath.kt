@@ -251,12 +251,8 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     fun cosR(rad: Double) = kotlin.math.cos(rad)
 
     // --- PHASE ANGLE & SHADOW GEOMETRY ---
-    val planetList = getOrreryPlanets()
-    val earthElem = planetList.find { it.name == "Earth" }!!
-    val jupElem = planetList.find { it.name == "Jupiter" }!!
-
-    val earthState = calculatePlanetStateKeplerian(jd, earthElem)
-    val jupState = calculatePlanetStateKeplerian(jd, jupElem)
+    val earthState = AstroEngine.getBodyState("Earth", jd)
+    val jupState = AstroEngine.getBodyState("Jupiter", jd)
 
     // Vectors in Heliocentric Ecliptic Coords
     // Renamed to avoid conflict with Meeus variables later
@@ -275,7 +271,7 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     // Shadow displacement factor (tan alpha)
     val shadowFactor = tan(alpha)
 
-    val sunRA = calculateSunPositionKepler(jd).ra
+    val sunRA = AstroEngine.getBodyState("Sun", jd).ra
     val jupRA = jupState.ra
 
     var raDiff = sunRA - jupRA
@@ -376,7 +372,7 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
 // --- LEGACY HELPERS (Must remain for existing calls) ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
-    val state = calculateSunPositionKepler(epochDay + 2440587.5 + 0.5)
+    val state = AstroEngine.getBodyState("Sun", epochDay + 2440587.5 + 0.5)
     return calculateRiseSet(state.ra, state.dec, lat, lon, timezoneOffset, altitude, epochDay)
 }
 
@@ -400,7 +396,7 @@ fun calculateRiseSet(raDeg: Double, decDeg: Double, lat: Double, lon: Double, ti
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
     var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
-        val state = calculatePlanetStateKeplerian(tGuess + 2440587.5, p)
+        val state = AstroEngine.getBodyState(p.name, tGuess + 2440587.5)
         val raHours = state.ra / 15.0
         val jd = tGuess + 2440587.5
         val lst = calculateLSTHours(jd, lon)
@@ -409,19 +405,19 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     }
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
-        val state = calculatePlanetStateKeplerian(t + 2440587.5, p)
+        val state = AstroEngine.getBodyState(p.name, t + 2440587.5)
         val lst = calculateLSTHours(t + 2440587.5, lon)
         val haHours = lst - state.ra / 15.0
         return calculateAltitude(haHours, lat, state.dec)
     }
     val targetAlt = -0.5667
     var tRise = tTransit - 0.25
-    for (i in 0..4) {
+    for (i in 0..9) {
         val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tRise -= (diff / rate)
     }
     var tSet = tTransit + 0.25
-    for (i in 0..4) {
+    for (i in 0..9) {
         val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tSet -= (diff / rate)
     }
@@ -449,10 +445,10 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 
     // Combined moon altitude and hour angle at time t
     fun getMoonState(t: Double): Pair<Double, Double> {
-        val pos = calculateMoonPosition(t)
+        val state = AstroEngine.getBodyState("Moon", t + 2440587.5)
         val lst = calculateLSTHours(t + 2440587.5, lon)
-        val haHours = lst - pos.ra
-        val alt = calculateAltitude(haHours, lat, pos.dec)
+        val haHours = lst - state.ra / 15.0
+        val alt = calculateAltitude(haHours, lat, state.dec)
         return Pair(alt - targetAlt, normalizeHourAngle(haHours))
     }
 
