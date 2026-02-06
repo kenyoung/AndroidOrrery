@@ -1132,7 +1132,7 @@ private fun EclipseDetailView(
     var useStandardTime by remember { mutableStateOf(false) }
 
     // Calculate standard timezone offset from longitude (15° per hour)
-    val standardTimeOffsetHours = kotlin.math.round(longitude / 15.0)
+    val standardTimeOffsetHours = longitude / 15.0
 
     // Get timezone abbreviation (e.g., "CST", "EST")
     val timeZone = TimeZone.getDefault()

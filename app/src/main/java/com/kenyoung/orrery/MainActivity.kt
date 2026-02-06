@@ -390,7 +390,7 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId)
     val planetMap = mutableMapOf<String, Triple<DoubleArray, DoubleArray, DoubleArray>>()
     for (p in planets) planetMap[p.name] = Triple(DoubleArray(daysCount), DoubleArray(daysCount), DoubleArray(daysCount))
 
-    val offsetHours = round(lon / 15.0)
+    val offsetHours = lon / 15.0
 
     for (i in 0 until daysCount) {
         val currentEpochDay = startEpochDay + i

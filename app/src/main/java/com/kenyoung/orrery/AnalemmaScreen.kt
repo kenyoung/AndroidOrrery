@@ -28,7 +28,7 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
     // so the display is consistent with the observation location.
     // If local time is before noon, we're in the morning portion of the
     // previous night, so use yesterday's date.
-    val offsetHours = round(lon / 15.0)
+    val offsetHours = lon / 15.0
     val currentOffset = ZoneOffset.ofTotalSeconds((offsetHours * 3600).toInt())
     val localDateTime = instant.atOffset(currentOffset).toLocalDateTime()
     val observingDate = if (localDateTime.hour < 12) {

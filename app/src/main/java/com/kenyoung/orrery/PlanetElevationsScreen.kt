@@ -25,7 +25,7 @@ import kotlin.math.*
 @Composable
 fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant) {
     // 1. Setup Time and Date
-    val offsetHours = round(lon / 15.0)
+    val offsetHours = lon / 15.0
 
     // Determine the "observing night" date. In astronomy, a night is identified by
     // its evening date - e.g., the night of June 15 runs from sunset June 15 to

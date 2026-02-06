@@ -48,7 +48,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
     // --- ASYNC CALCULATION ---
     LaunchedEffect(epochDay, lat, lon) {
         withContext(Dispatchers.Default) {
-            val offset = round(lon / 15.0)
+            val offset = lon / 15.0
             val jdStart = epochDay + 2440587.5
             val newList = mutableListOf<PlotObject>()
 
@@ -316,7 +316,7 @@ fun CompassCanvas(
             nc.drawText("Az", cols[7], row2Y, paints.tableHeaderRight)
 
             var currY = row2Y + rowHeight + 5f
-            val offset = round(lon/15.0)
+            val offset = lon / 15.0
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0

@@ -35,7 +35,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val drawingWidth = w - paddingLeft - paddingRight
             val centerX = paddingLeft + (drawingWidth / 2f)
 
-            val offsetHours = round(lon / 15.0)
+            val offsetHours = lon / 15.0
 
             // Determine the "observing date" based on longitude-derived local time.
             // Use the longitude-based offset rather than the phone's system timezone
