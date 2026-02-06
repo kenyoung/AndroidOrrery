@@ -77,7 +77,11 @@ class MainActivity : ComponentActivity() {
                     OrreryApp(initialGpsLat = lat, initialGpsLon = lon)
                 }
             }
-        } catch (e: SecurityException) { }
+        } catch (e: SecurityException) {
+            setContent {
+                OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0)
+            }
+        }
     }
 }
 
