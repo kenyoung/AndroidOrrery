@@ -138,9 +138,14 @@ fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Do
     val decRad = Math.toRadians(decDeg)
     val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
     val altRad = asin(sinAlt.coerceIn(-1.0, 1.0))
-    val cosAz = (sin(decRad) - sin(altRad) * sin(latRad)) / (cos(altRad) * cos(latRad))
-    val azRadAbs = acos(cosAz.coerceIn(-1.0, 1.0))
-    val azDeg = if (sin(haRad) > 0) 360.0 - Math.toDegrees(azRadAbs) else Math.toDegrees(azRadAbs)
+    val denom = cos(altRad) * cos(latRad)
+    val azDeg = if (abs(denom) < 1e-15) {
+        0.0 // Azimuth is undefined at poles or for objects at zenith/nadir
+    } else {
+        val cosAz = (sin(decRad) - sin(altRad) * sin(latRad)) / denom
+        val azRadAbs = acos(cosAz.coerceIn(-1.0, 1.0))
+        if (sin(haRad) > 0) 360.0 - Math.toDegrees(azRadAbs) else Math.toDegrees(azRadAbs)
+    }
     return Pair(azDeg, Math.toDegrees(altRad))
 }
 
@@ -383,7 +388,7 @@ fun calculateRiseSet(raDeg: Double, decDeg: Double, lat: Double, lon: Double, ti
     val transitStandard = transitUT + timezoneOffset
     val latRad = Math.toRadians(lat); val decRad = Math.toRadians(decDeg); val altRad = Math.toRadians(altitude)
     val cosH = (sin(altRad) - sin(latRad) * sin(decRad)) / (cos(latRad) * cos(decRad))
-    if (cosH < -1.0 || cosH > 1.0) return Pair(Double.NaN, Double.NaN)
+    if (cosH.isNaN() || cosH < -1.0 || cosH > 1.0) return Pair(Double.NaN, Double.NaN)
     val hHours = Math.toDegrees(acos(cosH)) / 15.0
     val rise = normalizeTime(transitStandard - hHours)
     val set = normalizeTime(transitStandard + hHours)
