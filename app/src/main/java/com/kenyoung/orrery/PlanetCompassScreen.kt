@@ -76,7 +76,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val sunTransit = normalizeTime(sunTransitUT + offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
-            newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents))
+            newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED))
 
 
             // 2. Moon
@@ -93,7 +93,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val moonEvents = calculateMoonEvents(epochDay, lat, lon, offset)
 
             // Use Topocentric coords for plotting the dot, but standard events for the table
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents))
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, 0.125))
 
 
             // 3. Planets
@@ -106,7 +106,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     // Events: Standard Low Precision (Math) - Matches TransitsScreen
                     val events = calculatePlanetEvents(epochDay, lat, lon, offset, p)
 
-                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events))
+                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667))
                 }
             }
 
@@ -324,12 +324,14 @@ fun CompassCanvas(
                 // FIXED: obj.ra is in DEGREES. Must convert to HOURS for calculateAzAlt.
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
-                val pColor = if (alt > 0) paints.whiteInt else paints.redInt
+                val apparentAlt = applyRefraction(alt)
+                // Color uses geometric alt vs same target as rise/set calculation
+                val pColor = if (alt > obj.targetAlt) paints.whiteInt else paints.redInt
 
                 // Plot Az (Rotate -90)
                 drawMarker(centerRightOff, Math.toRadians(az - 90.0), obj.symbol, pColor, occupiedAz)
-                // Plot El (Map -90..90 to 270..90 -> 180+alt)
-                drawMarker(centerLeftOff, Math.toRadians(180.0 + alt), obj.symbol, pColor, occupiedEl)
+                // Plot El: use apparent (refracted) altitude
+                drawMarker(centerLeftOff, Math.toRadians(180.0 + apparentAlt), obj.symbol, pColor, occupiedEl)
             }
 
             // 4. Data Table
@@ -359,19 +361,21 @@ fun CompassCanvas(
                 val raHours = obj.ra / 15.0
                 val (currAz, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val haNorm = normalizeHourAngle(lst - raHours)
+                // Use geometric alt vs same target as rise/set calculation
+                val isUp = currAlt > obj.targetAlt
 
                 // Name
-                paints.tableDataLeft.color = if (currAlt > 0) paints.greenInt else paints.redInt
+                paints.tableDataLeft.color = if (isUp) paints.greenInt else paints.redInt
                 nc.drawText(obj.name, cols[0], currY, paints.tableDataLeft)
 
                 // HA
-                paints.tableDataCenter.color = if (currAlt > 0) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (isUp) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(haNorm, true), cols[1]-15f, currY, paints.tableDataCenter)
 
                 // Rise
                 val riseUT = normalizeTime(obj.events.rise - offset)
                 val riseDisplay = normalizeTime(riseUT + displayOffsetHours)
-                paints.tableDataCenter.color = if (currAlt <= 0) paints.whiteInt else paints.grayInt
+                paints.tableDataCenter.color = if (!isUp) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(riseDisplay, false), cols[2], currY, paints.tableDataCenter)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
                 paints.tableDataRight.color = paints.tableDataCenter.color
@@ -380,7 +384,7 @@ fun CompassCanvas(
                 // Transit
                 val transUT = normalizeTime(obj.events.transit - offset)
                 val transDisplay = normalizeTime(transUT + displayOffsetHours)
-                val isPre = (currAlt > 0 && haNorm < 0)
+                val isPre = (isUp && haNorm < 0)
                 paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(transDisplay, false), cols[4], currY, paints.tableDataCenter)
                 val transEl = 90.0 - abs(lat - obj.dec)
@@ -390,7 +394,7 @@ fun CompassCanvas(
                 // Set
                 val setUT = normalizeTime(obj.events.set - offset)
                 val setDisplay = normalizeTime(setUT + displayOffsetHours)
-                val isPost = (currAlt > 0 && haNorm > 0)
+                val isPost = (isUp && haNorm > 0)
                 paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(setDisplay, false), cols[6], currY, paints.tableDataCenter)
                 val setAz = calculateAzAtRiseSet(lat, obj.dec, false)
@@ -405,7 +409,7 @@ fun CompassCanvas(
 
 // --- HELPER CLASSES & LOGIC ---
 
-data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents)
+data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double)
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,
@@ -430,6 +434,16 @@ class CompassPaints(
 }
 
 // --- SHARED MATH HELPERS ---
+
+// Saemundsson's formula: geometric (true) altitude -> apparent altitude
+// Adds atmospheric refraction so objects smoothly descend to 0° at the horizon
+fun applyRefraction(trueAltDeg: Double): Double {
+    if (trueAltDeg < -2.0) return trueAltDeg
+    val h = trueAltDeg.coerceAtLeast(-1.5)
+    val rArcmin = 1.02 / tan(Math.toRadians(h + 10.3 / (h + 5.11)))
+    val correction = (rArcmin / 60.0).coerceAtLeast(0.0)
+    return trueAltDeg + correction
+}
 
 fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
     val latRad = Math.toRadians(lat)
