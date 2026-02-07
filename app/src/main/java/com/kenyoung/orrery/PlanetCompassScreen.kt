@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import kotlin.math.*
@@ -64,9 +65,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             // Visual Position: High Precision (Engine)
             val sunState = AstroEngine.getBodyState("Sun", jdStart)
 
-            // Events: Use ephemeris data via AstroEngine for Sun position at noon
             val sunNoon = AstroEngine.getBodyState("Sun", jdStart + 0.5)
-            val (sunRise, sunSet) = calculateRiseSet(sunNoon.ra, sunNoon.dec, lat, lon, offset, HORIZON_REFRACTED, epochDay)
+            val (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
 
             // Calculate Sun Transit (Local Apparent Noon)
             val nSun = (jdStart + 0.5) - 2451545.0
@@ -89,11 +89,11 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            // Events: Standard Low Precision (Math) - Matches TransitsScreen
             val moonEvents = calculateMoonEvents(epochDay, lat, lon, offset)
 
-            // Use Topocentric coords for plotting the dot, but standard events for the table
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, 0.125))
+            val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
+            val moonTargetAlt = -(0.5667 + moonSdDeg)
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt))
 
 
             // 3. Planets
@@ -168,7 +168,8 @@ fun CompassCanvas(
         val smallTickLength = 12.5f
 
         // Time Strings
-        val displayZoneId = if (useLocalTime) ZoneId.systemDefault() else ZoneId.of("UTC")
+        val standardOffsetMs = TimeZone.getDefault().rawOffset
+        val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds(standardOffsetMs / 1000) else ZoneOffset.UTC
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
         val displayTimeStr = timeFormatter.format(now)
         val lstStr = calculateLST(now, lon)
@@ -177,7 +178,7 @@ fun CompassCanvas(
 
         // Offset in hours to convert UT to display time
         val displayOffsetHours = if (useLocalTime) {
-            TimeZone.getDefault().getOffset(now.toEpochMilli()).toDouble() / 3600000.0
+            standardOffsetMs.toDouble() / 3600000.0
         } else {
             0.0
         }
@@ -377,7 +378,7 @@ fun CompassCanvas(
                 val riseDisplay = normalizeTime(riseUT + displayOffsetHours)
                 paints.tableDataCenter.color = if (!isUp) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(riseDisplay, false), cols[2], currY, paints.tableDataCenter)
-                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true)
+                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true, obj.targetAlt)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
 
@@ -397,7 +398,7 @@ fun CompassCanvas(
                 val isPost = (isUp && haNorm > 0)
                 paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(setDisplay, false), cols[6], currY, paints.tableDataCenter)
-                val setAz = calculateAzAtRiseSet(lat, obj.dec, false)
+                val setAz = calculateAzAtRiseSet(lat, obj.dec, false, obj.targetAlt)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(setAz), cols[7]+20f, currY, paints.tableDataRight)
 
@@ -445,10 +446,11 @@ fun applyRefraction(trueAltDeg: Double): Double {
     return trueAltDeg + correction
 }
 
-fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean): Double {
+fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, altitude: Double): Double {
     val latRad = Math.toRadians(lat)
     val decRad = Math.toRadians(dec)
-    val cosAz = sin(decRad) / cos(latRad)
+    val altRad = Math.toRadians(altitude)
+    val cosAz = (sin(decRad) - sin(latRad) * sin(altRad)) / (cos(latRad) * cos(altRad))
     if (cosAz < -1.0 || cosAz > 1.0) return Double.NaN
     val azRad = acos(cosAz)
     val azDeg = Math.toDegrees(azRad)

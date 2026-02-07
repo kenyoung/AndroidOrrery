@@ -296,7 +296,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             "Planet Elevations" to Screen.ELEVATIONS,
                             "Planet Compass" to Screen.COMPASS,
                             "Planet Phenomena" to Screen.PHENOMENA,
-                            "Moon Calendar" to Screen.MOON_CALENDAR,
+                            "Lunar Calendar" to Screen.MOON_CALENDAR,
                             "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
@@ -369,7 +369,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
-                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId)
+                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId, currentInstant)
                 }
             }
         }

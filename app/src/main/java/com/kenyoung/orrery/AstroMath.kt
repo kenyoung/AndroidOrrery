@@ -372,25 +372,46 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
 // --- LEGACY HELPERS (Must remain for existing calls) ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
-    val state = AstroEngine.getBodyState("Sun", epochDay + 2440587.5 + 0.5)
-    return calculateRiseSet(state.ra, state.dec, lat, lon, timezoneOffset, altitude, epochDay)
-}
+    // Iteratively find Sun transit (recomputes position each step)
+    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
+    for (i in 0..4) {
+        val state = AstroEngine.getBodyState("Sun", tGuess + 2440587.5)
+        val raHours = state.ra / 15.0
+        val lst = calculateLSTHours(tGuess + 2440587.5, lon)
+        val ha = normalizeHourAngle(lst - raHours)
+        tGuess -= (ha / 24.0) * 0.99727
+    }
+    val tTransit = tGuess
 
-fun calculateRiseSet(raDeg: Double, decDeg: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double, epochDay: Double): Pair<Double, Double> {
-    val jd = epochDay + 2440587.5 + 0.5
-    val n = jd - 2451545.0
-    val GMST0 = (6.697374558 + 0.06570982441908 * n) % 24.0
-    val gmstFixed = if (GMST0 < 0) GMST0 + 24.0 else GMST0
-    val raHours = raDeg / 15.0
-    val transitUT = normalizeTime(raHours - (lon / 15.0) - gmstFixed)
-    val transitStandard = transitUT + timezoneOffset
-    val latRad = Math.toRadians(lat); val decRad = Math.toRadians(decDeg); val altRad = Math.toRadians(altitude)
-    val cosH = (sin(altRad) - sin(latRad) * sin(decRad)) / (cos(latRad) * cos(decRad))
-    if (cosH.isNaN() || cosH < -1.0 || cosH > 1.0) return Pair(Double.NaN, Double.NaN)
-    val hHours = Math.toDegrees(acos(cosH)) / 15.0
-    val rise = normalizeTime(transitStandard - hHours)
-    val set = normalizeTime(transitStandard + hHours)
-    return Pair(rise, set)
+    fun getAlt(t: Double): Double {
+        val state = AstroEngine.getBodyState("Sun", t + 2440587.5)
+        val lst = calculateLSTHours(t + 2440587.5, lon)
+        val haHours = lst - state.ra / 15.0
+        return calculateAltitude(haHours, lat, state.dec)
+    }
+
+    // Polar day/night check
+    val transitAlt = getAlt(tTransit)
+    if (transitAlt < altitude) return Pair(Double.NaN, Double.NaN)
+    val nadirAlt = getAlt(tTransit + 0.5)
+    if (nadirAlt > altitude) return Pair(Double.NaN, Double.NaN)
+
+    // Iteratively refine rise time
+    var tRise = tTransit - 0.25
+    for (i in 0..9) {
+        val alt = getAlt(tRise); val diff = alt - altitude; val rate = 360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break; tRise -= (diff / rate)
+    }
+
+    // Iteratively refine set time
+    var tSet = tTransit + 0.25
+    for (i in 0..9) {
+        val alt = getAlt(tSet); val diff = alt - altitude; val rate = -360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break; tSet -= (diff / rate)
+    }
+
+    fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
+    return Pair(toLocal(tRise), toLocal(tSet))
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
@@ -426,29 +447,29 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
 }
 
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
-    val d = (2440587.5 + epochDay) - 2451545.0
-    val Ms = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
-    val Ls = Math.toRadians((280.466 + 0.98564736 * d) % 360.0)
-    val trueLongSun = Math.toDegrees(Ls) + (1.915 * sin(Ms) + 0.020 * sin(2 * Ms))
-    val L = (218.316 + 13.176396 * d) % 360.0
-    val M = Math.toRadians((134.963 + 13.064993 * d) % 360.0)
-    val lambda = L + 6.289 * sin(M)
-    var diff = (lambda - trueLongSun) % 360.0; if (diff < 0) diff += 360.0
+    val jd = epochDay + 2440587.5
+    val moonLon = AstroEngine.getBodyState("Moon", jd).eclipticLon
+    val sunLon = AstroEngine.getBodyState("Sun", jd).eclipticLon
+    var diff = (moonLon - sunLon) % 360.0; if (diff < 0) diff += 360.0
     return diff
 }
 
 fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false): PlanetEvents {
     // Start of local day in UT (midnight local time)
     val dayStartUT = epochDay - timezoneOffset / 24.0
-    val targetAlt = 0.125
     val step = 1.0 / 144.0 // 10-minute steps
+    val moonRadiusM = 1737400.0
 
-    // Combined moon altitude and hour angle at time t
+    // Combined moon altitude and hour angle at time t (topocentric)
     fun getMoonState(t: Double): Pair<Double, Double> {
-        val state = AstroEngine.getBodyState("Moon", t + 2440587.5)
-        val lst = calculateLSTHours(t + 2440587.5, lon)
-        val haHours = lst - state.ra / 15.0
-        val alt = calculateAltitude(haHours, lat, state.dec)
+        val jd = t + 2440587.5
+        val state = AstroEngine.getBodyState("Moon", jd)
+        val lst = calculateLSTHours(jd, lon)
+        val topo = toTopocentric(state.ra, state.dec, state.distGeo, lat, lon, lst)
+        val haHours = lst - topo.ra / 15.0
+        val alt = calculateAltitude(haHours, lat, topo.dec)
+        val sdDeg = Math.toDegrees(asin(moonRadiusM / (state.distGeo * AU_METERS)))
+        val targetAlt = -(0.5667 + sdDeg)
         return Pair(alt - targetAlt, normalizeHourAngle(haHours))
     }
 
@@ -514,23 +535,14 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
     val jd = epochDay + 2440587.5; val n = jd - 2451545.0
     var L = (280.460 + 0.9856474 * n) % 360.0; if (L < 0) L += 360.0
-    var g = (357.528 + 0.9856003 * n) % 360.0; if (g < 0) g += 360.0
-    val lambda = L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(Math.toRadians(2 * g))
-    val epsilon = 23.439 - 0.0000004 * n
-    val alphaRad = atan2(cos(Math.toRadians(epsilon)) * sin(Math.toRadians(lambda)), cos(Math.toRadians(lambda)))
-    var alphaDeg = Math.toDegrees(alphaRad)
-    if (alphaDeg < 0) alphaDeg += 360.0
-    var E_deg = L - alphaDeg
-    while (E_deg > 180) E_deg -= 360.0; while (E_deg <= -180) E_deg += 360.0
-    return E_deg * 4.0
+    val alphaDeg = AstroEngine.getBodyState("Sun", jd).ra
+    var eDeg = L - alphaDeg
+    while (eDeg > 180) eDeg -= 360.0; while (eDeg <= -180) eDeg += 360.0
+    return eDeg * 4.0
 }
 fun calculateSunDeclination(epochDay: Double): Double {
-    val n = (2440587.5 + epochDay + 0.5) - 2451545.0
-    var L = (280.460 + 0.9856474 * n) % 360.0; if (L < 0) L += 360.0
-    var g = (357.528 + 0.9856003 * n) % 360.0; if (g < 0) g += 360.0
-    val lambdaRad = Math.toRadians(L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(2 * Math.toRadians(g)))
-    val epsilonRad = Math.toRadians(23.439 - 0.0000004 * n)
-    return asin(sin(epsilonRad) * sin(lambdaRad))
+    val jd = epochDay + 2440587.5 + 0.5
+    return Math.toRadians(AstroEngine.getBodyState("Sun", jd).dec)
 }
 fun calculateMoonPosition(epochDay: Double): RaDec {
     val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0

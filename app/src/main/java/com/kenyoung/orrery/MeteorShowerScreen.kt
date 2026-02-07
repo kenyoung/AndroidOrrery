@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -80,13 +81,13 @@ fun MeteorShowerScreen(
     currentEpochDay: Double,
     lat: Double,
     lon: Double,
-    zoneId: ZoneId
+    zoneId: ZoneId,
+    currentInstant: Instant
 ) {
     var rowData by remember { mutableStateOf<List<ShowerRowData>?>(null) }
     var tonightDarkHours by remember { mutableStateOf(0.0) }
     var tonightStartTime by remember { mutableStateOf("") }
     var tonightEndTime by remember { mutableStateOf("") }
-    var lastDarkHoursCalcEpochDay by remember { mutableStateOf(Double.NaN) }
     var isCalculating by remember { mutableStateOf(true) }
 
     val activeYear = LocalDate.ofEpochDay(currentEpochDay.toLong()).year
@@ -154,30 +155,25 @@ fun MeteorShowerScreen(
             rowData = calculatedRows
 
             // 2. Calculate "Tonight's" Dark Hours
-            // Only update if sun is below horizon, or never calculated, or stale (>24h)
-            val sunStateNow = AstroEngine.getBodyState("Sun", currentEpochDay + 2440587.5)
-            val sunAltNow = getAltitude(sunStateNow.ra, sunStateNow.dec, currentEpochDay, lat, lon)
-            val sunBelowHorizon = sunAltNow < HORIZON_REFRACTED
-            val neverCalculated = lastDarkHoursCalcEpochDay.isNaN()
-            val staleCalc = !neverCalculated && abs(currentEpochDay - lastDarkHoursCalcEpochDay) > 1.0
+            val nowEpochDay = currentInstant.toEpochMilli() / 86400000.0
+            val sunStateNow = AstroEngine.getBodyState("Sun", nowEpochDay + 2440587.5)
+            val sunAltNow = getAltitude(sunStateNow.ra, sunStateNow.dec, nowEpochDay, lat, lon)
+            val sunAboveHorizon = sunAltNow >= HORIZON_REFRACTED
+            val epochFloor = floor(nowEpochDay)
+            val frac = nowEpochDay - epochFloor
 
-            if (sunBelowHorizon || neverCalculated || staleCalc) {
-                val epochFloor = floor(currentEpochDay)
-                val frac = currentEpochDay - epochFloor
-
-                // Determine Start of "Night Block" (Noon to Noon)
-                val searchBase = if (sunAltNow > HORIZON_REFRACTED || frac > 0.5) {
-                    epochFloor // Start from Today Noon
-                } else {
-                    epochFloor - 1.0 // Start from Yesterday Noon (we are in the early morning tail)
-                }
-
-                val dhResult = calculateDarkHoursDetails(searchBase, lat, lon)
-                tonightDarkHours = dhResult.totalHours
-                tonightStartTime = dhResult.startTime
-                tonightEndTime = dhResult.endTime
-                lastDarkHoursCalcEpochDay = currentEpochDay
+            // Determine Start of "Night Block" (Noon to Noon)
+            // Daytime or evening: scan from today's noon. Early morning: scan from yesterday's noon.
+            val searchBase = if (sunAboveHorizon || frac > 0.5) {
+                epochFloor
+            } else {
+                epochFloor - 1.0
             }
+
+            val dhResult = calculateDarkHoursDetails(searchBase, lat, lon)
+            tonightDarkHours = dhResult.totalHours
+            tonightStartTime = dhResult.startTime
+            tonightEndTime = dhResult.endTime
         }
         isCalculating = false
     }

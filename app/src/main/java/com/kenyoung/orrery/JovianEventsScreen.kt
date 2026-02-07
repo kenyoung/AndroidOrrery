@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 import kotlin.math.*
@@ -101,7 +102,7 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
 
     // --- TIME ZONE STATE ---
     var useLocalTime by remember { mutableStateOf(false) }
-    val zoneId = if (useLocalTime) ZoneId.systemDefault() else ZoneId.of("UTC")
+    val zoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds(TimeZone.getDefault().rawOffset / 1000) else ZoneOffset.UTC
     val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
     val timeLabel = if (useLocalTime) " $timeZoneAbbreviation" else " UT"
 
@@ -441,7 +442,7 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
         val jd = raw.mjd + 2400000.5
         val (_, _, sunAlt) = getAltAz(jd, "Sun", lat, lon)
         val (_, _, jupAlt) = getAltAz(jd, "Jupiter", lat, lon)
-        val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > 0.0)
+        val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > -0.5667)
         var pixelType = if (isVisible) JovEventPixel.VISIBLE else JovEventPixel.HIDDEN
 
         if (raw.mjd > nowMJD && isVisible && !nextEventFound) {
