@@ -58,7 +58,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
     LaunchedEffect(epochDay, lat, lon) {
         withContext(Dispatchers.Default) {
             val offset = lon / 15.0
-            val jdStart = epochDay + 2440587.5
+            // Derive JD from the UT Instant, not epochDay which encodes local time
+            val jdStart = now.epochSecond.toDouble() / 86400.0 + 2440587.5
             val newList = mutableListOf<PlotObject>()
 
             // 1. Sun
@@ -78,6 +79,11 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED))
 
+            // Anchor Moon/planet events to the observing night: before sunrise,
+            // use the previous local day so events stay stable all night.
+            val nowUtFracDay = (jdStart - 2440587.5) - floor(jdStart - 2440587.5)
+            val currentLocalSolar = normalizeTime(nowUtFracDay * 24.0 + offset)
+            val eventEpochDay = if (currentLocalSolar < sunRise) epochDay - 1.0 else epochDay
 
             // 2. Moon
             // Visual Position: High Precision (Engine)
@@ -89,7 +95,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            val moonEvents = calculateMoonEvents(epochDay, lat, lon, offset)
+            val moonEvents = calculateMoonEvents(eventEpochDay, lat, lon, offset)
 
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
             val moonTargetAlt = -(0.5667 + moonSdDeg)
@@ -104,7 +110,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     val col = p.color.toArgb()
 
                     // Events: Standard Low Precision (Math) - Matches TransitsScreen
-                    val events = calculatePlanetEvents(epochDay, lat, lon, offset, p)
+                    val events = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
 
                     newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667))
                 }
@@ -374,30 +380,33 @@ fun CompassCanvas(
                 nc.drawText(formatTimeMM(haNorm, true), cols[1]-15f, currY, paints.tableDataCenter)
 
                 // Rise
-                val riseUT = normalizeTime(obj.events.rise - offset)
-                val riseDisplay = normalizeTime(riseUT + displayOffsetHours)
+                val riseRaw = obj.events.rise - offset + displayOffsetHours
+                val riseDisplay = normalizeTime(riseRaw)
+                val riseStr = formatTimeMM(riseDisplay, false) + if (riseRaw >= 24.0) "*" else ""
                 paints.tableDataCenter.color = if (!isUp) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(riseDisplay, false), cols[2], currY, paints.tableDataCenter)
+                nc.drawText(riseStr, cols[2], currY, paints.tableDataCenter)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true, obj.targetAlt)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
 
                 // Transit
-                val transUT = normalizeTime(obj.events.transit - offset)
-                val transDisplay = normalizeTime(transUT + displayOffsetHours)
+                val transRaw = obj.events.transit - offset + displayOffsetHours
+                val transDisplay = normalizeTime(transRaw)
+                val transStr = formatTimeMM(transDisplay, false) + if (transRaw >= 24.0) "*" else ""
                 val isPre = (isUp && haNorm < 0)
                 paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(transDisplay, false), cols[4], currY, paints.tableDataCenter)
+                nc.drawText(transStr, cols[4], currY, paints.tableDataCenter)
                 val transEl = 90.0 - abs(lat - obj.dec)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(transEl), cols[5], currY, paints.tableDataRight)
 
                 // Set
-                val setUT = normalizeTime(obj.events.set - offset)
-                val setDisplay = normalizeTime(setUT + displayOffsetHours)
+                val setRaw = obj.events.set - offset + displayOffsetHours
+                val setDisplay = normalizeTime(setRaw)
+                val setStr = formatTimeMM(setDisplay, false) + if (setRaw >= 24.0) "*" else ""
                 val isPost = (isUp && haNorm > 0)
                 paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(setDisplay, false), cols[6], currY, paints.tableDataCenter)
+                nc.drawText(setStr, cols[6], currY, paints.tableDataCenter)
                 val setAz = calculateAzAtRiseSet(lat, obj.dec, false, obj.targetAlt)
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(setAz), cols[7]+20f, currY, paints.tableDataRight)

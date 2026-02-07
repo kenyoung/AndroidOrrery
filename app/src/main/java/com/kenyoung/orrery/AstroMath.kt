@@ -372,8 +372,11 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
 // --- RISE/SET/TRANSIT CALCULATIONS ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
+    // Use integer date — fractional epoch days from manual time entry shift the
+    // scan start forward, causing events between now and now+|offset| to be missed.
+    val epochDayInt = floor(epochDay)
     // Iteratively find Sun transit (recomputes position each step)
-    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
+    var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
         val state = AstroEngine.getBodyState("Sun", tGuess + 2440587.5)
         val raHours = state.ra / 15.0
@@ -415,7 +418,10 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
-    var tGuess = epochDay + 0.5 - (timezoneOffset / 24.0)
+    // Use integer date — fractional epoch days from manual time entry shift the
+    // scan start forward, causing events between now and now+|offset| to be missed.
+    val epochDayInt = floor(epochDay)
+    var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
         val state = AstroEngine.getBodyState(p.name, tGuess + 2440587.5)
         val raHours = state.ra / 15.0
@@ -455,8 +461,11 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
 }
 
 fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false): PlanetEvents {
+    // Use integer date — fractional epoch days from manual time entry shift the
+    // scan start forward, causing events between now and now+|offset| to be missed.
+    val epochDayInt = floor(epochDay)
     // Start of local day in UT (midnight local time)
-    val dayStartUT = epochDay - timezoneOffset / 24.0
+    val dayStartUT = epochDayInt - timezoneOffset / 24.0
     val step = 1.0 / 144.0 // 10-minute steps
     val moonRadiusM = 1737400.0
 
