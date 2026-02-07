@@ -926,7 +926,7 @@ private fun EclipseSelectionView(
         // Title
         Text(
             text = "Lunar Eclipses",
-            color = Color.Yellow,
+            color = LabelColor,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
@@ -966,7 +966,7 @@ private fun EclipseSelectionView(
                 )
                 Text(
                     text = " → ",
-                    color = Color.Yellow,
+                    color = LabelColor,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -1249,7 +1249,7 @@ private fun renderEclipse(
     val colorGreen = Color.Green
     val colorMediumGrey = Color(0xFF757575)  // For connecting lines
     val colorBlue = Color(0xFF0080FF)
-    val colorYellow = Color.Yellow
+    val colorYellow = LabelColor
     val colorCream = Color(0xFFFFFDD0)
     val colorLightBlue = Color(0xFF87CEEB)
     val colorDarkBlueGreen = Color(0xFF006464)

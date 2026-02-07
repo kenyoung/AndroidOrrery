@@ -42,6 +42,7 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
     val gridColorInt = 0xFF000080.toInt() // Dark Blue
     val curveColor = Color.Green
     val markerColorInt = Color.Yellow.toArgb()
+    val labelColorInt = LabelColor.toArgb()
     val lightBlueInt = 0xFF87CEFA.toInt()
     val lightBlueColor = Color(0xFF87CEFA)
     val textColorInt = Color.White.toArgb()
@@ -155,7 +156,6 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
 
         // Axis Titles
         drawIntoCanvas {
-            // Title - year in white, " Analemma" in yellow
             textPaint.textSize = 100f
             textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
             textPaint.textAlign = Paint.Align.LEFT
@@ -166,7 +166,7 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             textPaint.color = textColorInt
             it.nativeCanvas.drawText(titlePart1, titleX, paddingY - 40f, textPaint)
             titleX += textPaint.measureText(titlePart1)
-            textPaint.color = markerColorInt
+            textPaint.color = labelColorInt
             it.nativeCanvas.drawText(titlePart2, titleX, paddingY - 40f, textPaint)
             textPaint.textAlign = Paint.Align.CENTER
 

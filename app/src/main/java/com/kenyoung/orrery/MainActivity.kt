@@ -341,15 +341,15 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             if (currentScreen == Screen.TRANSITS) {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row {
-                        Text(text = "Lat ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "Lat ", style = TextStyle(color = LabelColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         Text(text = "%.3f ".format(effectiveLat), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                        Text(text = "Lon ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "Lon ", style = TextStyle(color = LabelColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         Text(text = "%.4f".format(effectiveLon), style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                     }
                     Row {
-                        Text(text = "UT ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "UT ", style = TextStyle(color = LabelColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         Text(text = utString, style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                        Text(text = "  LST ", style = TextStyle(color = Color.Yellow, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        Text(text = "  LST ", style = TextStyle(color = LabelColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         Text(text = lstString, style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                     }
                 }

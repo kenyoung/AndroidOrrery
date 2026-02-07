@@ -194,7 +194,7 @@ fun MeteorShowerScreen(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
-                Text("Meteor Shower Information for ", color = Color.Yellow, fontSize = (16 * fontScale).sp, fontWeight = FontWeight.Bold)
+                Text("Meteor Shower Information for ", color = LabelColor, fontSize = (16 * fontScale).sp, fontWeight = FontWeight.Bold)
                 Text("$activeYear", color = Color.White, fontSize = (16 * fontScale).sp, fontWeight = FontWeight.Bold)
             }
 
@@ -233,16 +233,16 @@ fun MeteorShowerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(horizontalArrangement = Arrangement.Center) {
-                    Text("The sky will be very dark for ", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text("The sky will be very dark for ", color = LabelColor, fontSize = (14 * fontScale).sp)
                     Text("%.2f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" hours", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text(" hours", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
                 Row(horizontalArrangement = Arrangement.Center) {
-                    Text("(", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text("(", color = LabelColor, fontSize = (14 * fontScale).sp)
                     Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" → ", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
                     Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" UT) tonight.", color = Color.Yellow, fontSize = (14 * fontScale).sp)
+                    Text(" UT) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
             }
         }

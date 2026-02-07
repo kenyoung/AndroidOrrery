@@ -140,7 +140,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             // --- STANDARD PLANETS ---
             for (p in planetList) {
-                // 1. Draw Orbit Path (Still uses Keplerian elements for the ellipse shape)
+                // 1. Draw Orbit Path (Keplerian elements define the ellipse shape)
                 val orbitPath = androidx.compose.ui.graphics.Path()
                 for (angleIdx in 0..100) {
                     val M_sim = (angleIdx / 100.0) * 2.0 * Math.PI
@@ -187,7 +187,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             // --- HALLEY'S COMET ---
             val p = halley
-            // 1. Draw Orbit Path (Keplerian Fallback for shape)
+            // 1. Draw Orbit Path (Keplerian elements define the ellipse shape)
             val halleyPath = androidx.compose.ui.graphics.Path()
             val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
 

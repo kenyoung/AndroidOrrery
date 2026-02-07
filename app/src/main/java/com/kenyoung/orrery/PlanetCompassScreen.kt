@@ -417,7 +417,7 @@ class CompassPaints(
     tickCol: Int, grayTickCol: Int, headerCol: Int
 ) {
     val header = Paint().apply { color=android.graphics.Color.WHITE; textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
-    val headerYellow = Paint().apply { color=android.graphics.Color.YELLOW; textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
+    val headerYellow = Paint().apply { color=LabelColor.toArgb(); textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
     val label = Paint().apply { color=greenInt; textSize=40f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL); isAntiAlias=true }
     val labelRed = Paint().apply { color=redInt; textSize=40f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL); isAntiAlias=true }
     val triangleTick = Paint().apply { color=tickCol; style=Paint.Style.FILL; isAntiAlias=true }

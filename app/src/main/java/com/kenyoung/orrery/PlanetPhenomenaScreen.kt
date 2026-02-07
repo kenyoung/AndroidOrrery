@@ -32,8 +32,8 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
     val density = LocalDensity.current
 
     val bgColor = Color.Black
-    val headerYellow = Color(0xFFFFFF00)
-    val planetYellow = Color(0xFFFFFFE0)
+    val headerYellow = LabelColor
+    val planetYellow = LabelColor
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 

@@ -71,7 +71,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     val brightBlue = Color(0xFF9999FF)
     val blueAxis = neptuneBlue
     val standardGray = Color.Gray
-    val textYellow = Color.Yellow
+    val textYellow = LabelColor
     val sunRed = Color.Red
     val labelRed = Color.Red
     val labelGreen = Color.Green

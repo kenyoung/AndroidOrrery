@@ -96,8 +96,8 @@ fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     val appLSTString = formatHours(appLST)
 
     // UI Layout
-    val headerColor = Color.Yellow
-    val labelColor = Color(0xFFFFFF00) // Yellowish
+    val headerColor = LabelColor
+    val labelColor = LabelColor
     val valueColor = Color.White
     val separatorColor = Color(0xFF20B2AA) // LightSeaGreen (Blue-Green)
 

@@ -2,6 +2,9 @@ package com.kenyoung.orrery
 
 import androidx.compose.ui.graphics.Color
 
+// --- UI CONSTANTS ---
+val LabelColor = Color(0xFFADD8E6) // Light Blue
+
 // --- DATA CLASSES ---
 
 data class PlanetElements(

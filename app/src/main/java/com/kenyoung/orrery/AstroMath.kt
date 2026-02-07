@@ -369,7 +369,7 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     )
 }
 
-// --- LEGACY HELPERS (Must remain for existing calls) ---
+// --- RISE/SET/TRANSIT CALCULATIONS ---
 
 fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
     // Iteratively find Sun transit (recomputes position each step)
