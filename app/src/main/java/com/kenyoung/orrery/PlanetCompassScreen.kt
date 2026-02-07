@@ -95,11 +95,21 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            val moonEvents = calculateMoonEvents(eventEpochDay, lat, lon, offset)
+            val moonEvD = calculateMoonEvents(eventEpochDay, lat, lon, offset)
+            val moonEvD1 = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
+
+            // Ensure rise < transit < set chronologically, pulling from next day as needed
+            val moonTransitAbs = if (moonEvD.transit >= moonEvD.rise) moonEvD.transit else moonEvD1.transit + 24.0
+            val moonSetAbs = if (moonEvD.set >= moonTransitAbs) moonEvD.set else moonEvD1.set + 24.0
+            val moonTransitTomorrow = moonTransitAbs >= 24.0
+            val moonSetTomorrow = moonSetAbs >= 24.0
+            val moonEvents = PlanetEvents(moonEvD.rise,
+                if (moonTransitTomorrow) moonTransitAbs - 24.0 else moonTransitAbs,
+                if (moonSetTomorrow) moonSetAbs - 24.0 else moonSetAbs)
 
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
             val moonTargetAlt = -(0.5667 + moonSdDeg)
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt))
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow))
 
 
             // 3. Planets
@@ -109,10 +119,18 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     val state = AstroEngine.getBodyState(p.name, jdStart)
                     val col = p.color.toArgb()
 
-                    // Events: Standard Low Precision (Math) - Matches TransitsScreen
-                    val events = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
+                    // Events: ensure rise < transit < set chronologically
+                    val evD = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
+                    val evD1 = calculatePlanetEvents(eventEpochDay + 1.0, lat, lon, offset, p)
+                    val pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
+                    val pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
+                    val pTransitTomorrow = pTransitAbs >= 24.0
+                    val pSetTomorrow = pSetAbs >= 24.0
+                    val events = PlanetEvents(evD.rise,
+                        if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
+                        if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
-                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667))
+                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow))
                 }
             }
 
@@ -363,6 +381,7 @@ fun CompassCanvas(
 
             var currY = row2Y + rowHeight + 5f
             val offset = lon / 15.0
+            var anyAsterisk = false
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0
@@ -382,7 +401,8 @@ fun CompassCanvas(
                 // Rise
                 val riseRaw = obj.events.rise - offset + displayOffsetHours
                 val riseDisplay = normalizeTime(riseRaw)
-                val riseStr = formatTimeMM(riseDisplay, false) + if (riseRaw >= 24.0) "*" else ""
+                val riseTomorrow = riseRaw >= 24.0
+                val riseStr = formatTimeMM(riseDisplay, false) + if (riseTomorrow) "*" else ""
                 paints.tableDataCenter.color = if (!isUp) paints.whiteInt else paints.grayInt
                 nc.drawText(riseStr, cols[2], currY, paints.tableDataCenter)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true, obj.targetAlt)
@@ -392,7 +412,8 @@ fun CompassCanvas(
                 // Transit
                 val transRaw = obj.events.transit - offset + displayOffsetHours
                 val transDisplay = normalizeTime(transRaw)
-                val transStr = formatTimeMM(transDisplay, false) + if (transRaw >= 24.0) "*" else ""
+                val transTomorrow = obj.transitTomorrow || transRaw >= 24.0
+                val transStr = formatTimeMM(transDisplay, false) + if (transTomorrow) "*" else ""
                 val isPre = (isUp && haNorm < 0)
                 paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
                 nc.drawText(transStr, cols[4], currY, paints.tableDataCenter)
@@ -403,7 +424,8 @@ fun CompassCanvas(
                 // Set
                 val setRaw = obj.events.set - offset + displayOffsetHours
                 val setDisplay = normalizeTime(setRaw)
-                val setStr = formatTimeMM(setDisplay, false) + if (setRaw >= 24.0) "*" else ""
+                val setIsTomorrow = obj.setTomorrow || setRaw >= 24.0
+                val setStr = formatTimeMM(setDisplay, false) + if (setIsTomorrow) "*" else ""
                 val isPost = (isUp && haNorm > 0)
                 paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
                 nc.drawText(setStr, cols[6], currY, paints.tableDataCenter)
@@ -411,7 +433,14 @@ fun CompassCanvas(
                 paints.tableDataRight.color = paints.tableDataCenter.color
                 nc.drawText("%.0f".format(setAz), cols[7]+20f, currY, paints.tableDataRight)
 
+                if (riseTomorrow || transTomorrow || setIsTomorrow) anyAsterisk = true
                 currY += rowHeight
+            }
+
+            // "* Tomorrow" footnote if any time has an asterisk
+            if (anyAsterisk) {
+                paints.tableDataLeft.color = LabelColor.toArgb()
+                nc.drawText("* Tomorrow", cols[0], currY + 5f, paints.tableDataLeft)
             }
         }
     }
@@ -419,7 +448,7 @@ fun CompassCanvas(
 
 // --- HELPER CLASSES & LOGIC ---
 
-data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double)
+data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false)
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,
