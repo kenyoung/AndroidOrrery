@@ -8,9 +8,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -101,14 +105,16 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var currentScreen by remember { mutableStateOf(Screen.TRANSITS) }
 
     // --- LOCATION STATE ---
-    var usePhoneLocation by remember { mutableStateOf(true) }
+    // locationMode: 0=Phone, 1=Custom, 2=From List
+    var locationMode by remember { mutableStateOf(0) }
     var manualLat by remember { mutableStateOf(0.0) }
     var manualLon by remember { mutableStateOf(0.0) }
     // Stores the last text entered by the user (LatDeg, LatMin, LatSec, LonDeg, LonMin, LonSec)
     var savedLocationInput by remember { mutableStateOf<List<String>?>(null) }
+    var savedCityName by remember { mutableStateOf<String?>(null) }
 
-    val effectiveLat = if (usePhoneLocation) initialGpsLat else manualLat
-    val effectiveLon = if (usePhoneLocation) initialGpsLon else manualLon
+    val effectiveLat = if (locationMode == 0) initialGpsLat else manualLat
+    val effectiveLon = if (locationMode == 0) initialGpsLon else manualLon
 
     // --- TIME STATE ---
     var usePhoneTime by remember { mutableStateOf(true) }
@@ -214,18 +220,20 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 
     if (showLocationDialog) {
         LocationDialog(
-            currentUsePhone = usePhoneLocation,
+            currentMode = locationMode,
             phoneLat = initialGpsLat,
             phoneLon = initialGpsLon,
             savedInput = savedLocationInput,
+            savedCityName = savedCityName,
             onDismiss = { showLocationDialog = false },
-            onConfirm = { usePhone, lat, lon, inputStrings ->
-                usePhoneLocation = usePhone
-                if (!usePhone) {
+            onConfirm = { mode, lat, lon, inputStrings, cityName ->
+                locationMode = mode
+                if (mode != 0) {
                     manualLat = lat
                     manualLon = lon
-                    savedLocationInput = inputStrings
                 }
+                if (mode == 1) savedLocationInput = inputStrings
+                if (mode == 2) savedCityName = cityName
                 showLocationDialog = false
             }
         )
@@ -357,7 +365,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
                 when (currentScreen) {
-                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId, usePhoneLocation && usePhoneTime)
+                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId, locationMode == 0 && usePhoneTime)
                     Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch)
                     Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
@@ -422,36 +430,97 @@ fun degToDms(valDeg: Double): Triple<String, String, String> {
     return Triple("$sign$d", "$m", sStr)
 }
 
+data class CityEntry(
+    val name: String,
+    val countryCode: String,
+    val continent: String,
+    val lat: Double,
+    val lon: Double
+)
+
+object CityData {
+    var cities: List<CityEntry>? = null
+        private set
+
+    private val continentNames = mapOf(
+        "AF" to "Africa", "AS" to "Asia", "EU" to "Europe",
+        "NA" to "North America", "OC" to "Oceania", "SA" to "South America"
+    )
+
+    fun continentName(code: String): String = continentNames[code] ?: code
+
+    fun countryName(code: String): String =
+        java.util.Locale("", code).displayCountry
+
+    fun load(context: android.content.Context) {
+        if (cities != null) return
+        cities = context.assets.open("cities_over_100k.csv").bufferedReader().useLines { lines ->
+            lines.drop(1).mapNotNull { line ->
+                val fields = parseCsvLine(line)
+                if (fields.size >= 5) {
+                    CityEntry(
+                        name = fields[0],
+                        countryCode = fields[1],
+                        continent = fields[2],
+                        lat = fields[3].toDoubleOrNull() ?: return@mapNotNull null,
+                        lon = fields[4].toDoubleOrNull() ?: return@mapNotNull null
+                    )
+                } else null
+            }.toList()
+        }
+    }
+
+    private fun parseCsvLine(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        var i = 0
+        while (i < line.length) {
+            if (line[i] == '"') {
+                val closing = line.indexOf('"', i + 1)
+                if (closing == -1) { fields.add(line.substring(i + 1)); break }
+                fields.add(line.substring(i + 1, closing))
+                i = closing + 1
+                if (i < line.length && line[i] == ',') i++
+            } else {
+                val comma = line.indexOf(',', i)
+                if (comma == -1) { fields.add(line.substring(i)); break }
+                fields.add(line.substring(i, comma))
+                i = comma + 1
+            }
+        }
+        return fields
+    }
+}
+
 @Composable
 fun LocationDialog(
-    currentUsePhone: Boolean,
+    currentMode: Int,
     phoneLat: Double,
     phoneLon: Double,
     savedInput: List<String>?,
+    savedCityName: String?,
     onDismiss: () -> Unit,
-    onConfirm: (Boolean, Double, Double, List<String>) -> Unit
+    onConfirm: (Int, Double, Double, List<String>, String?) -> Unit
 ) {
-    var usePhone by remember { mutableStateOf(currentUsePhone) }
+    val context = LocalContext.current
+    // Ensure city data is loaded
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { CityData.load(context) }
+    }
 
-    // Initialize Fields based on mode
+    var mode by remember { mutableStateOf(currentMode) } // 0=Phone, 1=Custom, 2=From List
+
+    // DMS fields for Custom mode
     val phoneLatDms = degToDms(phoneLat)
     val phoneLonDms = degToDms(phoneLon)
 
-    // If saving input exists, use it. Otherwise fallback to phone defaults.
-    val initialVals = if (savedInput != null) {
-        savedInput
-    } else {
-        listOf(phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
-            phoneLonDms.first, phoneLonDms.second, phoneLonDms.third)
-    }
-
-    // If using phone currently, we show phone values. If Manual, we show saved values.
-    val startVals = if (currentUsePhone) {
-        listOf(phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
-            phoneLonDms.first, phoneLonDms.second, phoneLonDms.third)
-    } else {
-        initialVals
-    }
+    val initialVals = savedInput ?: listOf(
+        phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
+        phoneLonDms.first, phoneLonDms.second, phoneLonDms.third
+    )
+    val startVals = if (currentMode == 0) listOf(
+        phoneLatDms.first, phoneLatDms.second, phoneLatDms.third,
+        phoneLonDms.first, phoneLonDms.second, phoneLonDms.third
+    ) else initialVals
 
     var latDeg by remember { mutableStateOf(startVals[0]) }
     var latMin by remember { mutableStateOf(startVals[1]) }
@@ -461,32 +530,45 @@ fun LocationDialog(
     var lonSec by remember { mutableStateOf(startVals[5]) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // When toggling Use Phone, update fields accordingly
-    LaunchedEffect(usePhone) {
-        if (usePhone) {
+    // From List state — restore previous selection if available
+    val cities = CityData.cities
+    val savedCity = if (savedCityName != null && cities != null) cities.find { it.name == savedCityName } else null
+    var selectedContinent by remember { mutableStateOf(savedCity?.let { CityData.continentName(it.continent) }) }
+    var selectedCountryCode by remember { mutableStateOf(savedCity?.countryCode) }
+    var selectedCity by remember { mutableStateOf(savedCity) }
+
+    // Dropdown expansion state
+    var continentExpanded by remember { mutableStateOf(false) }
+    var countryExpanded by remember { mutableStateOf(false) }
+    var cityExpanded by remember { mutableStateOf(false) }
+
+    // When switching to Phone mode, restore phone DMS values
+    LaunchedEffect(mode) {
+        if (mode == 0) {
             latDeg = phoneLatDms.first; latMin = phoneLatDms.second; latSec = phoneLatDms.third
             lonDeg = phoneLonDms.first; lonMin = phoneLonDms.second; lonSec = phoneLonDms.third
-        } else {
-            if (savedInput != null) {
-                latDeg = savedInput[0]; latMin = savedInput[1]; latSec = savedInput[2]
-                lonDeg = savedInput[3]; lonMin = savedInput[4]; lonSec = savedInput[5]
-            }
+        } else if (mode == 1 && savedInput != null) {
+            latDeg = savedInput[0]; latMin = savedInput[1]; latSec = savedInput[2]
+            lonDeg = savedInput[3]; lonMin = savedInput[4]; lonSec = savedInput[5]
         }
     }
 
     fun validateAndSubmit() {
-        if (usePhone) {
-            // Return empty strings for saved input as they are ignored in phone mode
-            onConfirm(true, 0.0, 0.0, emptyList())
-            return
+        when (mode) {
+            0 -> { onConfirm(0, 0.0, 0.0, emptyList(), null); return }
+            2 -> {
+                val city = selectedCity
+                if (city == null) { errorMsg = "Please select a city."; return }
+                onConfirm(2, city.lat, city.lon, emptyList(), city.name)
+                return
+            }
         }
+        // Mode 1: Custom DMS
         try {
             val ld = latDeg.toIntOrNull(); val lm = latMin.toIntOrNull(); val ls = latSec.toDoubleOrNull()
             val lod = lonDeg.toIntOrNull(); val lom = lonMin.toIntOrNull(); val los = lonSec.toDoubleOrNull()
-
             if (ld == null || lm == null || ls == null || lod == null || lom == null || los == null) {
-                errorMsg = "Please enter all fields."
-                return
+                errorMsg = "Please enter all fields."; return
             }
             if (abs(ld) > 90) { errorMsg = "Latitude degrees must be -90 to 90"; return }
             if (lm !in 0..59) { errorMsg = "Latitude minutes must be 0-59"; return }
@@ -494,17 +576,13 @@ fun LocationDialog(
             if (abs(lod) > 180) { errorMsg = "Longitude degrees must be -180 to 180"; return }
             if (lom !in 0..59) { errorMsg = "Longitude minutes must be 0-59"; return }
             if (los < 0 || los >= 60) { errorMsg = "Longitude seconds must be 0-59.9"; return }
-
             val latSign = if (ld < 0) -1.0 else 1.0
             val finalLat = (abs(ld) + (lm / 60.0) + (ls / 3600.0)) * latSign
             val lonSign = if (lod < 0) -1.0 else 1.0
             val finalLon = (abs(lod) + (lom / 60.0) + (los / 3600.0)) * lonSign
-
             if (abs(finalLat) > 90.0) { errorMsg = "Invalid Latitude."; return }
             if (abs(finalLon) > 180.0) { errorMsg = "Invalid Longitude."; return }
-
-            val inputStrings = listOf(latDeg, latMin, latSec, lonDeg, lonMin, lonSec)
-            onConfirm(false, finalLat, finalLon, inputStrings)
+            onConfirm(1, finalLat, finalLon, listOf(latDeg, latMin, latSec, lonDeg, lonMin, lonSec), null)
         } catch (e: Exception) {
             errorMsg = "Invalid number format."
         }
@@ -512,26 +590,97 @@ fun LocationDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
-            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Enter Location", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Radio buttons
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = usePhone, onCheckedChange = { usePhone = it; errorMsg = null }, colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black))
-                    Text("Use phone location", color = Color.White)
+                    listOf(0 to "Phone", 1 to "Custom", 2 to "From List").forEach { (m, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { mode = m; errorMsg = null }) {
+                            RadioButton(selected = mode == m, onClick = { mode = m; errorMsg = null },
+                                colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.Gray))
+                            Text(label, color = Color.White, fontSize = 13.sp)
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val contentAlpha = if (usePhone) 0.38f else 1f
-                val inputColor = if (usePhone) Color.Gray else Color.Green
+                if (mode == 0 || mode == 1) {
+                    // DMS input (disabled in Phone mode, enabled in Custom)
+                    val contentAlpha = if (mode == 0) 0.38f else 1f
+                    val inputColor = if (mode == 0) Color.Gray else Color.Green
+                    Text("Latitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        DmsInput(latDeg, { latDeg = it }, "Deg", mode == 1, inputColor)
+                        DmsInput(latMin, { latMin = it }, "Min", mode == 1, inputColor)
+                        DmsInput(latSec, { latSec = it }, "Sec", mode == 1, inputColor)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Longitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        DmsInput(lonDeg, { lonDeg = it }, "Deg", mode == 1, inputColor)
+                        DmsInput(lonMin, { lonMin = it }, "Min", mode == 1, inputColor)
+                        DmsInput(lonSec, { lonSec = it }, "Sec", mode == 1, inputColor)
+                    }
+                } else {
+                    // From List mode
+                    if (cities == null) {
+                        Text("Loading cities...", color = Color.Gray, fontSize = 14.sp)
+                    } else {
+                        val continents = cities.map { CityData.continentName(it.continent) }.distinct().sorted()
 
-                Text("Latitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DmsInput(latDeg, { latDeg = it }, "Deg", !usePhone, inputColor); DmsInput(latMin, { latMin = it }, "Min", !usePhone, inputColor); DmsInput(latSec, { latSec = it }, "Sec", !usePhone, inputColor)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Longitude (D M S)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    DmsInput(lonDeg, { lonDeg = it }, "Deg", !usePhone, inputColor); DmsInput(lonMin, { lonMin = it }, "Min", !usePhone, inputColor); DmsInput(lonSec, { lonSec = it }, "Sec", !usePhone, inputColor)
+                        // Continent selector
+                        DropdownSelector("Continent", selectedContinent, continentExpanded, { continentExpanded = it }) {
+                            continents.forEach { name ->
+                                DropdownMenuItem(text = { Text(name) }, onClick = {
+                                    selectedContinent = name; selectedCountryCode = null; selectedCity = null
+                                    continentExpanded = false
+                                })
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Country selector
+                        val continentCode = when (selectedContinent) {
+                            "Africa" -> "AF"; "Asia" -> "AS"; "Europe" -> "EU"
+                            "North America" -> "NA"; "Oceania" -> "OC"; "South America" -> "SA"
+                            else -> null
+                        }
+                        val countryCodes = if (continentCode != null) {
+                            cities.filter { it.continent == continentCode }.map { it.countryCode }.distinct().sortedBy { CityData.countryName(it) }
+                        } else emptyList()
+
+                        DropdownSelector("Country", selectedCountryCode?.let { CityData.countryName(it) }, countryExpanded, { countryExpanded = it }) {
+                            countryCodes.forEach { code ->
+                                DropdownMenuItem(text = { Text(CityData.countryName(code)) }, onClick = {
+                                    selectedCountryCode = code; selectedCity = null
+                                    countryExpanded = false
+                                })
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // City selector
+                        val citiesInCountry = if (selectedCountryCode != null) {
+                            cities.filter { it.countryCode == selectedCountryCode }.sortedBy { it.name }
+                        } else emptyList()
+
+                        DropdownSelector("City", selectedCity?.name, cityExpanded, { cityExpanded = it }) {
+                            citiesInCountry.forEach { city ->
+                                DropdownMenuItem(text = { Text(city.name) }, onClick = {
+                                    selectedCity = city; cityExpanded = false
+                                })
+                            }
+                        }
+
+                        // Show selected city coordinates
+                        if (selectedCity != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Lat: ${"%.4f".format(selectedCity!!.lat)}  Lon: ${"%.4f".format(selectedCity!!.lon)}",
+                                color = Color.Green, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
                 }
 
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
@@ -540,6 +689,37 @@ fun LocationDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
                     Button(onClick = { validateAndSubmit() }, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) { Text("OK", color = Color.Black) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun DropdownSelector(
+    label: String,
+    selected: String?,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column {
+        Text(label, color = Color.LightGray, fontSize = 12.sp)
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                    .clickable { onExpandedChange(true) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(selected ?: "—", color = if (selected != null) Color.White else Color.Gray, fontSize = 14.sp)
+                Text("\u25BC", color = Color.Gray, fontSize = 10.sp)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) },
+                modifier = Modifier.heightIn(max = 300.dp)) {
+                content()
             }
         }
     }
