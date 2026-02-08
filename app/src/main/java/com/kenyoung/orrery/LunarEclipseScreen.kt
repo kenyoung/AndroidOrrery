@@ -37,7 +37,6 @@ import kotlin.math.*
 // ============================================================================
 
 private const val N_LUNAR_ECLIPSES = 12064
-
 private const val PENUMBRAL_LUNAR_ECLIPSE = 0
 private const val PARTIAL_LUNAR_ECLIPSE = 1
 private const val TOTAL_LUNAR_ECLIPSE = 2

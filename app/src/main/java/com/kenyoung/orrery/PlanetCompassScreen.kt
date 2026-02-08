@@ -365,19 +365,19 @@ fun CompassCanvas(
 
             val row1Y = tableTop; val row2Y = tableTop + rowHeight
 
-            nc.drawText("Rising", cols[2] + (cols[3]-cols[2])*0.4f - 20f, row1Y, paints.tableHeaderCenter)
-            nc.drawText("Transit", cols[4] + (cols[5]-cols[4])*0.4f - 20f, row1Y, paints.tableHeaderCenter)
-            nc.drawText("Setting", cols[6] + (cols[7]-cols[6])*0.4f - 20f, row1Y, paints.tableHeaderCenter)
+            nc.drawText("Rising", cols[2] + (cols[3]-cols[2]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
+            nc.drawText("Transit", cols[4] + (cols[5]-cols[4]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
+            nc.drawText("Setting", cols[6] + (cols[7]-cols[6]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
 
             val timeColHeader = "Time ($timeLabel)"
             nc.drawText("Planet", cols[0], row2Y, paints.tableHeaderLeft)
-            nc.drawText("HA", cols[1], row2Y, paints.tableHeaderCenter)
-            nc.drawText(timeColHeader, cols[2], row2Y, paints.tableHeaderCenter)
-            nc.drawText(timeColHeader, cols[4], row2Y, paints.tableHeaderCenter)
-            nc.drawText(timeColHeader, cols[6], row2Y, paints.tableHeaderCenter)
-            nc.drawText("Az", cols[3], row2Y, paints.tableHeaderRight)
-            nc.drawText("El", cols[5], row2Y, paints.tableHeaderRight)
-            nc.drawText("Az", cols[7], row2Y, paints.tableHeaderRight)
+            nc.drawText("HA", cols[1], row2Y, paints.tableHeaderRight)
+            nc.drawText(timeColHeader, cols[2], row2Y, paints.tableHeaderLeft)
+            nc.drawText(timeColHeader, cols[4], row2Y, paints.tableHeaderLeft)
+            nc.drawText(timeColHeader, cols[6], row2Y, paints.tableHeaderLeft)
+            nc.drawText("Az", cols[3]+45f, row2Y, paints.tableHeaderRight)
+            nc.drawText("El", cols[5]+45f, row2Y, paints.tableHeaderRight)
+            nc.drawText("Az", cols[7]+45f, row2Y, paints.tableHeaderRight)
 
             var currY = row2Y + rowHeight + 5f
             val offset = lon / 15.0
@@ -395,19 +395,20 @@ fun CompassCanvas(
                 nc.drawText(obj.name, cols[0], currY, paints.tableDataLeft)
 
                 // HA
-                paints.tableDataCenter.color = if (isUp) paints.whiteInt else paints.grayInt
-                nc.drawText(formatTimeMM(haNorm, true), cols[1]-15f, currY, paints.tableDataCenter)
+                paints.tableDataRight.color = if (isUp) paints.whiteInt else paints.grayInt
+                nc.drawText(formatTimeMM(haNorm, true), cols[1]+45f, currY, paints.tableDataRight)
 
                 // Rise
                 val riseRaw = obj.events.rise - offset + displayOffsetHours
                 val riseDisplay = normalizeTime(riseRaw)
                 val riseTomorrow = riseRaw >= 24.0
                 val riseStr = formatTimeMM(riseDisplay, false) + if (riseTomorrow) "*" else ""
-                paints.tableDataCenter.color = if (!isUp) paints.whiteInt else paints.grayInt
-                nc.drawText(riseStr, cols[2], currY, paints.tableDataCenter)
+                val riseColor = if (!isUp) paints.whiteInt else paints.grayInt
+                paints.tableDataLeft.color = riseColor
+                nc.drawText(riseStr, cols[2] - 17f, currY, paints.tableDataLeft)
                 val riseAz = calculateAzAtRiseSet(lat, obj.dec, true, obj.targetAlt)
-                paints.tableDataRight.color = paints.tableDataCenter.color
-                nc.drawText("%.0f".format(riseAz), cols[3]+20f, currY, paints.tableDataRight)
+                paints.tableDataRight.color = riseColor
+                nc.drawText("%.0f".format(riseAz), cols[3]+45f, currY, paints.tableDataRight)
 
                 // Transit
                 val transRaw = obj.events.transit - offset + displayOffsetHours
@@ -415,11 +416,12 @@ fun CompassCanvas(
                 val transTomorrow = obj.transitTomorrow || transRaw >= 24.0
                 val transStr = formatTimeMM(transDisplay, false) + if (transTomorrow) "*" else ""
                 val isPre = (isUp && haNorm < 0)
-                paints.tableDataCenter.color = if (isPre) paints.whiteInt else paints.grayInt
-                nc.drawText(transStr, cols[4], currY, paints.tableDataCenter)
+                val transColor = if (isPre) paints.whiteInt else paints.grayInt
+                paints.tableDataLeft.color = transColor
+                nc.drawText(transStr, cols[4], currY, paints.tableDataLeft)
                 val transEl = 90.0 - abs(lat - obj.dec)
-                paints.tableDataRight.color = paints.tableDataCenter.color
-                nc.drawText("%.0f".format(transEl), cols[5], currY, paints.tableDataRight)
+                paints.tableDataRight.color = transColor
+                nc.drawText("%.0f".format(transEl), cols[5]+45f, currY, paints.tableDataRight)
 
                 // Set
                 val setRaw = obj.events.set - offset + displayOffsetHours
@@ -427,11 +429,12 @@ fun CompassCanvas(
                 val setIsTomorrow = obj.setTomorrow || setRaw >= 24.0
                 val setStr = formatTimeMM(setDisplay, false) + if (setIsTomorrow) "*" else ""
                 val isPost = (isUp && haNorm > 0)
-                paints.tableDataCenter.color = if (isPost) paints.whiteInt else paints.grayInt
-                nc.drawText(setStr, cols[6], currY, paints.tableDataCenter)
+                val setColor = if (isPost) paints.whiteInt else paints.grayInt
+                paints.tableDataLeft.color = setColor
+                nc.drawText(setStr, cols[6], currY, paints.tableDataLeft)
                 val setAz = calculateAzAtRiseSet(lat, obj.dec, false, obj.targetAlt)
-                paints.tableDataRight.color = paints.tableDataCenter.color
-                nc.drawText("%.0f".format(setAz), cols[7]+20f, currY, paints.tableDataRight)
+                paints.tableDataRight.color = setColor
+                nc.drawText("%.0f".format(setAz), cols[7]+45f, currY, paints.tableDataRight)
 
                 if (riseTomorrow || transTomorrow || setIsTomorrow) anyAsterisk = true
                 currY += rowHeight
