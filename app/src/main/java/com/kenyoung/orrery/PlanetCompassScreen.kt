@@ -77,7 +77,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val sunTransit = normalizeTime(sunTransitUT + offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
-            newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED))
+            newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED, anchorEpochDay = epochDay))
 
             // Anchor Moon/planet events to the observing night: before sunrise,
             // use the previous local day so events stay stable all night.
@@ -109,7 +109,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
             val moonTargetAlt = -(0.5667 + moonSdDeg)
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow))
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow, eventEpochDay))
 
 
             // 3. Planets
@@ -130,7 +130,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                         if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
                         if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
-                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow))
+                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow, eventEpochDay))
                 }
             }
 
@@ -382,6 +382,8 @@ fun CompassCanvas(
             var currY = row2Y + rowHeight + 5f
             val offset = lon / 15.0
             var anyAsterisk = false
+            // Current display-timezone date for asterisk evaluation
+            val currentDisplayDate = floor(now.epochSecond.toDouble() / 86400.0 + displayOffsetHours / 24.0).toLong()
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0
@@ -389,6 +391,7 @@ fun CompassCanvas(
                 val haNorm = normalizeHourAngle(lst - raHours)
                 // Use geometric alt vs same target as rise/set calculation
                 val isUp = currAlt > obj.targetAlt
+                val anchorDate = floor(obj.anchorEpochDay).toLong()
 
                 // Name
                 paints.tableDataLeft.color = if (isUp) paints.greenInt else paints.redInt
@@ -398,10 +401,10 @@ fun CompassCanvas(
                 paints.tableDataRight.color = if (isUp) paints.whiteInt else paints.grayInt
                 nc.drawText(formatTimeMM(haNorm, true), cols[1]+45f, currY, paints.tableDataRight)
 
-                // Rise
+                // Rise — un-normalized display hours for date comparison
                 val riseRaw = obj.events.rise - offset + displayOffsetHours
                 val riseDisplay = normalizeTime(riseRaw)
-                val riseTomorrow = riseRaw >= 24.0
+                val riseTomorrow = anchorDate + floor(riseRaw / 24.0).toLong() > currentDisplayDate
                 val riseStr = formatTimeMM(riseDisplay, false) + if (riseTomorrow) "*" else ""
                 val riseColor = if (!isUp) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = riseColor
@@ -410,10 +413,10 @@ fun CompassCanvas(
                 paints.tableDataRight.color = riseColor
                 nc.drawText("%.0f".format(riseAz), cols[3]+45f, currY, paints.tableDataRight)
 
-                // Transit
-                val transRaw = obj.events.transit - offset + displayOffsetHours
+                // Transit — restore 24h if pulled from next day, for correct date calc
+                val transRaw = (obj.events.transit + if (obj.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
                 val transDisplay = normalizeTime(transRaw)
-                val transTomorrow = obj.transitTomorrow || transRaw >= 24.0
+                val transTomorrow = anchorDate + floor(transRaw / 24.0).toLong() > currentDisplayDate
                 val transStr = formatTimeMM(transDisplay, false) + if (transTomorrow) "*" else ""
                 val isPre = (isUp && haNorm < 0)
                 val transColor = if (isPre) paints.whiteInt else paints.grayInt
@@ -423,10 +426,10 @@ fun CompassCanvas(
                 paints.tableDataRight.color = transColor
                 nc.drawText("%.0f".format(transEl), cols[5]+45f, currY, paints.tableDataRight)
 
-                // Set
-                val setRaw = obj.events.set - offset + displayOffsetHours
+                // Set — restore 24h if pulled from next day, for correct date calc
+                val setRaw = (obj.events.set + if (obj.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
                 val setDisplay = normalizeTime(setRaw)
-                val setIsTomorrow = obj.setTomorrow || setRaw >= 24.0
+                val setIsTomorrow = anchorDate + floor(setRaw / 24.0).toLong() > currentDisplayDate
                 val setStr = formatTimeMM(setDisplay, false) + if (setIsTomorrow) "*" else ""
                 val isPost = (isUp && haNorm > 0)
                 val setColor = if (isPost) paints.whiteInt else paints.grayInt
@@ -451,7 +454,7 @@ fun CompassCanvas(
 
 // --- HELPER CLASSES & LOGIC ---
 
-data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false)
+data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false, val anchorEpochDay: Double = 0.0)
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,

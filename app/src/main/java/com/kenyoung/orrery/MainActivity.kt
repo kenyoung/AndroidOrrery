@@ -199,7 +199,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         }
     }
 
-    val effectiveDate = currentInstant.atZone(zoneId).toLocalDate()
+    // In manual/animation mode, dates were entered as UT, so derive date from UT
+    val effectiveDate = if (usePhoneTime) currentInstant.atZone(zoneId).toLocalDate()
+        else currentInstant.atZone(ZoneId.of("UTC")).toLocalDate()
 
     val cache by produceState<AstroCache?>(initialValue = null, currentScreen, effectiveDate.toEpochDay(), effectiveLat, effectiveLon) {
         if (currentScreen == Screen.TRANSITS) {
