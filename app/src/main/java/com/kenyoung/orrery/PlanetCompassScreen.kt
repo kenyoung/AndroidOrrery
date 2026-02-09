@@ -95,21 +95,34 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
-            val moonEvD = calculateMoonEvents(eventEpochDay, lat, lon, offset)
-            val moonEvD1 = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
+            var moonEvBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
+            var moonEvNext = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
+            var moonAnchor = eventEpochDay
+
+            // If all events are in the past, advance to the next day's events.
+            // Check by computing the UT epoch day of the set (last chronological event).
+            val currentUtEpochDay = jdStart - 2440587.5
+            val baseMidnightUT = floor(eventEpochDay) - offset / 24.0
+            val checkTransAbs = if (moonEvBase.transit >= moonEvBase.rise) moonEvBase.transit else moonEvNext.transit + 24.0
+            val checkSetAbs = if (moonEvBase.set >= checkTransAbs) moonEvBase.set else moonEvNext.set + 24.0
+            if (baseMidnightUT + checkSetAbs / 24.0 < currentUtEpochDay) {
+                moonEvBase = moonEvNext
+                moonEvNext = calculateMoonEvents(eventEpochDay + 2.0, lat, lon, offset)
+                moonAnchor = eventEpochDay + 1.0
+            }
 
             // Ensure rise < transit < set chronologically, pulling from next day as needed
-            val moonTransitAbs = if (moonEvD.transit >= moonEvD.rise) moonEvD.transit else moonEvD1.transit + 24.0
-            val moonSetAbs = if (moonEvD.set >= moonTransitAbs) moonEvD.set else moonEvD1.set + 24.0
+            val moonTransitAbs = if (moonEvBase.transit >= moonEvBase.rise) moonEvBase.transit else moonEvNext.transit + 24.0
+            val moonSetAbs = if (moonEvBase.set >= moonTransitAbs) moonEvBase.set else moonEvNext.set + 24.0
             val moonTransitTomorrow = moonTransitAbs >= 24.0
             val moonSetTomorrow = moonSetAbs >= 24.0
-            val moonEvents = PlanetEvents(moonEvD.rise,
+            val moonEvents = PlanetEvents(moonEvBase.rise,
                 if (moonTransitTomorrow) moonTransitAbs - 24.0 else moonTransitAbs,
                 if (moonSetTomorrow) moonSetAbs - 24.0 else moonSetAbs)
 
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
             val moonTargetAlt = -(0.5667 + moonSdDeg)
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow, eventEpochDay))
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow, moonAnchor))
 
 
             // 3. Planets
