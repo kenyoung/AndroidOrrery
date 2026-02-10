@@ -174,9 +174,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (x >= -1f && x <= w + 1f) {
                 drawLine(blueAxis, Offset(x, h - footerHeight), Offset(x, h - footerHeight - 15f), strokeWidth = 2f)
 
-                val lstStr = calculateLST(now, lon)
-                val parts = lstStr.split(":")
-                val currentLST = parts[0].toDouble() + parts[1].toDouble() / 60.0
+                val currentLST = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
                 val lst = normalizeTime(currentLST + ((hourVal - currentH) * 1.0027379))
                 val lstInt = lst.toInt()
 
@@ -335,10 +333,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val transitJD = moonEpochBase + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
             val mTrans = AstroEngine.getBodyState("Moon", transitJD)
             // LST at Transit
-            val transitInstant = Instant.ofEpochMilli(((transitJD - 2440587.5) * 86400000.0).toLong())
-            val lstParts = calculateLST(transitInstant, lon).split(":")
-            val lstVal = lstParts[0].toDouble() + lstParts[1].toDouble()/60.0
-            moonDec = toTopocentric(mTrans.ra, mTrans.dec, mTrans.distGeo, lat, lon, lstVal).dec
+            val lstAtTransit = calculateLSTHours(transitJD, lon)
+            moonDec = toTopocentric(mTrans.ra, mTrans.dec, mTrans.distGeo, lat, lon, lstAtTransit).dec
         }
 
         val moonY = chartTop + (chartH * 0.28f)

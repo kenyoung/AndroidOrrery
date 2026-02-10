@@ -83,9 +83,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val moonState = AstroEngine.getBodyState("Moon", jdStart)
 
             // Calculate LST for the current 'now' to place the dot correctly on the Radar
-            val lstStr = calculateLST(now, lon)
-            val parts = lstStr.split(":")
-            val lstVal = parts[0].toDouble() + parts[1].toDouble()/60.0
+            val lstVal = calculateLSTHours(jdStart, lon)
             val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
 
             var moonEvBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
@@ -121,9 +119,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val anchorMidnightJD = floor(moonAnchor) + 2440587.5 - offset / 24.0
             val moonDecAt = { jd: Double ->
                 val st = AstroEngine.getBodyState("Moon", jd)
-                val inst = Instant.ofEpochMilli(((jd - 2440587.5) * 86400000.0).toLong())
-                val lp = calculateLST(inst, lon).split(":")
-                toTopocentric(st.ra, st.dec, st.distGeo, lat, lon, lp[0].toDouble() + lp[1].toDouble() / 60.0).dec
+                val lst = calculateLSTHours(jd, lon)
+                toTopocentric(st.ra, st.dec, st.distGeo, lat, lon, lst).dec
             }
             val moonRiseDec = if (!moonEvents.rise.isNaN()) moonDecAt(anchorMidnightJD + moonEvents.rise / 24.0) else topoMoon.dec
             val moonTransitDec = if (!moonEvents.transit.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.transit + if (moonTransitTomorrow) 24.0 else 0.0) / 24.0) else topoMoon.dec
@@ -222,9 +219,8 @@ fun CompassCanvas(
         val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds(standardOffsetMs / 1000) else ZoneOffset.UTC
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
         val displayTimeStr = timeFormatter.format(now)
-        val lstStr = calculateLST(now, lon)
-        val lstParts = lstStr.split(":")
-        val lst = lstParts[0].toDouble() + (lstParts[1].toDouble() / 60.0)
+        val lst = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
+        val lstStr = "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 
         // Offset in hours to convert UT to display time
         val displayOffsetHours = if (useLocalTime) {
