@@ -201,11 +201,8 @@ fun calculateSunPositionKepler(jd: Double): BodyState {
 
     val raDeg = normalizeDegrees(Math.toDegrees(alpha))
     val decDeg = Math.toDegrees(delta)
-    val geoPos = sphericalToCartesian(r, raDeg, decDeg)
 
-    return BodyState(
-        "Sun", jd, Vector3(0.0, 0.0, 0.0), geoPos, raDeg, decDeg, 0.0, r, Math.toDegrees(lambdaRad), 0.0
-    )
+    return BodyState(Vector3(0.0, 0.0, 0.0), raDeg, decDeg, 0.0, r, Math.toDegrees(lambdaRad), 0.0)
 }
 
 fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
@@ -237,7 +234,7 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
 
     val (eclLon, eclLat) = equatorialToEcliptic(raDeg, decDeg, jd)
 
-    return BodyState(p.name, jd, helioPos, Vector3(xg, yg, zg), raDeg, decDeg, rp, distGeo, eclLon, eclLat)
+    return BodyState(helioPos, raDeg, decDeg, rp, distGeo, eclLon, eclLat)
 }
 
 // --- JOVIAN MOONS (Meeus Chapter 44 - Accurate Implementation with Shadows) ---

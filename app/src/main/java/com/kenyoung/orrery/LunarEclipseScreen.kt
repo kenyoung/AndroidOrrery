@@ -43,7 +43,6 @@ private const val TOTAL_LUNAR_ECLIPSE = 2
 
 private const val M_2PI = 2.0 * Math.PI
 private const val DEGREES_TO_RADIANS = Math.PI / 180.0
-// HOURS_TO_DEGREES now in AstroMath.kt
 
 // Physical constants (CGS units)
 private const val AU_KM = 149597870.691
@@ -67,9 +66,7 @@ data class LunarEclipse(
     val umbMag: Float,       // Umbral magnitude
     val penDur: Float,       // Penumbral phase duration (minutes)
     val parDur: Float,       // Partial phase duration (minutes)
-    val totDur: Float,       // Total phase duration (minutes)
-    val zenithLat: Short,    // Latitude of sub-lunar point
-    val zenithLon: Short     // Longitude of sub-lunar point
+    val totDur: Float        // Total phase duration (minutes)
 ) {
     val eclipseType: Int get() = (type1.toInt() and 0x0f)
 
@@ -154,14 +151,13 @@ private suspend fun loadEclipseData(context: Context): List<LunarEclipse> {
                 val penDur = buffer.float
                 val parDur = buffer.float
                 val totDur = buffer.float
-                val zenithLat = buffer.short
-                val zenithLon = buffer.short
+                buffer.short // zenithLat (unused)
+                buffer.short // zenithLon (unused)
 
                 eclipses.add(
                     LunarEclipse(
                         date, tDGE, dTMinusUT, sarosNum, type1,
-                        penMag, umbMag, penDur, parDur, totDur,
-                        zenithLat, zenithLon
+                        penMag, umbMag, penDur, parDur, totDur
                     )
                 )
             }

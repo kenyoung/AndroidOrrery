@@ -17,16 +17,11 @@ data class PlanetElements(
 )
 
 data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
-data class LabelPosition(var x: Float = 0f, var y: Float = 0f, var minDistToCenter: Float = Float.MAX_VALUE, var found: Boolean = false)
 data class RaDec(val ra: Double, val dec: Double)
 
-// NEW: Universal State Object
 data class BodyState(
-    val name: String,
-    val jd: Double,
     // Vectors (AU)
     val helioPos: Vector3,
-    val geoPos: Vector3,
     // Spherical
     val ra: Double,      // Degrees
     val dec: Double,     // Degrees

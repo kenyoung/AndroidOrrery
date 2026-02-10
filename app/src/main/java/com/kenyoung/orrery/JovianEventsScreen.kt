@@ -62,8 +62,6 @@ data class MoonInstantState(
 )
 
 private data class MoonCompleteState(
-    val x: Double, val y: Double, val z: Double,
-    val shadowX: Double, val shadowY: Double,
     val isTransit: Boolean, val isOccultation: Boolean,
     val isShadowTransit: Boolean, val isEclipse: Boolean
 )
@@ -71,7 +69,6 @@ private data class MoonCompleteState(
 private data class RawEvent(
     val mjd: Double,
     val text: String,
-    val moonName: String,
     val typeId: Int,
     val isStart: Boolean
 )
@@ -322,23 +319,23 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
             val p = prevState[m]!!; val c = currState[m]!!
 
             // Transit events (always visible if Jupiter is visible)
-            if (!p.transit && c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m begins transit", m, 0, true))
-            if (p.transit && !c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m ends transit", m, 0, false))
+            if (!p.transit && c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m begins transit", 0, true))
+            if (p.transit && !c.transit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 0), "$m ends transit", 0, false))
 
             // Shadow Transit events
-            if (!p.shadowTransit && c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit begins", m, 1, true))
-            if (p.shadowTransit && !c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit ends", m, 1, false))
+            if (!p.shadowTransit && c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit begins", 1, true))
+            if (p.shadowTransit && !c.shadowTransit) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 1), "$m shadow transit ends", 1, false))
 
             // Occultation events - only if NOT Eclipsed (in shadow)
             if (!c.eclipse) {
-                if (!p.occultation && c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m enters occultation", m, 2, true))
-                if (p.occultation && !c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m exits occultation", m, 2, false))
+                if (!p.occultation && c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m enters occultation", 2, true))
+                if (p.occultation && !c.occultation) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 2), "$m exits occultation", 2, false))
             }
 
             // Eclipse events - only if NOT Occulted (behind disk)
             if (!c.occultation) {
-                if (!p.eclipse && c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m enters eclipse", m, 3, true))
-                if (p.eclipse && !c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m exits eclipse", m, 3, false))
+                if (!p.eclipse && c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m enters eclipse", 3, true))
+                if (p.eclipse && !c.eclipse) rawEvents.add(RawEvent(refineTimeMJD(tMJD, m, 3), "$m exits eclipse", 3, false))
             }
         }
         prevState = currState
@@ -351,8 +348,8 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
 
     for (raw in sortedRaw) {
         val jd = raw.mjd + 2400000.5
-        val (_, _, sunAlt) = getAltAz(jd, "Sun", lat, lon)
-        val (_, _, jupAlt) = getAltAz(jd, "Jupiter", lat, lon)
+        val sunAlt = getAltitude(jd, "Sun", lat, lon)
+        val jupAlt = getAltitude(jd, "Jupiter", lat, lon)
         val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > -0.5667)
         var pixelType = if (isVisible) JovEventPixel.VISIBLE else JovEventPixel.HIDDEN
 
@@ -460,17 +457,16 @@ private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
         val distEclipseSq = (x - cX).pow(2) + ((y - cY) * yScale).pow(2)
         val isEclipse = (z < 0) && (distEclipseSq < limitSq)
 
-        resultMap[name] = MoonCompleteState(x, y, z, sX, sY, isTransit, isOccultation, isShadow, isEclipse)
+        resultMap[name] = MoonCompleteState(isTransit, isOccultation, isShadow, isEclipse)
     }
     return resultMap
 }
 
-fun getAltAz(jd: Double, body: String, lat: Double, lon: Double): Triple<Double, Double, Double> {
+private fun getAltitude(jd: Double, body: String, lat: Double, lon: Double): Double {
     val state = AstroEngine.getBodyState(body, jd)
     val lst = calculateLSTHours(jd, lon)
-    val haHours = lst - state.ra/15.0
-    val alt = calculateAltitude(haHours, lat, state.dec)
-    return Triple(0.0, 0.0, alt)
+    val haHours = lst - state.ra / 15.0
+    return calculateAltitude(haHours, lat, state.dec)
 }
 
 private fun refineTimeMJD(tMJD_before: Double, moon: String, typeIdx: Int): Double {
