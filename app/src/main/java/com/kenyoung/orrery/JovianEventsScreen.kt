@@ -354,8 +354,8 @@ fun JovianSystemDiagram(moons: List<MoonVisualState>) {
             val bandThickness = jH / 10f
             val bandWidth = jW * 0.8f
             val bandXOffset = jW * 0.1f
-            val band1Top = currentY - jH / 4 - bandThickness / 2
-            val band2Top = currentY + jH / 4 - bandThickness / 2
+            val band1Top = currentY - jH / 8 - bandThickness / 2
+            val band2Top = currentY + jH / 8 - bandThickness / 2
 
             drawRect(tanColor, topLeft = Offset(centerX - jW / 2 + bandXOffset, band1Top), size = Size(bandWidth, bandThickness))
             drawRect(tanColor, topLeft = Offset(centerX - jW / 2 + bandXOffset, band2Top), size = Size(bandWidth, bandThickness))
