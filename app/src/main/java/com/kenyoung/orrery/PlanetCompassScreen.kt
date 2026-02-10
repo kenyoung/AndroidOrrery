@@ -140,6 +140,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
 
             // 3. Planets
+            val pAnchorMidnightJD = floor(eventEpochDay) + 2440587.5 - offset / 24.0
             for (p in planets) {
                 if (p.name != "Earth") {
                     // Visual Position: High Precision (Engine)
@@ -157,7 +158,12 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                         if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
                         if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
-                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow, eventEpochDay))
+                    // Compute dec at each event time for accurate Az/El
+                    val pRiseDec = if (!evD.rise.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + evD.rise / 24.0).dec else state.dec
+                    val pTransitDec = if (!events.transit.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0).dec else state.dec
+                    val pSetDec = if (!events.set.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0).dec else state.dec
+
+                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow, eventEpochDay, pRiseDec, pTransitDec, pSetDec))
                 }
             }
 

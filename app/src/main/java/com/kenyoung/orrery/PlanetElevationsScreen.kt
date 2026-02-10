@@ -382,7 +382,13 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val yPos = rowsStartY + ((i + 1) * rowHeight)
             // Use Standard Calculator (matches TransitsScreen)
             val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
-            val state = AstroEngine.getBodyState(p.name, jd)
+            // Dec at transit time for tick marks and max-alt display
+            val transitDec = if (!ev.transit.isNaN()) {
+                val transitJD = jd + ((ev.transit - offsetHours) / 24.0)
+                AstroEngine.getBodyState(p.name, transitJD).dec
+            } else {
+                AstroEngine.getBodyState(p.name, jd).dec
+            }
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
             if (sNorm < rNorm) sNorm += 24.0
@@ -391,14 +397,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (cNorm2 < sNorm) pIsUp = true
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
 
-            drawObjectLineAndTicks(yPos, p.name, ev, state.dec, pLabelColor.toArgb(), Color.Gray)
+            drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb(), Color.Gray)
 
             // Planet Current Elevation (Simple)
             if (isNightNow && pIsUp) {
+                val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+                val currentDec = AstroEngine.getBodyState(p.name, currentJD).dec
                 var tT = ev.transit; var tT_adj = tT
                 while (tT_adj < currentH - 12.0) tT_adj += 24.0
                 while (tT_adj > currentH + 12.0) tT_adj -= 24.0
-                val currentAlt = getAlt(currentH - tT_adj, state.dec)
+                val currentAlt = getAlt(currentH - tT_adj, currentDec)
                 if (currentAlt > 0) {
                     drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + 57f, currentElevationPaint) }
                 }
