@@ -167,18 +167,19 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         drawLine(blueAxis, Offset(0f, h - footerHeight), Offset(w, h - footerHeight), strokeWidth = 2f)
-        for (i in 0..24) {
-            val hourVal = floor(startHour) + i
-            val x = ((hourVal - startHour) * pixelsPerHour).toFloat()
+        // Place tick marks at integer LST hours by inverting LST→local-time
+        val currentLST = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
+        val lstAtStart = currentLST + ((startHour - currentH) * 1.0027379)
+        val firstLSTHour = ceil(lstAtStart).toInt()
+        for (i in 0..25) {
+            val lstHour = firstLSTHour + i
+            val lstDisplay = ((lstHour % 24) + 24) % 24
+            val localTime = currentH + (lstHour - currentLST) / 1.0027379
+            val x = ((localTime - startHour) * pixelsPerHour).toFloat()
             if (x >= -1f && x <= w + 1f) {
                 drawLine(blueAxis, Offset(x, h - footerHeight), Offset(x, h - footerHeight - 15f), strokeWidth = 2f)
-
-                val currentLST = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
-                val lst = normalizeTime(currentLST + ((hourVal - currentH) * 1.0027379))
-                val lstInt = lst.toInt()
-
-                val paintToUse = if (lstInt % 6 == 0) whiteAxisTextPaint else axisTextPaint
-                drawIntoCanvas { it.nativeCanvas.drawText(lstInt.toString(), x, h - footerHeight + 30f, paintToUse) }
+                val paintToUse = if (lstDisplay % 6 == 0) whiteAxisTextPaint else axisTextPaint
+                drawIntoCanvas { it.nativeCanvas.drawText(lstDisplay.toString(), x, h - footerHeight + 30f, paintToUse) }
             }
         }
 
