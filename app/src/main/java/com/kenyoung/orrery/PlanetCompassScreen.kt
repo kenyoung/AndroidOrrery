@@ -66,15 +66,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             // Visual Position: High Precision (Engine)
             val sunState = AstroEngine.getBodyState("Sun", jdStart)
 
-            val sunNoon = AstroEngine.getBodyState("Sun", jdStart + 0.5)
             val (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
-
-            // Calculate Sun Transit (Local Apparent Noon)
-            val nSun = (jdStart + 0.5) - 2451545.0
-            val gmstSun = (6.697374558 + 0.06570982441908 * nSun) % 24.0
-            val gmstFixedSun = if (gmstSun < 0) gmstSun + 24.0 else gmstSun
-            val sunTransitUT = normalizeTime((sunNoon.ra / 15.0) - (lon / 15.0) - gmstFixedSun)
-            val sunTransit = normalizeTime(sunTransitUT + offset)
+            val (sunTransit, _) = calculateSunTransit(epochDay, lon, offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
             newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED, anchorEpochDay = epochDay))

@@ -417,6 +417,16 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     return Pair(toLocal(tRise), toLocal(tSet))
 }
 
+fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
+    val jd = floor(epochDay) + 2440587.5 + 0.5
+    val sunNoon = AstroEngine.getBodyState("Sun", jd)
+    val n = jd - 2451545.0
+    val gmst = (6.697374558 + 0.06570982441908 * n) % 24.0
+    val gmstFixed = if (gmst < 0) gmst + 24.0 else gmst
+    val transitUT = normalizeTime(sunNoon.ra / 15.0 - lon / 15.0 - gmstFixed)
+    return Pair(normalizeTime(transitUT + timezoneOffset), sunNoon.dec)
+}
+
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
     // Use integer date — fractional epoch days from manual time entry shift the
     // scan start forward, causing events between now and now+|offset| to be missed.

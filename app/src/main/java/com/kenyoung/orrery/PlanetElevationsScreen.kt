@@ -305,22 +305,12 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- DRAW SUN LINE (Row 1) ---
         val sunY = chartTop + (chartH * 0.12f)
-        // Compute Sun transit using GMST formula
-        fun sunTransitAndDec(epochDay: Double): Pair<Double, Double> {
-            val jd = epochDay + 2440587.5 + 0.5
-            val sunNoon = AstroEngine.getBodyState("Sun", jd)
-            val n = jd - 2451545.0
-            val gmst0 = (6.697374558 + 0.06570982441908 * n) % 24.0
-            val gmstFixed = if (gmst0 < 0) gmst0 + 24.0 else gmst0
-            val transitUT = normalizeTime(sunNoon.ra / 15.0 - lon / 15.0 - gmstFixed)
-            return Pair(normalizeTime(transitUT + offsetHours), sunNoon.dec)
-        }
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
-            val (transitToday, sunDecToday) = sunTransitAndDec(epochDayInt)
+            val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED, sunRed)
         }
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
-            val (transitTomorrow, sunDecTomorrow) = sunTransitAndDec(epochDayInt + 1.0)
+            val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED, sunRed)
         }
 
