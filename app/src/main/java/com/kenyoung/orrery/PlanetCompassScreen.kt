@@ -409,7 +409,7 @@ fun CompassCanvas(
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0
-                val (currAz, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
+                val (_, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val haNorm = normalizeHourAngle(lst - raHours)
                 // Use geometric alt vs same target as rise/set calculation
                 val isUp = currAlt > obj.targetAlt
@@ -498,7 +498,6 @@ class CompassPaints(
     val tableHeaderLeft = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.LEFT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
     val tableHeaderRight = Paint().apply { color=headerCol; textSize=24f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 
-    val tableDataCenter = Paint().apply { textSize=29f; textAlign=Paint.Align.CENTER; typeface=Typeface.MONOSPACE; isAntiAlias=true }
     val tableDataLeft = Paint().apply { textSize=29f; textAlign=Paint.Align.LEFT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
     val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 }

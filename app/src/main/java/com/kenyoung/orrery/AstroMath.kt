@@ -254,11 +254,6 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val earthState = AstroEngine.getBodyState("Earth", jd)
     val jupState = AstroEngine.getBodyState("Jupiter", jd)
 
-    // Vectors in Heliocentric Ecliptic Coords
-    // Renamed to avoid conflict with Meeus variables later
-    val J_vec = jupState.helioPos // Sun -> Jupiter
-    val E_vec = earthState.helioPos // Sun -> Earth
-
     val r = earthState.distSun
     val R = jupState.distSun
     val Delta = jupState.distGeo

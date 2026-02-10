@@ -61,7 +61,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
             val startTime = System.nanoTime()
             val startOffset = animDayOffset
             while (isAnimating) {
-                withInfiniteAnimationFrameMillis { frameTimeMillis ->
+                withInfiniteAnimationFrameMillis { _ ->
                     val now = System.nanoTime()
                     val elapsedSeconds = (now - startTime) / 1_000_000_000.0
                     val newOffset = startOffset + elapsedSeconds

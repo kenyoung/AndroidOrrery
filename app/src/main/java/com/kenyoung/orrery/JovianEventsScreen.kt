@@ -384,11 +384,6 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
 
 private fun mjdToJD(mjd: Double): Double = mjd + 2400000.5
 
-private fun mjdToLocalDate(mjd: Double): LocalDate {
-    val unixDay = (mjd - 40587.0).toLong()
-    return LocalDate.ofEpochDay(unixDay)
-}
-
 private fun mjdToInstant(mjd: Double): Instant {
     val unixDay = (mjd - 40587.0).toLong()
     val fracDay = mjd - floor(mjd)

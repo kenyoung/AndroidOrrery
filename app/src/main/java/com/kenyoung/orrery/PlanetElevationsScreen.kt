@@ -72,7 +72,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     val blueAxis = neptuneBlue
     val standardGray = Color.Gray
     val textYellow = LabelColor
-    val sunRed = Color.Red
     val labelRed = Color.Red
     val labelGreen = Color.Green
     val currentLineGreen = Color(0xFF00FF00)
@@ -218,7 +217,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         data class LabelData(val text: String, val x: Float, val y: Float, val color: Int)
         val labelsToDraw = mutableListOf<LabelData>()
 
-        fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int, lineColor: Color) {
+        fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int) {
             if (!ev.rise.isNaN() && !ev.set.isNaN()) {
                 val candidates = listOf(-24.0, 0.0, 24.0)
                 candidates.forEach { shift ->
@@ -305,11 +304,11 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val sunY = chartTop + (chartH * 0.12f)
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED, sunRed)
+            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
         }
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
             val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED, sunRed)
+            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED)
         }
 
         // --- DRAW MOON (Row 2) ---
@@ -357,7 +356,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
         val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
 
-        drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb(), Color.Gray)
+        drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb())
 
         // --- DRAW PLANETS (Rows 3+) ---
         val rowsStartY = chartTop + (chartH * 0.28f)
@@ -383,7 +382,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (cNorm2 < sNorm) pIsUp = true
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
 
-            drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb(), Color.Gray)
+            drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb())
 
             // Planet Current Elevation (Simple)
             if (isNightNow && pIsUp) {

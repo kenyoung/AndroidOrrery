@@ -71,9 +71,6 @@ fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     var appSolarHours = meanSolarHours + eotHours
     appSolarHours = (appSolarHours % 24.0); if (appSolarHours < 0) appSolarHours += 24.0
 
-    // GMST (Greenwich Mean Sidereal Time)
-    val gmst = calculateGMST(jd)
-
     // Mean LST = GMST + Lon (hours)
     val meanLST = calculateLSTHours(jd, lon)
 

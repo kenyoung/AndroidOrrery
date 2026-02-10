@@ -39,7 +39,6 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
 
     // Time zone state
     var useLocalTime by remember { mutableStateOf(false) }
-    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
     val displayOffsetHours = if (useLocalTime) {
         TimeZone.getDefault().rawOffset.toDouble() / 3600000.0
     } else 0.0

@@ -42,7 +42,6 @@ private const val PARTIAL_LUNAR_ECLIPSE = 1
 private const val TOTAL_LUNAR_ECLIPSE = 2
 
 private const val M_2PI = 2.0 * Math.PI
-private const val M_HALF_PI = 0.5 * Math.PI
 private const val DEGREES_TO_RADIANS = Math.PI / 180.0
 // HOURS_TO_DEGREES now in AstroMath.kt
 
@@ -1249,7 +1248,6 @@ private fun renderEclipse(
     val colorMediumGrey = Color(0xFF757575)  // For connecting lines
     val colorBlue = Color(0xFF0080FF)
     val colorYellow = LabelColor
-    val colorCream = Color(0xFFFFFDD0)
     val colorLightBlue = Color(0xFF87CEEB)
     val colorDarkBlueGreen = Color(0xFF006464)
 
@@ -1631,7 +1629,6 @@ private fun renderEclipse(
 
     // Moonset indicator
     var moonsetPx = 0f
-    var moonsetPy = 0f
     if (moonsetTJD != null) {
         val msSun = sunPosition(moonsetTJD)
         val msMoon = moonPosition(moonsetTJD)
@@ -1640,7 +1637,6 @@ private fun renderEclipse(
         val msSpY = -sin(-msSun.dec - msMoon.dec) * msDistCM
         val (px, py) = cmToPixels(msSpX, msSpY)
         moonsetPx = px
-        moonsetPy = py
         drawScope.drawCircle(colorRed, moonRadiusPixels.toFloat(), Offset(px, py), style = Stroke(2f))
         // Arrow pointing up from Moon
         val labelY = umbraMapTop + umbraMapHeight - 15f * scaleFactor
@@ -1654,7 +1650,6 @@ private fun renderEclipse(
 
     // Moonrise indicator
     var moonrisePx = 0f
-    var moonrisePy = 0f
     if (moonriseTJD != null) {
         val mrSun = sunPosition(moonriseTJD)
         val mrMoon = moonPosition(moonriseTJD)
@@ -1663,7 +1658,6 @@ private fun renderEclipse(
         val mrSpY = -sin(-mrSun.dec - mrMoon.dec) * mrDistCM
         val (px, py) = cmToPixels(mrSpX, mrSpY)
         moonrisePx = px
-        moonrisePy = py
         drawScope.drawCircle(colorRed, moonRadiusPixels.toFloat(), Offset(px, py), style = Stroke(2f))
         // Arrow pointing down from Moon
         val labelY = umbraMapTop + 15f * scaleFactor
