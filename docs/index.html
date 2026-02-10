@@ -94,11 +94,64 @@
             color: var(--muted);
             font-size: 0.95em;
         }
-    </style>
+    
+        .toc {
+            margin-top: 18px;
+        }
+
+        .toc-title {
+            margin: 0 0 10px;
+            color: var(--accent);
+            font-size: 1.35em;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        .toc-list {
+            margin: 0;
+            padding-left: 18px;
+            columns: 2;
+            column-gap: 28px;
+        }
+
+        .toc-list li {
+            margin: 2px 0;
+            break-inside: avoid;
+        }
+
+        @media (max-width: 650px) {
+            .toc-list {
+                columns: 1;
+            }
+        }
+
+</style>
 </head>
 <body>
     <main class="wrap">
         <h1>Orrery App Help</h1>
+
+        <div class="card toc">
+            <div class="toc-title">Table of Contents</div>
+            <ul class="toc-list">
+                <li><a href="#planet-transits">Planet Transits</a></li>
+                <li><a href="#planet-elevations">Planet Elevations</a></li>
+                <li><a href="#planet-compass">Planet Compass</a></li>
+                <li><a href="#planet-phenomena">Planet Phenomena</a></li>
+                <li><a href="#moon-calendar">Moon Calendar</a></li>
+                <li><a href="#lunar-eclipses">Lunar Eclipses</a></li>
+                <li><a href="#jovian-moons">Jovian Moons</a></li>
+                <li><a href="#jovian-moon-events">Jovian Moon Events</a></li>
+                <li><a href="#analemma">Analemma</a></li>
+                <li><a href="#meteor-showers">Meteor Showers</a></li>
+                <li><a href="#schematic-orrery">Schematic Orrery</a></li>
+                <li><a href="#to-scale-orrery">To-scale Orrery</a></li>
+                <li><a href="#astronomical-times">Astronomical Times</a></li>
+                <li><a href="#symbols-and-colors-used">Symbols and Colors Used</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+
 
         <div class="card">
             <p>
@@ -108,7 +161,7 @@
             </p>
         </div>
 
-        <h2>Planet Transits</h2>
+        <h2 id="planet-transits">Planet Transits</h2>
         <p>
             The default display is the Planet Transits display, which shows the times of sunset and sunrise and twilight
             as well as the rising, transit, and setting times of the planets. The times of the four major Moon phases,
@@ -140,7 +193,7 @@
             or Venus are plotted, and for those planets the rise and set lines are bright.
         </p>
         <hr>
-        <h2>Planet Elevations</h2>
+        <h2 id="planet-elevations">Planet Elevations</h2>
         <p>
 	  This display shows the elevation above the horizon for the Sun, Moon and planets. The UT is listed across the top, and the LST is listed across the bottom. Theo vertical lines show the time of sunset (left) and sunrise (right), along with blue shading for twilight. A horizontal line for each object shows the period of time during which the object is above the horizon. Tick marks on those lines show the elevation at 20 degree intervals, and a tick mark at the line's center shows the object's elevation at transit. A vertical line (gray before sunset, green after sunset) shows the current time, and during the time between sunset and sunrise the names of the objects that are currently visible are shown in green and the current elevation is shown at the intersection of the green current time line and the object's horizontal line.
 	<p>
@@ -148,7 +201,7 @@
 	</p>
         </p>
         <hr>
-        <h2>Planet Compass</h2>
+        <h2 id="planet-compass">Planet Compass</h2>
         <p>
 	  This display shows the current azimuth and elevation of the Sun, Moon and planets.  The full circle on the upper right shows the azimuth of each object. Objects above the horizon are shown in white, and objects below the horizon are red. The lengths of the lines connecting the circle to the object's symbol are meaningless - different lengths are used merely to prevent the symbols from overlapping. The semicircle on the upper left shows the current elevation for each object.
 	</p>
@@ -156,7 +209,7 @@
 	 Below the graphic figures is a table of the hour angle and rising, transit and setting times for all the plotted objects.  Objects above the horizon are named with green text, and red otherwise. The time of the next event for each object is shown in white, and the other events are shown in gray.
         </p>
         <hr>
-        <h2>Planet Phenomena</h2>
+        <h2 id="planet-phenomena">Planet Phenomena</h2>
         <p>
 	  The planet phenomena page shows a table with the date and hour of certain events related to a planet's position in the sky. The table has two columns, The left column shows the time of the most recent occurance of the phenomenon, and the right column show when the phenomenon will next occur.
 	</p>
@@ -168,7 +221,7 @@
 	</p>
 
         <hr>
-        <h2>Moon Calendar</h2>
+        <h2 id="moon-calendar">Moon Calendar</h2>
         <p>
 	  The Moon Calendar shows the phase of the Moon for every day within a 21 month interval, centered on the current month.
 	  You can swipe right or left to move forward or backward in time. Blue Moons (the second Full Moon in a calendar month) are shown in cyan.
@@ -177,7 +230,7 @@
 	  A yellow square is drawn around the current phase. All Full Moons are circled in red. Light gray shading is applied to the unilluminated portion of the Moon figure if earthshine might be visible. New Moons are shown in dark gray.
         </p>
         <hr>
-        <h2>Lunar Eclipses</h2>
+        <h2 id="lunar-eclipses">Lunar Eclipses</h2>
         <p>
 	  The Lunar Eclipse page will show you information about lunar eclipses within the time range of 1999 BC through 3000 AD. When you first select the page, you will be presented with a list of eclipses that occur during the current decade. The year range is listed near the top, and the "-" button moves you back one decade, and the "+" button move you forward one decade. Below the decade indicator is a set of buttons that allow you to select the type of eclipses that should appear in the list. By default Partial and Total eclipses are shown, but not wimpy, "Why did I stay up for this?" penumbral eclipses. You can also set a filter to show only eclipses that are visible from your location. The list can be quite long, so it is scrollable.  Tap on the date of the eclipse you are interested, to produce the eclipse display.
 	</p>
@@ -197,7 +250,7 @@
 	  The back button returns you to the eclipse selection list.
 	</p>
         <hr>
-	<h2> Jovian Moons</h2>
+	<h2 id="jovian-moons"> Jovian Moons</h2>
 	<p>
 	  The Jovian Moons display shows the positions of the four Gailean Moons relative to Jupiter. The current configuration is shown at the top, and the positions throughout the current calendar month are shown below it. Gray lines are drawn at 00:00 UT for each day. The "Animate" button showns how the moons move thoughout the month.
 	</p>
@@ -205,12 +258,12 @@
 	  The buttons on the lower right allow you to invert (north down, appropriate for Newtonian telescopes) or mirror reverse (appropriate for Schmidt Cassegrain or some refracting telescopes) the display, to match the view seen with your telescope.
 	</p>
         <hr>
-	<h2> Jovian Moon Events</h2>
+	<h2 id="jovian-moon-events"> Jovian Moon Events</h2>
 	<p>
 	  The Jovian Moon Events display shows a table of the start and stop times for eclipses (moon goes into Jupiter's shadow), occultations (moon goes behind Jupiter), transits (moon passes in front of Jupiter) and shadow transits (the moon's shadow falls on Jupiter's cloud deck). Events for the current and next UT day are shown, so some of the events listed may have already occured; a check mark is shown after those events. Events for which Jupiter is above the horizon and the Sun is below the horizon are shown in green, except for the next one which is shown in red. Other events are shown in gray.
 	</p>
         <hr>
-	<h2> Analemma</h2>
+	<h2 id="analemma"> Analemma</h2>
 	<p>
 	  The Analemma is a plot of the
 altitude of the Sun at transit, versus the Equation of Time for each
@@ -219,7 +272,7 @@ at old globes. The value for the current time is shown with a dot
 marked “Now”.
 	</p>
         <hr>
-	<h2> Meteor Showers</h2>
+	<h2 id="meteor-showers"> Meteor Showers</h2>
 	<p>
 	  The Meteor Showers page shows data for this year's periodic meteor shower events.  The main utility of this page is that it looks at the Moon's position during the shower, and figures out whether of not the sky will be dark enough to see the meteors. It goes without saying that you should not look for meteors from within a light-polluted city, but if the Moon is over the horizon even that will greatly reduce the number of meterors you will see.
 	</p>
@@ -235,7 +288,7 @@ marked “Now”.
 
         <hr>
 
-        <h2>Schematic Orrery</h2>
+        <h2 id="schematic-orrery">Schematic Orrery</h2>
         <p>
             The schematic Orrery page shows the current position of the planets (and our Moon) relative to the Sun, as seen
             from above the Sun’s north pole, with the top of the display oriented towards the Vernal Equinox. Nothing is to
@@ -249,14 +302,14 @@ marked “Now”.
             the display to the initial time.
         </p>
         <hr>
-        <h2>To-scale Orrery</h2>
+        <h2 id="to-scale-orrery">To-scale Orrery</h2>
         <p>
             The To-scale Orrery display is like the Schematic Orrery, except that the planet orbits are shown, to scale, as
             properly oriented ellipses with the Sun at one focus. Because the orbits of the inner planets are so small relative
             to Neptune’s orbit, pinch-to-zoom must be used to see all of the orbits distinctly. Halley's Comet is included, because it has an interesting highly eccentric retrograde orbit.
         </p>
 	<hr>
-	<h2>Astronomical Times</h2>
+	<h2 id="astronomical-times">Astronomical Times</h2>
 	<p>
 	  The Astronomical Times page displays several different times useful in astronomy:<br>
 	  <b>JD</b>: This is the Julian
@@ -279,7 +332,7 @@ Time, presumably because European astronomers didn’t want the day
 	</p>
 	<hr>
 
-        <h2>Symbols and Colors Used</h2>
+        <h2 id="symbols-and-colors-used">Symbols and Colors Used</h2>
 
         <style>
             /* Per-object colors for the "Symbols Used" list */
@@ -361,7 +414,7 @@ Time, presumably because European astronomers didn’t want the day
 
         <hr>
 
-        <h2>Contact</h2>
+        <h2 id="contact">Contact</h2>
         <p class="footer-note">
             Please send bug reports, suggestions for improvements, and in-app disappointments to
             <a href="mailto:orrery.app.help@gmail.com">orrery.app.help@gmail.com</a>.
