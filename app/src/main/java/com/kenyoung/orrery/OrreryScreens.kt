@@ -219,54 +219,19 @@ fun ScaleOrrery(epochDay: Double) {
                 canvas.nativeCanvas.drawText(p.symbol, pxHalley, pyHalley - halleyTextOffset, cometTextPaint)
             }
 
-            // --- HELPER FOR DIRECTION ARROWS ---
+            // --- DIRECTION ARROWS ---
             val arrowDistAU = 36.0
             val distPx = arrowDistAU * currentPixelsPerAU
             val lightBlue = 0xFF87CEFA.toInt()
             val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
             val arrowLen = 80f
 
-            fun drawArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-                val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
-
-                val xBase = cx - (distPx * cos(angleRad)).toFloat()
-                val yBase = cy - (distPx * sin(angleRad)).toFloat()
-
-                val tipX = cx - ((distPx + arrowLen) * cos(angleRad)).toFloat()
-                val tipY = cy - ((distPx + arrowLen) * sin(angleRad)).toFloat()
-
-                val lightBlueColor = Color(0xFF87CEFA)
-                drawLine(color = lightBlueColor, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
-
-                val headSize = 10f
-                val arrowHeadPath = Path().apply {
-                    val anglePerp = angleRad + (Math.PI / 2.0)
-                    val dx = (headSize * cos(anglePerp)).toFloat()
-                    val dy = (headSize * sin(anglePerp)).toFloat()
-                    moveTo(tipX, tipY)
-                    val backX = cx - ((distPx + (arrowLen - headSize)) * cos(angleRad)).toFloat()
-                    val backY = cy - ((distPx + (arrowLen - headSize)) * sin(angleRad)).toFloat()
-                    lineTo(backX + dx, backY + dy)
-                    lineTo(backX - dx, backY - dy)
-                    close()
-                }
-
-                drawIntoCanvas { canvas ->
-                    canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
-
-                    val labelDist = 45f
-                    val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
-                    val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
-                    val yShift = h / 50f
-
-                    canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
-                    canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
-                }
-            }
-
             // 1. Vernal Equinox
+            val vernalAngleRad = Math.toRadians(90.0 - 0.0)
+            val vernalBaseX = cx - (distPx * cos(vernalAngleRad)).toFloat()
+            val vernalBaseY = cy - (distPx * sin(vernalAngleRad)).toFloat()
             val vernalShiftX = w / 10f
-            drawArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
+            drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(vernalShiftX, 0f))
 
             // 2. Galactic Center
             val gcUnscaledOffsetX = (w * 0.84f) - cx
@@ -402,51 +367,19 @@ fun SchematicOrrery(epochDay: Double) {
             }
         }
 
-        // --- HELPER FOR DIRECTION ARROWS ---
+        // --- DIRECTION ARROWS ---
         val outerRadius = orbitStep * 8f
         val dist = outerRadius + 60f
         val lightBlue = 0xFF87CEFA.toInt()
         val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
         val arrowLen = 80f
 
-        fun drawSchematicArrow(eclipticLongDeg: Double, l1: String, l2: String, textOffset: Offset = Offset.Zero) {
-            val angleRad = Math.toRadians(90.0 - eclipticLongDeg)
-
-            val xBase = cx - (dist * cos(angleRad)).toFloat()
-            val yBase = cy - (dist * sin(angleRad)).toFloat()
-            val tipX = cx - ((dist + arrowLen) * cos(angleRad)).toFloat()
-            val tipY = cy - ((dist + arrowLen) * sin(angleRad)).toFloat()
-
-            val lightBlueColor = Color(0xFF87CEFA)
-            drawLine(color = lightBlueColor, start = Offset(xBase, yBase), end = Offset(tipX, tipY), strokeWidth = 4f)
-
-            val headSize = 10f
-            val arrowHeadPath = Path().apply {
-                val anglePerp = angleRad + (Math.PI / 2.0)
-                val dx = (headSize * cos(anglePerp)).toFloat()
-                val dy = (headSize * sin(anglePerp)).toFloat()
-                moveTo(tipX, tipY)
-                val backX = cx - ((dist + arrowLen - headSize) * cos(angleRad)).toFloat()
-                val backY = cy - ((dist + arrowLen - headSize) * sin(angleRad)).toFloat()
-                lineTo(backX + dx, backY + dy)
-                lineTo(backX - dx, backY - dy)
-                close()
-            }
-
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawPath(arrowHeadPath, arrowPaint)
-                val labelDist = 45f
-                val labelX = tipX - (labelDist * cos(angleRad)).toFloat() + textOffset.x
-                val labelY = tipY - (labelDist * sin(angleRad)).toFloat() + textOffset.y
-                val yShift = h / 50f
-                canvas.nativeCanvas.drawText(l1, labelX, labelY + yShift, labelPaint)
-                canvas.nativeCanvas.drawText(l2, labelX, labelY + 40f + yShift, labelPaint)
-            }
-        }
-
         // 1. Vernal Equinox
+        val vernalAngleRad = Math.toRadians(90.0 - 0.0)
+        val vernalBaseX = cx - (dist * cos(vernalAngleRad)).toFloat()
+        val vernalBaseY = cy - (dist * sin(vernalAngleRad)).toFloat()
         val vernalShiftX = (60f + (w / 10f)) - (0.296f * w) + (0.27f * w)
-        drawSchematicArrow(0.0, "To Vernal", "Equinox", Offset(vernalShiftX, 0f))
+        drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint, labelOffset = Offset(vernalShiftX, 0f))
 
         // 2. Galactic Center
         val gcBaseX = w * 0.84f
