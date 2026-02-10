@@ -301,8 +301,12 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
 
+        // --- Uniform vertical spacing for all bodies ---
+        val numBodies = planetList.size + 2  // Sun + Moon + planets
+        val rowHeight = chartH / (numBodies + 1).toFloat()
+
         // --- DRAW SUN LINE (Row 1) ---
-        val sunY = chartTop + (chartH * 0.12f)
+        val sunY = chartTop + rowHeight
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
@@ -337,7 +341,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             moonDec = toTopocentric(mTrans.ra, mTrans.dec, mTrans.distGeo, lat, lon, lstAtTransit).dec
         }
 
-        val moonY = chartTop + (chartH * 0.28f)
+        val moonY = chartTop + 2 * rowHeight
         val isNightNow = (xNow >= xSS && xNow <= xSR)
         // Determine if Moon is up at current time (handles midnight wrap correctly)
         var moonIsUp = false
@@ -360,12 +364,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb())
 
         // --- DRAW PLANETS (Rows 3+) ---
-        val rowsStartY = chartTop + (chartH * 0.28f)
         val jd = epochDayInt + 2440587.5
-        val rowHeight = (chartH * 0.72f) / (planetList.size + 1)
 
         planetList.forEachIndexed { i, p ->
-            val yPos = rowsStartY + ((i + 1) * rowHeight)
+            val yPos = chartTop + (i + 3) * rowHeight
             // Use Standard Calculator (matches TransitsScreen)
             val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
             // Dec at transit time for tick marks and max-alt display
