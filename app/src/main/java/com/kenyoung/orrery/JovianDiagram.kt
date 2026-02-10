@@ -6,6 +6,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.*
 
+val jovianCreamColor = Color(0xFFFDEEBD)
+val jovianMoonColors = mapOf(
+    "Io" to Color.Red,
+    "Europa" to Color(0xFF00FF00),
+    "Ganymede" to Color(0xFFADD8E6),
+    "Callisto" to Color(0xFFFFFF00)
+)
+
 data class MoonPosHighPrec(
     val x: Double, val y: Double, val z: Double,
     val shadowX: Double, val shadowY: Double,
@@ -74,7 +82,6 @@ fun DrawScope.drawJovianSystem(
     flipX: Float = 1f,
     flipY: Float = -1f
 ) {
-    val creamColor = Color(0xFFFDEEBD)
     val tanColor = Color(0xFFD2B48C)
     val shadowColor = Color.Black
 
@@ -92,7 +99,7 @@ fun DrawScope.drawJovianSystem(
 
     // 1. Jupiter (Z=0)
     drawList.add(DrawOp(0.0) {
-        drawOval(creamColor, topLeft = Offset(centerX - jW / 2, centerY - jH / 2), size = Size(jW, jH))
+        drawOval(jovianCreamColor, topLeft = Offset(centerX - jW / 2, centerY - jH / 2), size = Size(jW, jH))
         val bandThickness = jH / 10f
         val bandWidth = jW * 0.8f
         val bandXOffset = jW * 0.1f
@@ -102,12 +109,7 @@ fun DrawScope.drawJovianSystem(
         drawRect(tanColor, topLeft = Offset(centerX - jW / 2 + bandXOffset, band2Top), size = Size(bandWidth, bandThickness))
     })
 
-    val moonColors = mapOf(
-        "Io" to Color.Red,
-        "Europa" to Color(0xFF00FF00),
-        "Ganymede" to Color(0xFFADD8E6),
-        "Callisto" to Color(0xFFFFFF00)
-    )
+    val moonColors = jovianMoonColors
     val mSize = 7.5f
     val mHalf = mSize / 2f
 

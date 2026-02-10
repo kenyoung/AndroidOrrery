@@ -35,11 +35,10 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
 
     // Colors
     val bgColor = Color.Black
-    val creamColor = Color(0xFFFDEEBD)
-    val colorIo = Color.Red
-    val colorEu = Color(0xFF00FF00)
-    val colorGa = Color(0xFFADD8E6)
-    val colorCa = Color(0xFFFFFF00)
+    val colorIo = jovianMoonColors["Io"]!!
+    val colorEu = jovianMoonColors["Europa"]!!
+    val colorGa = jovianMoonColors["Ganymede"]!!
+    val colorCa = jovianMoonColors["Callisto"]!!
     val gridColor = Color.Gray
 
     // Orientation State
@@ -152,7 +151,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 val flipY = if (isNorthUp) -1f else 1f
                 drawJovianSystem(effectiveJD, centerX, currentY, w, flipX, flipY)
 
-                val moonColors = mapOf("Io" to colorIo, "Europa" to colorEu, "Ganymede" to colorGa, "Callisto" to colorCa)
+                val moonColors = jovianMoonColors
 
                 // --- GRAPH SECTION (Low Precision Cached) ---
                 val col1X = w * 0.25f
@@ -162,10 +161,10 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
 
                 drawLine(gridColor, Offset(w/2f, topSectionH), Offset(w/2f, h), strokeWidth = 1f)
                 val jLineOffset = 1.0f * graphScalePxPerRad
-                drawLine(creamColor, Offset(col1X - jLineOffset, topSectionH), Offset(col1X - jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
-                drawLine(creamColor, Offset(col1X + jLineOffset, topSectionH), Offset(col1X + jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
-                drawLine(creamColor, Offset(col2X - jLineOffset, topSectionH), Offset(col2X - jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
-                drawLine(creamColor, Offset(col2X + jLineOffset, topSectionH), Offset(col2X + jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
+                drawLine(jovianCreamColor, Offset(col1X - jLineOffset, topSectionH), Offset(col1X - jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
+                drawLine(jovianCreamColor, Offset(col1X + jLineOffset, topSectionH), Offset(col1X + jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
+                drawLine(jovianCreamColor, Offset(col2X - jLineOffset, topSectionH), Offset(col2X - jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
+                drawLine(jovianCreamColor, Offset(col2X + jLineOffset, topSectionH), Offset(col2X + jLineOffset, topSectionH + graphSectionH), strokeWidth = 2f)
 
                 val rowH = graphSectionH / daysSplit
                 for (d in 1..daysInMonth) {
