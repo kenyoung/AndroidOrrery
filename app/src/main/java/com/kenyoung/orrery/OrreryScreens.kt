@@ -24,6 +24,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
+private fun buildOrbitPath(
+    p: PlanetElements, cx: Float, cy: Float, pixelsPerAU: Float, steps: Int = 360
+): androidx.compose.ui.graphics.Path {
+    val path = androidx.compose.ui.graphics.Path()
+    val wBar = Math.toRadians(p.w_bar)
+    val nodeN = Math.toRadians(p.N)
+    val iRad = Math.toRadians(p.i)
+    for (step in 0..steps) {
+        val E = (step.toDouble() / steps) * 2.0 * Math.PI
+        val xv = p.a * (cos(E) - p.e)
+        val yv = p.a * sqrt(1 - p.e * p.e) * sin(E)
+        val u = atan2(yv, xv) + wBar - nodeN
+        val r = sqrt(xv * xv + yv * yv)
+        val xEcl = r * (cos(u) * cos(nodeN) - sin(u) * sin(nodeN) * cos(iRad))
+        val yEcl = r * (cos(u) * sin(nodeN) + sin(u) * cos(nodeN) * cos(iRad))
+        val px = cx - (yEcl * pixelsPerAU).toFloat()
+        val py = cy - (xEcl * pixelsPerAU).toFloat()
+        if (step == 0) path.moveTo(px, py) else path.lineTo(px, py)
+    }
+    path.close()
+    return path
+}
+
 private fun DrawScope.drawArbitraryArrow(
     baseX: Float, baseY: Float, pointingAngleDeg: Double,
     l1: String, l2: String, arrowLen: Float, arrowPaint: Paint, labelPaint: Paint,
@@ -141,28 +164,7 @@ fun ScaleOrrery(epochDay: Double) {
             // --- STANDARD PLANETS ---
             for (p in planetList) {
                 // 1. Draw Orbit Path (Keplerian elements define the ellipse shape)
-                val orbitPath = androidx.compose.ui.graphics.Path()
-                for (angleIdx in 0..100) {
-                    val M_sim = (angleIdx / 100.0) * 2.0 * Math.PI
-                    val E = solveKepler(M_sim, p.e)
-
-                    val xv = p.a * (cos(E) - p.e)
-                    val yv = p.a * sqrt(1 - p.e*p.e) * sin(E)
-
-                    val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
-                    val u = atan2(yv, xv) + w_bar - N
-                    val r = p.a * (1 - p.e * cos(E))
-
-                    val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
-                    val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
-
-                    // ROTATED 90 DEG: Map (x, y) -> (-y, x) for screen coordinates
-                    val px = cx - (y_ecl * currentPixelsPerAU).toFloat()
-                    val py = cy - (x_ecl * currentPixelsPerAU).toFloat()
-
-                    if (angleIdx == 0) orbitPath.moveTo(px, py) else orbitPath.lineTo(px, py)
-                }
-                orbitPath.close()
+                val orbitPath = buildOrbitPath(p, cx, cy, currentPixelsPerAU.toFloat())
                 drawPath(orbitPath, color = Color.Gray, style = Stroke(width = 2f))
 
                 // 2. Draw Planet Position (FROM ENGINE)
@@ -187,24 +189,7 @@ fun ScaleOrrery(epochDay: Double) {
 
             // --- HALLEY'S COMET ---
             val p = halley
-            // 1. Draw Orbit Path (Keplerian elements define the ellipse shape)
-            val halleyPath = androidx.compose.ui.graphics.Path()
-            val w_bar = Math.toRadians(p.w_bar); val N = Math.toRadians(p.N); val i_rad = Math.toRadians(p.i)
-
-            for (deg in 0..360) {
-                val E_rad = Math.toRadians(deg.toDouble())
-                val xv = p.a * (cos(E_rad) - p.e)
-                val yv = p.a * sqrt(1 - p.e*p.e) * sin(E_rad)
-                val v = atan2(yv, xv)
-                val u = v + w_bar - N
-                val r = sqrt(xv*xv + yv*yv)
-                val x_ecl = r * (cos(u) * cos(N) - sin(u) * sin(N) * cos(i_rad))
-                val y_ecl = r * (cos(u) * sin(N) + sin(u) * cos(N) * cos(i_rad))
-                val px = cx - (y_ecl * currentPixelsPerAU).toFloat()
-                val py = cy - (x_ecl * currentPixelsPerAU).toFloat()
-                if (deg == 0) halleyPath.moveTo(px, py) else halleyPath.lineTo(px, py)
-            }
-            halleyPath.close()
+            val halleyPath = buildOrbitPath(p, cx, cy, currentPixelsPerAU.toFloat())
             drawPath(halleyPath, color = Color.Gray, style = Stroke(width = 2f))
 
             // 2. Current Position Halley (FROM ENGINE - Hybrid)
