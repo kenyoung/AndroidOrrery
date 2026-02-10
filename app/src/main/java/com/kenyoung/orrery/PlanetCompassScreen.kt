@@ -122,7 +122,21 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
             val moonTargetAlt = -(0.5667 + moonSdDeg)
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow, moonAnchor))
+
+            // Compute Moon's topocentric dec at each event time for accurate Az/El
+            // (Moon moves ~13°/day so current-time dec drifts noticeably)
+            val anchorMidnightJD = floor(moonAnchor) + 2440587.5 - offset / 24.0
+            val moonDecAt = { jd: Double ->
+                val st = AstroEngine.getBodyState("Moon", jd)
+                val inst = Instant.ofEpochMilli(((jd - 2440587.5) * 86400000.0).toLong())
+                val lp = calculateLST(inst, lon).split(":")
+                toTopocentric(st.ra, st.dec, st.distGeo, lat, lon, lp[0].toDouble() + lp[1].toDouble() / 60.0).dec
+            }
+            val moonRiseDec = if (!moonEvents.rise.isNaN()) moonDecAt(anchorMidnightJD + moonEvents.rise / 24.0) else topoMoon.dec
+            val moonTransitDec = if (!moonEvents.transit.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.transit + if (moonTransitTomorrow) 24.0 else 0.0) / 24.0) else topoMoon.dec
+            val moonSetDec = if (!moonEvents.set.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.set + if (moonSetTomorrow) 24.0 else 0.0) / 24.0) else topoMoon.dec
+
+            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec, moonEvents, moonTargetAlt, moonTransitTomorrow, moonSetTomorrow, moonAnchor, moonRiseDec, moonTransitDec, moonSetDec))
 
 
             // 3. Planets
@@ -374,7 +388,7 @@ fun CompassCanvas(
 
             // 4. Data Table
             val tableTop = centerY + radius + 60f + (3 * rowHeight)
-            val cols = listOf(20f, w*0.22f, w*0.34f, w*0.44f, w*0.59f, w*0.69f, w*0.84f, w*0.96f)
+            val cols = listOf(20f, w*0.22f, w*0.33f, w*0.46f, w*0.58f, w*0.71f, w*0.83f, w*0.96f)
 
             val row1Y = tableTop; val row2Y = tableTop + rowHeight
 
@@ -382,10 +396,10 @@ fun CompassCanvas(
             nc.drawText("Transit", cols[4] + (cols[5]-cols[4]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
             nc.drawText("Setting", cols[6] + (cols[7]-cols[6]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
 
-            val timeColHeader = "Time ($timeLabel)"
+            val timeColHeader = "Time $timeLabel"
             nc.drawText("Planet", cols[0], row2Y, paints.tableHeaderLeft)
             nc.drawText("HA", cols[1], row2Y, paints.tableHeaderRight)
-            nc.drawText(timeColHeader, cols[2], row2Y, paints.tableHeaderLeft)
+            nc.drawText(timeColHeader, cols[2] - 17f, row2Y, paints.tableHeaderLeft)
             nc.drawText(timeColHeader, cols[4], row2Y, paints.tableHeaderLeft)
             nc.drawText(timeColHeader, cols[6], row2Y, paints.tableHeaderLeft)
             nc.drawText("Az", cols[3]+45f, row2Y, paints.tableHeaderRight)
@@ -422,7 +436,8 @@ fun CompassCanvas(
                 val riseColor = if (!isUp) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = riseColor
                 nc.drawText(riseStr, cols[2] - 17f, currY, paints.tableDataLeft)
-                val riseAz = calculateAzAtRiseSet(lat, obj.dec, true, obj.targetAlt)
+                val riseDecVal = if (obj.riseDec.isNaN()) obj.dec else obj.riseDec
+                val riseAz = calculateAzAtRiseSet(lat, riseDecVal, true, obj.targetAlt)
                 paints.tableDataRight.color = riseColor
                 nc.drawText("%.0f".format(riseAz), cols[3]+45f, currY, paints.tableDataRight)
 
@@ -435,7 +450,8 @@ fun CompassCanvas(
                 val transColor = if (isPre) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = transColor
                 nc.drawText(transStr, cols[4], currY, paints.tableDataLeft)
-                val transEl = 90.0 - abs(lat - obj.dec)
+                val transitDecVal = if (obj.transitDec.isNaN()) obj.dec else obj.transitDec
+                val transEl = 90.0 - abs(lat - transitDecVal)
                 paints.tableDataRight.color = transColor
                 nc.drawText("%.0f".format(transEl), cols[5]+45f, currY, paints.tableDataRight)
 
@@ -448,7 +464,8 @@ fun CompassCanvas(
                 val setColor = if (isPost) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = setColor
                 nc.drawText(setStr, cols[6], currY, paints.tableDataLeft)
-                val setAz = calculateAzAtRiseSet(lat, obj.dec, false, obj.targetAlt)
+                val setDecVal = if (obj.setDec.isNaN()) obj.dec else obj.setDec
+                val setAz = calculateAzAtRiseSet(lat, setDecVal, false, obj.targetAlt)
                 paints.tableDataRight.color = setColor
                 nc.drawText("%.0f".format(setAz), cols[7]+45f, currY, paints.tableDataRight)
 
@@ -467,7 +484,7 @@ fun CompassCanvas(
 
 // --- HELPER CLASSES & LOGIC ---
 
-data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false, val anchorEpochDay: Double = 0.0)
+data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false, val anchorEpochDay: Double = 0.0, val riseDec: Double = Double.NaN, val transitDec: Double = Double.NaN, val setDec: Double = Double.NaN)
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,

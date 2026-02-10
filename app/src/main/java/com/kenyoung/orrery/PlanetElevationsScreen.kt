@@ -327,6 +327,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         // --- DRAW MOON (Row 2) ---
         // Use Standard Calculator (matches TransitsScreen)
         var moonEv = calculateMoonEvents(epochDayInt, lat, lon, offsetHours, pairedRiseSet = true)
+        var moonEpochBase = epochDayInt
 
         // If all Moon events are in the past, advance to the next day
         if (!moonEv.rise.isNaN() && !moonEv.set.isNaN()) {
@@ -334,13 +335,14 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val moonSetAbsLocal = if (moonEv.set >= moonEv.rise) moonEv.set else moonEv.set + 24.0
             if (moonDayStartUT + moonSetAbsLocal / 24.0 < now.epochSecond.toDouble() / 86400.0) {
                 moonEv = calculateMoonEvents(epochDayInt + 1.0, lat, lon, offsetHours, pairedRiseSet = true)
+                moonEpochBase = epochDayInt + 1.0
             }
         }
 
         // Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
-        var moonDec = AstroEngine.getBodyState("Moon", epochDayInt + 2440587.5 + 0.5).dec
+        var moonDec = AstroEngine.getBodyState("Moon", moonEpochBase + 2440587.5 + 0.5).dec
         if (!moonEv.transit.isNaN()) {
-            val transitJD = epochDayInt + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
+            val transitJD = moonEpochBase + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
             val mTrans = AstroEngine.getBodyState("Moon", transitJD)
             // LST at Transit
             val transitInstant = Instant.ofEpochMilli(((transitJD - 2440587.5) * 86400000.0).toLong())
