@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -590,19 +591,27 @@ fun LocationDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Card(modifier = Modifier.fillMaxWidth(0.88f), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Enter Location", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Radio buttons
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    listOf(0 to "Phone", 1 to "Custom", 2 to "From List").forEach { (m, label) ->
+                    listOf(0 to "Phone", 1 to "Custom").forEach { (m, label) ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { mode = m; errorMsg = null }) {
                             RadioButton(selected = mode == m, onClick = { mode = m; errorMsg = null },
                                 colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.Gray))
                             Text(label, color = Color.White, fontSize = 13.sp)
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { mode = 2; errorMsg = null }) {
+                        RadioButton(selected = mode == 2, onClick = { mode = 2; errorMsg = null },
+                            colors = RadioButtonDefaults.colors(selectedColor = Color.White, unselectedColor = Color.Gray))
+                        Column {
+                            Text("From", color = Color.White, fontSize = 13.sp, lineHeight = 15.sp)
+                            Text("List", color = Color.White, fontSize = 13.sp, lineHeight = 15.sp)
                         }
                     }
                 }
