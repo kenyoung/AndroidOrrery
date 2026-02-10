@@ -16,11 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -28,17 +26,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
-
-// Helper data class for the High Precision View
-private data class MoonPosHighPrec(
-    val x: Double,
-    val y: Double,
-    val z: Double,
-    val shadowX: Double,
-    val shadowY: Double,
-    val shadowOnDisk: Boolean,
-    val eclipsed: Boolean
-)
 
 @Composable
 fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
@@ -49,8 +36,6 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     // Colors
     val bgColor = Color.Black
     val creamColor = Color(0xFFFDEEBD)
-    val tanColor = Color(0xFFD2B48C)
-    val shadowColor = Color.Black
     val colorIo = Color.Red
     val colorEu = Color(0xFF00FF00)
     val colorGa = Color(0xFFADD8E6)
@@ -162,69 +147,12 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 }
 
                 // --- TOP SECTION: HIGH PRECISION DIAGRAM ---
-                // We use the local high-precision calculator here
                 val currentPos = calculateHighPrecisionPositions(effectiveJD)
-
-                val topScalePxPerRad = ((w * 1.15f) / (2 * maxElongationRadii)).toFloat()
-
-                // Jupiter Flattening for Display
-                val jFlatFactor = 0.06487
-                val jW = topScalePxPerRad * 2f
-                val jH = jW * (1.0 - jFlatFactor).toFloat()
-
                 val flipX = if (isEastRight) -1f else 1f
                 val flipY = if (isNorthUp) -1f else 1f
-
-                data class DrawOp(val z: Double, val draw: DrawScope.() -> Unit)
-                val drawList = mutableListOf<DrawOp>()
-
-                // 1. Jupiter (Z=0)
-                drawList.add(DrawOp(0.0) {
-                    drawOval(creamColor, topLeft = Offset(centerX - jW/2, currentY - jH/2), size = androidx.compose.ui.geometry.Size(jW, jH))
-                    // Bands
-                    val bandThickness = jH / 10f
-                    val bandWidth = jW * 0.8f
-                    val bandXOffset = jW * 0.1f
-                    val band1Top = currentY - jH/8 - bandThickness/2
-                    val band2Top = currentY + jH/8 - bandThickness/2
-                    drawRect(tanColor, topLeft = Offset(centerX - jW/2 + bandXOffset, band1Top), size = androidx.compose.ui.geometry.Size(bandWidth, bandThickness))
-                    drawRect(tanColor, topLeft = Offset(centerX - jW/2 + bandXOffset, band2Top), size = androidx.compose.ui.geometry.Size(bandWidth, bandThickness))
-                })
+                drawJovianSystem(effectiveJD, centerX, currentY, w, flipX, flipY)
 
                 val moonColors = mapOf("Io" to colorIo, "Europa" to colorEu, "Ganymede" to colorGa, "Callisto" to colorCa)
-                val mSize = 7.5f; val mHalf = mSize / 2f
-
-                // 2. Shadows (Z slightly > 0)
-                moonColors.forEach { (name, _) ->
-                    val pos = currentPos[name]!!
-                    if (pos.shadowOnDisk) {
-                        drawList.add(DrawOp(0.1) {
-                            val sx = centerX + (pos.shadowX * topScalePxPerRad * flipX).toFloat()
-                            // Shadow Y must be scaled for flattening logic if passed raw
-                            // Our HighPrec calculator returns raw Y.
-                            // Visual Y should match the flattened disk.
-                            // Note: shadowX/Y from HighPrec are projected onto the flattened plane already.
-                            val sy = currentY + (pos.shadowY * topScalePxPerRad * flipY).toFloat()
-                            drawOval(shadowColor, topLeft = Offset(sx - mHalf, sy - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
-                        })
-                    }
-                }
-
-                // 3. Moons
-                moonColors.forEach { (name, col) ->
-                    val pos = currentPos[name]!!
-                    if (!pos.eclipsed) {
-                        drawList.add(DrawOp(pos.z) {
-                            val mx = centerX + (pos.x * topScalePxPerRad * flipX).toFloat()
-                            val my = currentY + (pos.y * topScalePxPerRad * flipY).toFloat()
-                            drawRect(col, topLeft = Offset(mx - mHalf, my - mHalf), size = androidx.compose.ui.geometry.Size(mSize, mSize))
-                        })
-                    }
-                }
-
-                // Sort and Draw
-                drawList.sortBy { it.z }
-                drawList.forEach { it.draw(this) }
 
                 // --- GRAPH SECTION (Low Precision Cached) ---
                 val col1X = w * 0.25f
@@ -370,69 +298,3 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     }
 }
 
-// --- HIGH PRECISION CALCULATOR (Local) ---
-// Replicates the physics logic from JovianEventsScreen
-private fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
-    // 1. Delta T
-    val jdTT = jd + (69.184 / 86400.0)
-
-    val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
-    val deltaAU = jupBody.distGeo
-
-    // 2. Precession
-    val T = (jdTT - 2451545.0) / 36525.0
-    val precessionDeg = 1.396971 * T + 0.0003086 * T * T
-    val jupLamDegDate = jupBody.eclipticLon + precessionDeg
-    val jupBetaDeg = jupBody.eclipticLat
-
-    val moons = JovianPrecision.highAccuracyJovSats(jdTT, deltaAU, jupLamDegDate, jupBetaDeg)
-
-    // Shadow Geometry
-    val sunState = AstroEngine.getBodyState("Sun", jdTT)
-    var raDiff = sunState.ra - jupBody.ra
-    while (raDiff < -180) raDiff += 360; while (raDiff > 180) raDiff -= 360
-    val shadowSign = if (raDiff > 0) 1.0 else -1.0
-
-    val r = AstroEngine.getBodyState("Earth", jdTT).distSun
-    val R = jupBody.distSun
-    val Delta = jupBody.distGeo
-    val cosAlpha = (R*R + Delta*Delta - r*r) / (2*R*Delta)
-    val alpha = acos(cosAlpha.coerceIn(-1.0, 1.0))
-    val shadowFactor = tan(alpha)
-    val xShiftPerZ = shadowSign * shadowFactor
-
-    val resultMap = mutableMapOf<String, MoonPosHighPrec>()
-    val FLATTENING = 0.06487
-    val yScale = 1.0 / (1.0 - FLATTENING)
-
-    // Radii for Eclipse check
-    val moonRadii = mapOf("Io" to 0.0255, "Europa" to 0.0218, "Ganymede" to 0.0368, "Callisto" to 0.0337)
-
-    for ((name, pos) in moons) {
-        val x = pos.x
-        val y = pos.y
-        val z = -pos.z // Invert Z (Positive = Front/Transit)
-
-        // Shadow Projection
-        val sX = x + (z * xShiftPerZ)
-        val sY = y
-        // Shadow Check on Flattened Disk
-        // We project the shadow coordinate onto the flattened system
-        val sYScaled = sY * yScale
-        val sDistSq = sX*sX + sYScaled*sYScaled
-        val shadowOnDisk = (z > 0) && (sDistSq < 1.0) // z>0 means moon is in front, so shadow is thrown back onto disk?
-        // Wait. High Precision Model: Z axis is Towards Earth.
-        // Transit: Moon in front (Z > 0). Shadow: Moon casts shadow onto background.
-        // If Z > 0 (Moon between Earth and Jupiter), shadow is BEHIND the moon, landing on Jupiter. Correct.
-
-        // Eclipse Check (Moon behind Jupiter)
-        val mRad = moonRadii[name] ?: 0.0
-        val cX = -(z * xShiftPerZ)
-        val cY = 0.0
-        val distEclipseSq = (x - cX).pow(2) + ((y - cY) * yScale).pow(2)
-        val isEclipsed = (z < 0) && (distEclipseSq < (1.0 + mRad).pow(2))
-
-        resultMap[name] = MoonPosHighPrec(x, y, z, sX, sY, shadowOnDisk, isEclipsed)
-    }
-    return resultMap
-}

@@ -22,10 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -62,18 +59,6 @@ data class MoonInstantState(
     val occultation: Boolean,
     val shadowTransit: Boolean,
     val eclipse: Boolean
-)
-
-data class MoonVisualState(
-    val name: String,
-    val x: Double,
-    val y: Double,
-    val z: Double,
-    val shadowX: Double,
-    val shadowY: Double,
-    val shadowOnDisk: Boolean,
-    val eclipsed: Boolean,
-    val color: Color
 )
 
 private data class MoonCompleteState(
@@ -116,13 +101,11 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
     val nowMJD = (currentInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
 
     var eventList by remember { mutableStateOf<List<JovianEventItem>?>(null) }
-    var visualState by remember { mutableStateOf<List<MoonVisualState>?>(null) }
 
     LaunchedEffect(startMJD, currentInstant, lat, lon) {
         withContext(Dispatchers.Default) {
             try {
                 eventList = generateJovianEvents(startMJD, currentInstant, lat, lon)
-                visualState = calculateVisualState(nowMJD)
             } catch (e: Exception) {
                 e.printStackTrace()
                 eventList = emptyList()
@@ -142,10 +125,9 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                 .height(60.dp)
                 .background(Color.Black)
         ) {
-            if (visualState != null) {
-                JovianSystemDiagram(visualState!!)
-            } else {
-                Text("Loading...", color = Color.Gray, modifier = Modifier.align(Alignment.Center))
+            val currentJD = mjdToJD(nowMJD)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawJovianSystem(currentJD, size.width / 2f, size.height / 2f, size.width)
             }
         }
 
@@ -319,77 +301,6 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
     }
 }
 
-// --- DIAGRAM COMPOSABLE ---
-
-@Composable
-fun JovianSystemDiagram(moons: List<MoonVisualState>) {
-    val creamColor = Color(0xFFFDEEBD)
-    val tanColor = Color(0xFFD2B48C)
-    val shadowColor = Color.Black
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val centerX = w / 2f
-        val currentY = h / 2f
-
-        // Scale: Fit +/- 32 Jupiter Radii
-        val safeWidth = if (size.width > 0) size.width else 1000f
-        val maxElongationRadii = 32.0
-        val topScalePxPerRad = ((safeWidth * 1.15f) / (2 * maxElongationRadii)).toFloat()
-
-        val jFlat = 15f / 16f
-        val jW = topScalePxPerRad * 2f
-        val jH = jW * jFlat
-
-        val flipX = 1f
-        val flipY = -1f
-
-        data class DrawOp(val z: Double, val draw: DrawScope.() -> Unit)
-        val drawList = mutableListOf<DrawOp>()
-
-        // 1. Jupiter
-        drawList.add(DrawOp(0.0) {
-            drawOval(creamColor, topLeft = Offset(centerX - jW / 2, currentY - jH / 2), size = Size(jW, jH))
-            val bandThickness = jH / 10f
-            val bandWidth = jW * 0.8f
-            val bandXOffset = jW * 0.1f
-            val band1Top = currentY - jH / 8 - bandThickness / 2
-            val band2Top = currentY + jH / 8 - bandThickness / 2
-
-            drawRect(tanColor, topLeft = Offset(centerX - jW / 2 + bandXOffset, band1Top), size = Size(bandWidth, bandThickness))
-            drawRect(tanColor, topLeft = Offset(centerX - jW / 2 + bandXOffset, band2Top), size = Size(bandWidth, bandThickness))
-        })
-
-        val mSize = 7.5f
-        val mHalf = mSize / 2f
-
-        moons.forEach { moon ->
-            if (moon.shadowOnDisk) {
-                if (!moon.shadowX.isNaN() && !moon.shadowY.isNaN()) {
-                    drawList.add(DrawOp(0.1) {
-                        val sx = centerX + (moon.shadowX * topScalePxPerRad * flipX).toFloat()
-                        val sy = currentY + (moon.shadowY * topScalePxPerRad * flipY).toFloat()
-                        drawOval(shadowColor, topLeft = Offset(sx - mHalf, sy - mHalf), size = Size(mSize, mSize))
-                    })
-                }
-            }
-            if (!moon.eclipsed) {
-                if (!moon.x.isNaN() && !moon.y.isNaN()) {
-                    drawList.add(DrawOp(moon.z) {
-                        val mx = centerX + (moon.x * topScalePxPerRad * flipX).toFloat()
-                        val my = currentY + (moon.y * topScalePxPerRad * flipY).toFloat()
-                        drawRect(moon.color, topLeft = Offset(mx - mHalf, my - mHalf), size = Size(mSize, mSize))
-                    })
-                }
-            }
-        }
-
-        drawList.sortBy { it.z }
-        drawList.forEach { it.draw(this) }
-    }
-}
-
 // --- GENERATION LOGIC ---
 
 private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, lat: Double, lon: Double): List<JovianEventItem> {
@@ -467,27 +378,6 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
         }
     }
     return finalItems
-}
-
-private fun calculateVisualState(mjd: Double): List<MoonVisualState> {
-    val systemState = getCompleteSystemState(mjdToJD(mjd))
-    val colors = mapOf(
-        "Io" to Color.Red,
-        "Europa" to Color(0xFF00FF00),
-        "Ganymede" to Color(0xFFADD8E6),
-        "Callisto" to Color(0xFFFFFF00)
-    )
-
-    return systemState.map { (name, state) ->
-        MoonVisualState(
-            name = name,
-            x = state.x, y = state.y, z = state.z,
-            shadowX = state.shadowX, shadowY = state.shadowY,
-            shadowOnDisk = state.isShadowTransit,
-            eclipsed = state.isEclipse,
-            color = colors[name] ?: Color.White
-        )
-    }
 }
 
 // --- MATH HELPERS (MJD AWARE) ---
