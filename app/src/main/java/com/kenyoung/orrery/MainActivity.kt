@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (isGranted) getLocationAndSetContent()
+            else setContent { OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0) }
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
