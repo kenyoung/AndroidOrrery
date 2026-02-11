@@ -234,7 +234,7 @@ fun MeteorShowerScreen(
             ) {
                 Row(horizontalArrangement = Arrangement.Center) {
                     Text("The sky will be very dark for ", color = LabelColor, fontSize = (14 * fontScale).sp)
-                    Text("%.2f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
+                    Text("%.1f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
                     Text(" hours", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
                 Row(horizontalArrangement = Arrangement.Center) {
