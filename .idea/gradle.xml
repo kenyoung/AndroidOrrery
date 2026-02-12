@@ -9,8 +9,8 @@
         <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
         <option name="modules">
           <set>
-            <option value="$PROJECT_DIR$" />
-            <option value="$PROJECT_DIR$/app" />
+            <option value="/media/rtm/ExtraDrive1/Downloads/mygits/AndroidOrrery" />
+            <option value="/media/rtm/ExtraDrive1/Downloads/mygits/AndroidOrrery/app" />
           </set>
         </option>
       </GradleProjectSettings>
