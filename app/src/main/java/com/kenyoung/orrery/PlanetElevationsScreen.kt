@@ -265,7 +265,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                         if (xW2 > xW1 && hasNight) {
                             drawLine(Color.White, Offset(xW1, yPos), Offset(xW2, yPos), strokeWidth = 6f)
                         }
-                        labelsToDraw.add(LabelData(name, (x1 + x2) / 2, yPos - tickHalf - labelGap, labelColorInt))
+                        labelsToDraw.add(LabelData(name, (x1 + x2) / 2, yPos - tickHalf - labelGap - objectLabelPaint.descent(), labelColorInt))
 
                         // TICK DRAWING LOGIC
                         tickIncrements.forEach { alt ->
