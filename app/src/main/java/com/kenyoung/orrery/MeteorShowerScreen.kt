@@ -336,16 +336,57 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkH
     return DarkHoursResult(totalHours, startTime, endTime)
 }
 
+// Moon illumination % -> max Moon elevation (deg) for sky to be "very dark"
+// Linearly interpolated between table entries.
+private val moonDarkThresholdTable = doubleArrayOf(
+    //  illum%,  maxElev
+    100.0, -6.8,
+     98.3, -6.4,
+     93.3, -6.0,
+     85.4, -5.5,
+     75.0, -5.0,
+     62.9, -4.4,
+     50.0, -3.8,
+     37.1, -3.1,
+     25.0, -2.2,
+     14.6, -1.1,
+      6.7,  0.0
+)
+
+fun moonDarkThreshold(illumPercent: Double): Double {
+    if (illumPercent >= moonDarkThresholdTable[0]) return moonDarkThresholdTable[1]
+    if (illumPercent <= moonDarkThresholdTable[moonDarkThresholdTable.size - 2])
+        return moonDarkThresholdTable[moonDarkThresholdTable.size - 1]
+    var i = 0
+    while (i < moonDarkThresholdTable.size - 2) {
+        val illumHi = moonDarkThresholdTable[i]
+        val elevHi = moonDarkThresholdTable[i + 1]
+        val illumLo = moonDarkThresholdTable[i + 2]
+        val elevLo = moonDarkThresholdTable[i + 3]
+        if (illumPercent <= illumHi && illumPercent >= illumLo) {
+            val frac = (illumPercent - illumLo) / (illumHi - illumLo)
+            return elevLo + frac * (elevHi - elevLo)
+        }
+        i += 2
+    }
+    return 0.0
+}
+
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
+    val jd = epochDay + 2440587.5
+
     // 1. Sun below nautical twilight
-    val sunState = AstroEngine.getBodyState("Sun", epochDay + 2440587.5)
+    val sunState = AstroEngine.getBodyState("Sun", jd)
     val sunAlt = getAltitude(sunState.ra, sunState.dec, epochDay, lat, lon)
     if (sunAlt >= NAUTICAL_TWILIGHT) return false
 
-    // 2. Moon Alt < -10
-    val moonState = AstroEngine.getBodyState("Moon", epochDay + 2440587.5)
+    // 2. Moon below illumination-dependent threshold
+    val moonState = AstroEngine.getBodyState("Moon", jd)
     val moonAlt = getAltitude(moonState.ra, moonState.dec, epochDay, lat, lon)
-    if (moonAlt >= -10.0) return false
+    var phaseAngle = (moonState.eclipticLon - sunState.eclipticLon) % 360.0
+    if (phaseAngle < 0) phaseAngle += 360.0
+    val illumPercent = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
+    if (moonAlt >= moonDarkThreshold(illumPercent)) return false
 
     return true
 }
