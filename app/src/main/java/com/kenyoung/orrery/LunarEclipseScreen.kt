@@ -1047,7 +1047,7 @@ private fun EclipseSelectionView(
 
         // Eclipse count
         Text(
-            text = "${filteredEclipses.size} eclipses found",
+            text = "${filteredEclipses.size} eclipses found - tap date to select one",
             color = Color.Gray,
             fontSize = 12.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
