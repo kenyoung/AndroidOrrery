@@ -406,12 +406,7 @@ private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
     val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
     val deltaAU = jupBody.distGeo
 
-    val T = (jdTT - 2451545.0) / 36525.0
-    val precessionDeg = 1.396971 * T + 0.0003086 * T * T
-    val jupLamDegDate = jupBody.eclipticLon + precessionDeg
-    val jupBetaDeg = jupBody.eclipticLat
-
-    val moonsMap = JovianPrecision.highAccuracyJovSats(jdTT, deltaAU, jupLamDegDate, jupBetaDeg)
+    val moonsMap = JovianPrecision.highAccuracyJovSats(jdTT, deltaAU, jupBody.eclipticLon, jupBody.eclipticLat)
 
     // Safety check for empty or null return (prevents map loop crash)
     if (moonsMap.isEmpty()) return emptyMap()

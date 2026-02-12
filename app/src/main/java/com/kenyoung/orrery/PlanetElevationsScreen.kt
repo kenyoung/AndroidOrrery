@@ -414,14 +414,13 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
             drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb())
 
-            // Planet Current Elevation (Simple)
+            // Planet Current Elevation (using apparent coordinates)
             if (isNightNow && pIsUp) {
                 val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
-                val currentDec = AstroEngine.getBodyState(p.name, currentJD).dec
-                var tT = ev.transit; var tT_adj = tT
-                while (tT_adj < currentH - 12.0) tT_adj += 24.0
-                while (tT_adj > currentH + 12.0) tT_adj -= 24.0
-                val currentAlt = getAlt(currentH - tT_adj, currentDec)
+                val pState = AstroEngine.getBodyState(p.name, currentJD)
+                val (pAppRa, pAppDec) = j2000ToApparent(pState.ra, pState.dec, currentJD)
+                val pLst = calculateLSTHours(currentJD, lon)
+                val currentAlt = applyRefraction(calculateAltitude(pLst - pAppRa / 15.0, lat, pAppDec))
                 if (currentAlt > 0) {
                     drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + elevReadoutOffset, currentElevationPaint) }
                 }
@@ -447,11 +446,13 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
         if (isNightNow && moonLineAtXNow) {
-            // Use same approach as tick marks: hour angle from transit time, with moonDec
-            var tT = moonEv.transit; var tT_adj = tT
-            while (tT_adj < currentH - 12.0) tT_adj += 24.0
-            while (tT_adj > currentH + 12.0) tT_adj -= 24.0
-            val currAlt = getAlt(currentH - tT_adj, moonDec)
+            // Use apparent topocentric coordinates for Moon elevation readout
+            val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+            val moonSt = AstroEngine.getBodyState("Moon", currentJD)
+            val (mAppRa, mAppDec) = j2000ToApparent(moonSt.ra, moonSt.dec, currentJD)
+            val mLst = calculateLSTHours(currentJD, lon)
+            val mTopo = toTopocentric(mAppRa, mAppDec, moonSt.distGeo, lat, lon, mLst)
+            val currAlt = applyRefraction(calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec))
             if (currAlt > 0) {
                 drawIntoCanvas { it.nativeCanvas.drawText(currAlt.toInt().toString(), xNow + 5f, moonY + elevReadoutOffset, currentElevationPaint) }
             }

@@ -63,14 +63,15 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val newList = mutableListOf<PlotObject>()
 
             // 1. Sun
-            // Visual Position: High Precision (Engine)
+            // Visual Position: High Precision (Engine), converted to apparent (of-date)
             val sunState = AstroEngine.getBodyState("Sun", jdStart)
+            val (sunAppRa, sunAppDec) = j2000ToApparent(sunState.ra, sunState.dec, jdStart)
 
             val (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
             val (sunTransit, _) = calculateSunTransit(epochDay, lon, offset)
 
             val sunEvents = PlanetEvents(sunRise, sunTransit, sunSet)
-            newList.add(PlotObject("Sun", "☉", redColorInt, sunState.ra, sunState.dec, sunEvents, HORIZON_REFRACTED, anchorEpochDay = epochDay))
+            newList.add(PlotObject("Sun", "☉", redColorInt, sunAppRa, sunAppDec, sunEvents, HORIZON_REFRACTED, anchorEpochDay = epochDay))
 
             // Anchor Moon/planet events to the observing night: before sunrise,
             // use the previous local day so events stay stable all night.
@@ -79,12 +80,13 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val eventEpochDay = if (currentLocalSolar < sunRise) epochDay - 1.0 else epochDay
 
             // 2. Moon
-            // Visual Position: High Precision (Engine)
+            // Visual Position: High Precision (Engine), converted to apparent (of-date)
             val moonState = AstroEngine.getBodyState("Moon", jdStart)
+            val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, jdStart)
 
             // Calculate LST for the current 'now' to place the dot correctly on the Radar
             val lstVal = calculateLSTHours(jdStart, lon)
-            val topoMoon = toTopocentric(moonState.ra, moonState.dec, moonState.distGeo, lat, lon, lstVal)
+            val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
 
             var moonEvBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
             var moonEvNext = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
@@ -119,8 +121,9 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val anchorMidnightJD = floor(moonAnchor) + 2440587.5 - offset / 24.0
             val moonDecAt = { jd: Double ->
                 val st = AstroEngine.getBodyState("Moon", jd)
+                val (appRa, appDec) = j2000ToApparent(st.ra, st.dec, jd)
                 val lst = calculateLSTHours(jd, lon)
-                toTopocentric(st.ra, st.dec, st.distGeo, lat, lon, lst).dec
+                toTopocentric(appRa, appDec, st.distGeo, lat, lon, lst).dec
             }
             val moonRiseDec = if (!moonEvents.rise.isNaN()) moonDecAt(anchorMidnightJD + moonEvents.rise / 24.0) else topoMoon.dec
             val moonTransitDec = if (!moonEvents.transit.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.transit + if (moonTransitTomorrow) 24.0 else 0.0) / 24.0) else topoMoon.dec
@@ -133,8 +136,9 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val pAnchorMidnightJD = floor(eventEpochDay) + 2440587.5 - offset / 24.0
             for (p in planets) {
                 if (p.name != "Earth") {
-                    // Visual Position: High Precision (Engine)
+                    // Visual Position: High Precision (Engine), converted to apparent (of-date)
                     val state = AstroEngine.getBodyState(p.name, jdStart)
+                    val (pAppRa, pAppDec) = j2000ToApparent(state.ra, state.dec, jdStart)
                     val col = p.color.toArgb()
 
                     // Events: ensure rise < transit < set chronologically
@@ -148,12 +152,15 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                         if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
                         if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
-                    // Compute dec at each event time for accurate Az/El
-                    val pRiseDec = if (!evD.rise.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + evD.rise / 24.0).dec else state.dec
-                    val pTransitDec = if (!events.transit.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0).dec else state.dec
-                    val pSetDec = if (!events.set.isNaN()) AstroEngine.getBodyState(p.name, pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0).dec else state.dec
+                    // Compute apparent dec at each event time for accurate Az/El
+                    val pRiseJD = pAnchorMidnightJD + evD.rise / 24.0
+                    val pTransitJD = pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0
+                    val pSetJD = pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0
+                    val pRiseDec = if (!evD.rise.isNaN()) { val s = AstroEngine.getBodyState(p.name, pRiseJD); j2000ToApparent(s.ra, s.dec, pRiseJD).second } else pAppDec
+                    val pTransitDec = if (!events.transit.isNaN()) { val s = AstroEngine.getBodyState(p.name, pTransitJD); j2000ToApparent(s.ra, s.dec, pTransitJD).second } else pAppDec
+                    val pSetDec = if (!events.set.isNaN()) { val s = AstroEngine.getBodyState(p.name, pSetJD); j2000ToApparent(s.ra, s.dec, pSetJD).second } else pAppDec
 
-                    newList.add(PlotObject(p.name, p.symbol, col, state.ra, state.dec, events, -0.5667, pTransitTomorrow, pSetTomorrow, eventEpochDay, pRiseDec, pTransitDec, pSetDec))
+                    newList.add(PlotObject(p.name, p.symbol, col, pAppRa, pAppDec, events, -0.5667, pTransitTomorrow, pSetTomorrow, eventEpochDay, pRiseDec, pTransitDec, pSetDec))
                 }
             }
 
@@ -503,16 +510,6 @@ class CompassPaints(
 }
 
 // --- SHARED MATH HELPERS ---
-
-// Saemundsson's formula: geometric (true) altitude -> apparent altitude
-// Adds atmospheric refraction so objects smoothly descend to 0° at the horizon
-fun applyRefraction(trueAltDeg: Double): Double {
-    if (trueAltDeg < -2.0) return trueAltDeg
-    val h = trueAltDeg.coerceAtLeast(-1.5)
-    val rArcmin = 1.02 / tan(Math.toRadians(h + 10.3 / (h + 5.11)))
-    val correction = (rArcmin / 60.0).coerceAtLeast(0.0)
-    return trueAltDeg + correction
-}
 
 fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, altitude: Double): Double {
     val latRad = Math.toRadians(lat)

@@ -72,8 +72,11 @@ fun calculateObliquity(jd: Double): Double {
     return 23.439291 - 0.0130042 * t
 }
 
-// Convert Equatorial (RA/Dec) to Ecliptic (Lon/Lat)
+// Convert Equatorial (RA/Dec) to Ecliptic (Lon/Lat) in ecliptic of date.
+// RA/Dec are J2000 (ICRF); obliquity is of-date; general precession in
+// ecliptic longitude shifts the result from J2000 equinox to equinox of date.
 fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+    val t = (jd - 2451545.0) / 36525.0
     val eps = Math.toRadians(calculateObliquity(jd))
     val alpha = Math.toRadians(raDeg)
     val delta = Math.toRadians(decDeg)
@@ -85,7 +88,185 @@ fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double
     val beta = asin(sinBeta)
     val lambda = atan2(cbSl, cbCl)
 
-    return Pair(normalizeDegrees(Math.toDegrees(lambda)), Math.toDegrees(beta))
+    // General precession in ecliptic longitude (Meeus eq. 21.6)
+    val precessionDeg = 1.396971 * t + 0.0003086 * t * t
+
+    return Pair(normalizeDegrees(Math.toDegrees(lambda) + precessionDeg), Math.toDegrees(beta))
+}
+
+// --- NUTATION (IAU 1980, 63-term series) ---
+
+data class NutationResult(val deltaPhi: Double, val deltaEps: Double, val eps: Double)
+
+private val nutSinCoef = arrayOf(
+    floatArrayOf(-171996.0f, -174.2f), floatArrayOf(-13187.0f, -1.6f), floatArrayOf(-2274.0f, -0.2f),
+    floatArrayOf(2062.0f, 0.2f), floatArrayOf(1426.0f, -3.4f), floatArrayOf(712.0f, 0.1f),
+    floatArrayOf(-517.0f, 1.2f), floatArrayOf(-386.0f, -0.4f), floatArrayOf(-301.0f, 0.0f),
+    floatArrayOf(217.0f, -0.5f), floatArrayOf(-158.0f, 0.0f), floatArrayOf(129.0f, 0.1f),
+    floatArrayOf(123.0f, 0.0f), floatArrayOf(63.0f, 0.0f), floatArrayOf(63.0f, 0.1f),
+    floatArrayOf(-59.0f, 0.0f), floatArrayOf(-58.0f, -0.1f), floatArrayOf(-51.0f, 0.0f),
+    floatArrayOf(48.0f, 0.0f), floatArrayOf(46.0f, 0.0f), floatArrayOf(-38.0f, 0.0f),
+    floatArrayOf(-31.0f, 0.0f), floatArrayOf(29.0f, 0.0f), floatArrayOf(29.0f, 0.0f),
+    floatArrayOf(26.0f, 0.0f), floatArrayOf(-22.0f, 0.0f), floatArrayOf(21.0f, 0.0f),
+    floatArrayOf(17.0f, -0.1f), floatArrayOf(16.0f, 0.0f), floatArrayOf(-16.0f, 0.1f),
+    floatArrayOf(-15.0f, 0.0f), floatArrayOf(-13.0f, 0.0f), floatArrayOf(-12.0f, 0.0f),
+    floatArrayOf(11.0f, 0.0f), floatArrayOf(-10.0f, 0.0f), floatArrayOf(-8.0f, 0.0f),
+    floatArrayOf(7.0f, 0.0f), floatArrayOf(-7.0f, 0.0f), floatArrayOf(-7.0f, 0.0f),
+    floatArrayOf(-7.0f, 0.0f), floatArrayOf(6.0f, 0.0f), floatArrayOf(6.0f, 0.0f),
+    floatArrayOf(6.0f, 0.0f), floatArrayOf(-6.0f, 0.0f), floatArrayOf(-6.0f, 0.0f),
+    floatArrayOf(5.0f, 0.0f), floatArrayOf(-5.0f, 0.0f), floatArrayOf(-5.0f, 0.0f),
+    floatArrayOf(-5.0f, 0.0f), floatArrayOf(4.0f, 0.0f), floatArrayOf(4.0f, 0.0f),
+    floatArrayOf(4.0f, 0.0f), floatArrayOf(-4.0f, 0.0f), floatArrayOf(-4.0f, 0.0f),
+    floatArrayOf(-4.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
+    floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
+    floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f)
+)
+
+private val nutCosCoef = arrayOf(
+    floatArrayOf(92025.0f, 8.9f), floatArrayOf(5736.0f, -3.1f), floatArrayOf(977.0f, -0.5f),
+    floatArrayOf(-895.0f, 0.5f), floatArrayOf(54.0f, -0.1f), floatArrayOf(-7.0f, 0.0f),
+    floatArrayOf(224.0f, -0.6f), floatArrayOf(200.0f, 0.0f), floatArrayOf(129.0f, -0.1f),
+    floatArrayOf(-95.0f, 0.3f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-70.0f, 0.0f),
+    floatArrayOf(-53.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-33.0f, 0.0f),
+    floatArrayOf(26.0f, 0.0f), floatArrayOf(32.0f, 0.0f), floatArrayOf(27.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(-24.0f, 0.0f), floatArrayOf(16.0f, 0.0f),
+    floatArrayOf(13.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-12.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-10.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(-8.0f, 0.0f), floatArrayOf(7.0f, 0.0f),
+    floatArrayOf(9.0f, 0.0f), floatArrayOf(7.0f, 0.0f), floatArrayOf(6.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(5.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
+    floatArrayOf(-3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
+    floatArrayOf(3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
+    floatArrayOf(-3.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
+    floatArrayOf(3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
+    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f)
+)
+
+private val nutMults = arrayOf(
+    intArrayOf(0, 0, 0, 0, 1), intArrayOf(-2, 0, 0, 2, 2), intArrayOf(0, 0, 0, 2, 2),
+    intArrayOf(0, 0, 0, 0, 2), intArrayOf(0, 1, 0, 0, 0), intArrayOf(0, 0, 1, 0, 0),
+    intArrayOf(-2, 1, 0, 2, 2), intArrayOf(0, 0, 0, 2, 1), intArrayOf(0, 0, 1, 2, 2),
+    intArrayOf(-2, -1, 0, 2, 2), intArrayOf(-2, 0, 1, 0, 0), intArrayOf(-2, 0, 0, 2, 1),
+    intArrayOf(0, 0, -1, 2, 2), intArrayOf(2, 0, 0, 0, 0), intArrayOf(0, 0, 1, 0, 1),
+    intArrayOf(2, 0, -1, 2, 2), intArrayOf(0, 0, -1, 0, 1), intArrayOf(0, 0, 1, 2, 1),
+    intArrayOf(-2, 0, 2, 0, 0), intArrayOf(0, 0, -2, 2, 1), intArrayOf(2, 0, 0, 2, 2),
+    intArrayOf(0, 0, 2, 2, 2), intArrayOf(0, 0, 2, 0, 0), intArrayOf(-2, 0, 1, 2, 2),
+    intArrayOf(0, 0, 0, 2, 0), intArrayOf(-2, 0, 0, 2, 0), intArrayOf(0, 0, -1, 2, 1),
+    intArrayOf(0, 2, 0, 0, 0), intArrayOf(2, 0, -1, 0, 1), intArrayOf(-2, 2, 0, 2, 2),
+    intArrayOf(0, 1, 0, 0, 1), intArrayOf(-2, 0, 1, 0, 1), intArrayOf(0, -1, 0, 0, 1),
+    intArrayOf(0, 0, 2, -2, 0), intArrayOf(2, 0, -1, 2, 1), intArrayOf(2, 0, 1, 2, 2),
+    intArrayOf(0, 1, 0, 2, 2), intArrayOf(-2, 1, 1, 0, 0), intArrayOf(0, -1, 0, 2, 2),
+    intArrayOf(2, 0, 0, 2, 1), intArrayOf(2, 0, 1, 0, 0), intArrayOf(-2, 0, 2, 2, 2),
+    intArrayOf(-2, 0, 1, 2, 1), intArrayOf(2, 0, -2, 0, 1), intArrayOf(2, 0, 0, 0, 1),
+    intArrayOf(0, -1, 1, 0, 0), intArrayOf(-2, -1, 0, 2, 1), intArrayOf(-2, 0, 0, 0, 1),
+    intArrayOf(0, 0, 2, 2, 1), intArrayOf(-2, 0, 2, 0, 1), intArrayOf(-2, 1, 0, 2, 1),
+    intArrayOf(0, 0, 1, -2, 0), intArrayOf(-1, 0, 1, 0, 0), intArrayOf(-2, 1, 0, 0, 0),
+    intArrayOf(1, 0, 0, 0, 0), intArrayOf(0, 0, 1, 2, 0), intArrayOf(0, 0, -2, 2, 2),
+    intArrayOf(-1, -1, 1, 0, 0), intArrayOf(0, 1, 1, 0, 0), intArrayOf(0, -1, 1, 2, 2),
+    intArrayOf(2, -1, -1, 2, 2), intArrayOf(0, 0, 3, 2, 2), intArrayOf(2, -1, 0, 2, 2)
+)
+
+fun calculateNutation(T: Double): NutationResult {
+    var D = normalizeDegrees(297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0)
+    var M = normalizeDegrees(357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0)
+    var Mprime = normalizeDegrees(134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250.0)
+    var F = normalizeDegrees(93.27191 + 483202.017538 * T - 0.0036825 * T * T + T * T * T / 327270.0)
+    var omega = normalizeDegrees(125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000.0)
+
+    var dP = 0.0
+    var dE = 0.0
+    for (i in 0 until 63) {
+        val arg = Math.toRadians(nutMults[i][0] * D + nutMults[i][1] * M + nutMults[i][2] * Mprime +
+                nutMults[i][3] * F + nutMults[i][4] * omega)
+        dP += (nutSinCoef[i][0] + nutSinCoef[i][1] * T) * sin(arg)
+        dE += (nutCosCoef[i][0] + nutCosCoef[i][1] * T) * cos(arg)
+    }
+    val deltaPhi = dP * 0.0001  // arcseconds
+    val deltaEps = dE * 0.0001  // arcseconds
+
+    val U = T / 100.0
+    var eps = -(4680.93 / 3600.0) * U -
+            (1.55 / 3600.0) * U * U +
+            (1999.25 / 3600.0) * U * U * U -
+            (51.38 / 3600.0) * U.pow(4) -
+            (249.67 / 3600.0) * U.pow(5) -
+            (39.05 / 3600.0) * U.pow(6) +
+            (7.12 / 3600.0) * U.pow(7) +
+            (27.87 / 3600.0) * U.pow(8) +
+            (5.79 / 3600.0) * U.pow(9) +
+            (2.45 / 3600.0) * U.pow(10)
+    eps += 23.0 + 26.0 / 60.0 + 21.448 / 3600.0 + deltaEps / 3600.0
+
+    return NutationResult(deltaPhi, deltaEps, eps)
+}
+
+// --- PRECESSION (Meeus 21.3) ---
+// Converts J2000 (ICRF) equatorial coordinates to mean-of-date equatorial coordinates
+fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+    val T = (jd - 2451545.0) / 36525.0
+    val T2 = T * T
+    val T3 = T2 * T
+
+    // Precession angles in degrees (Meeus 21.3, Lieske 1979 — arcsec constants / 3600)
+    val zetaA = (0.6406161 + 0.0003879 * T - 0.0000001 * T2) * T +
+            (0.0000839 - 0.0000001 * T) * T2 + 0.0000050 * T3
+    val zA = (0.6406161 + 0.0003879 * T - 0.0000001 * T2) * T +
+            (0.0003041 + 0.0000001 * T) * T2 + 0.0000051 * T3
+    val thetaA = (0.5567530 - 0.0002370 * T - 0.0000001 * T2) * T -
+            (0.0001185 + 0.0000001 * T) * T2 - 0.0000116 * T3
+
+    // Convert to radians
+    val zetaRad = Math.toRadians(zetaA)
+    val zRad = Math.toRadians(zA)
+    val thetaRad = Math.toRadians(thetaA)
+
+    val alphaRad = Math.toRadians(raDeg)
+    val deltaRad = Math.toRadians(decDeg)
+
+    val cosD = cos(deltaRad)
+    val sinD = sin(deltaRad)
+    val cosT = cos(thetaRad)
+    val sinT = sin(thetaRad)
+    val cosAZ = cos(alphaRad + zetaRad)
+    val sinAZ = sin(alphaRad + zetaRad)
+
+    val A = cosD * sinAZ
+    val B = cosT * cosD * cosAZ - sinT * sinD
+    val C = sinT * cosD * cosAZ + cosT * sinD
+
+    val raNew = normalizeDegrees(Math.toDegrees(atan2(A, B)) + Math.toDegrees(zRad))
+    val decNew = Math.toDegrees(asin(C.coerceIn(-1.0, 1.0)))
+
+    return Pair(raNew, decNew)
+}
+
+// --- J2000 TO APPARENT (precession + nutation) ---
+// Converts J2000 equatorial coordinates to apparent (true) equatorial coordinates of date.
+// Use for display Az/Alt only — rise/set algorithms are calibrated with HORIZON_REFRACTED.
+fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+    // Step 1: precess J2000 → mean of date
+    val (meanRa, meanDec) = precessJ2000ToDate(raDeg, decDeg, jd)
+
+    // Step 2: apply nutation (mean → true of date)
+    val T = (jd - 2451545.0) / 36525.0
+    val nut = calculateNutation(T)
+    val dPsiDeg = nut.deltaPhi / 3600.0  // arcsec → degrees
+    val dEpsDeg = nut.deltaEps / 3600.0
+
+    val epsRad = Math.toRadians(nut.eps)
+    val alphaRad = Math.toRadians(meanRa)
+    val deltaRad = Math.toRadians(meanDec)
+
+    // Nutation corrections in RA and Dec (Meeus 23.1)
+    val dAlpha = (cos(epsRad) + sin(epsRad) * sin(alphaRad) * tan(deltaRad)) * dPsiDeg -
+            (cos(alphaRad) * tan(deltaRad)) * dEpsDeg
+    val dDelta = (sin(epsRad) * cos(alphaRad)) * dPsiDeg + sin(alphaRad) * dEpsDeg
+
+    return Pair(normalizeDegrees(meanRa + dAlpha), meanDec + dDelta)
 }
 
 // --- PARALLAX CORRECTION ---
@@ -158,6 +339,16 @@ fun calculateAltitude(haHours: Double, latDeg: Double, decDeg: Double): Double {
     val decRad = Math.toRadians(decDeg)
     val sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
     return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
+}
+
+// Saemundsson's formula: geometric (true) altitude -> apparent altitude
+// Adds atmospheric refraction so objects appear at their observed position
+fun applyRefraction(trueAltDeg: Double): Double {
+    if (trueAltDeg < -2.0) return trueAltDeg
+    val h = trueAltDeg.coerceAtLeast(-1.5)
+    val rArcmin = 1.02 / tan(Math.toRadians(h + 10.3 / (h + 5.11)))
+    val correction = (rArcmin / 60.0).coerceAtLeast(0.0)
+    return trueAltDeg + correction
 }
 
 fun normalizeTime(t: Double): Double {

@@ -257,119 +257,7 @@ private fun doubleNormalizeMinusPiToPi(angle: Double): Double {
     return a
 }
 
-// Nutation coefficients
-private val nutSinCoef = arrayOf(
-    floatArrayOf(-171996.0f, -174.2f), floatArrayOf(-13187.0f, -1.6f), floatArrayOf(-2274.0f, -0.2f),
-    floatArrayOf(2062.0f, 0.2f), floatArrayOf(1426.0f, -3.4f), floatArrayOf(712.0f, 0.1f),
-    floatArrayOf(-517.0f, 1.2f), floatArrayOf(-386.0f, -0.4f), floatArrayOf(-301.0f, 0.0f),
-    floatArrayOf(217.0f, -0.5f), floatArrayOf(-158.0f, 0.0f), floatArrayOf(129.0f, 0.1f),
-    floatArrayOf(123.0f, 0.0f), floatArrayOf(63.0f, 0.0f), floatArrayOf(63.0f, 0.1f),
-    floatArrayOf(-59.0f, 0.0f), floatArrayOf(-58.0f, -0.1f), floatArrayOf(-51.0f, 0.0f),
-    floatArrayOf(48.0f, 0.0f), floatArrayOf(46.0f, 0.0f), floatArrayOf(-38.0f, 0.0f),
-    floatArrayOf(-31.0f, 0.0f), floatArrayOf(29.0f, 0.0f), floatArrayOf(29.0f, 0.0f),
-    floatArrayOf(26.0f, 0.0f), floatArrayOf(-22.0f, 0.0f), floatArrayOf(21.0f, 0.0f),
-    floatArrayOf(17.0f, -0.1f), floatArrayOf(16.0f, 0.0f), floatArrayOf(-16.0f, 0.1f),
-    floatArrayOf(-15.0f, 0.0f), floatArrayOf(-13.0f, 0.0f), floatArrayOf(-12.0f, 0.0f),
-    floatArrayOf(11.0f, 0.0f), floatArrayOf(-10.0f, 0.0f), floatArrayOf(-8.0f, 0.0f),
-    floatArrayOf(7.0f, 0.0f), floatArrayOf(-7.0f, 0.0f), floatArrayOf(-7.0f, 0.0f),
-    floatArrayOf(-7.0f, 0.0f), floatArrayOf(6.0f, 0.0f), floatArrayOf(6.0f, 0.0f),
-    floatArrayOf(6.0f, 0.0f), floatArrayOf(-6.0f, 0.0f), floatArrayOf(-6.0f, 0.0f),
-    floatArrayOf(5.0f, 0.0f), floatArrayOf(-5.0f, 0.0f), floatArrayOf(-5.0f, 0.0f),
-    floatArrayOf(-5.0f, 0.0f), floatArrayOf(4.0f, 0.0f), floatArrayOf(4.0f, 0.0f),
-    floatArrayOf(4.0f, 0.0f), floatArrayOf(-4.0f, 0.0f), floatArrayOf(-4.0f, 0.0f),
-    floatArrayOf(-4.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
-    floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
-    floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f), floatArrayOf(-3.0f, 0.0f)
-)
-
-private val nutCosCoef = arrayOf(
-    floatArrayOf(92025.0f, 8.9f), floatArrayOf(5736.0f, -3.1f), floatArrayOf(977.0f, -0.5f),
-    floatArrayOf(-895.0f, 0.5f), floatArrayOf(54.0f, -0.1f), floatArrayOf(-7.0f, 0.0f),
-    floatArrayOf(224.0f, -0.6f), floatArrayOf(200.0f, 0.0f), floatArrayOf(129.0f, -0.1f),
-    floatArrayOf(-95.0f, 0.3f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-70.0f, 0.0f),
-    floatArrayOf(-53.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-33.0f, 0.0f),
-    floatArrayOf(26.0f, 0.0f), floatArrayOf(32.0f, 0.0f), floatArrayOf(27.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(-24.0f, 0.0f), floatArrayOf(16.0f, 0.0f),
-    floatArrayOf(13.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-12.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-10.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(-8.0f, 0.0f), floatArrayOf(7.0f, 0.0f),
-    floatArrayOf(9.0f, 0.0f), floatArrayOf(7.0f, 0.0f), floatArrayOf(6.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(5.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
-    floatArrayOf(-3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
-    floatArrayOf(3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(-3.0f, 0.0f),
-    floatArrayOf(-3.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(3.0f, 0.0f), floatArrayOf(3.0f, 0.0f),
-    floatArrayOf(3.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f),
-    floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f), floatArrayOf(0.0f, 0.0f)
-)
-
-private val nutMults = arrayOf(
-    intArrayOf(0, 0, 0, 0, 1), intArrayOf(-2, 0, 0, 2, 2), intArrayOf(0, 0, 0, 2, 2),
-    intArrayOf(0, 0, 0, 0, 2), intArrayOf(0, 1, 0, 0, 0), intArrayOf(0, 0, 1, 0, 0),
-    intArrayOf(-2, 1, 0, 2, 2), intArrayOf(0, 0, 0, 2, 1), intArrayOf(0, 0, 1, 2, 2),
-    intArrayOf(-2, -1, 0, 2, 2), intArrayOf(-2, 0, 1, 0, 0), intArrayOf(-2, 0, 0, 2, 1),
-    intArrayOf(0, 0, -1, 2, 2), intArrayOf(2, 0, 0, 0, 0), intArrayOf(0, 0, 1, 0, 1),
-    intArrayOf(2, 0, -1, 2, 2), intArrayOf(0, 0, -1, 0, 1), intArrayOf(0, 0, 1, 2, 1),
-    intArrayOf(-2, 0, 2, 0, 0), intArrayOf(0, 0, -2, 2, 1), intArrayOf(2, 0, 0, 2, 2),
-    intArrayOf(0, 0, 2, 2, 2), intArrayOf(0, 0, 2, 0, 0), intArrayOf(-2, 0, 1, 2, 2),
-    intArrayOf(0, 0, 0, 2, 0), intArrayOf(-2, 0, 0, 2, 0), intArrayOf(0, 0, -1, 2, 1),
-    intArrayOf(0, 2, 0, 0, 0), intArrayOf(2, 0, -1, 0, 1), intArrayOf(-2, 2, 0, 2, 2),
-    intArrayOf(0, 1, 0, 0, 1), intArrayOf(-2, 0, 1, 0, 1), intArrayOf(0, -1, 0, 0, 1),
-    intArrayOf(0, 0, 2, -2, 0), intArrayOf(2, 0, -1, 2, 1), intArrayOf(2, 0, 1, 2, 2),
-    intArrayOf(0, 1, 0, 2, 2), intArrayOf(-2, 1, 1, 0, 0), intArrayOf(0, -1, 0, 2, 2),
-    intArrayOf(2, 0, 0, 2, 1), intArrayOf(2, 0, 1, 0, 0), intArrayOf(-2, 0, 2, 2, 2),
-    intArrayOf(-2, 0, 1, 2, 1), intArrayOf(2, 0, -2, 0, 1), intArrayOf(2, 0, 0, 0, 1),
-    intArrayOf(0, -1, 1, 0, 0), intArrayOf(-2, -1, 0, 2, 1), intArrayOf(-2, 0, 0, 0, 1),
-    intArrayOf(0, 0, 2, 2, 1), intArrayOf(-2, 0, 2, 0, 1), intArrayOf(-2, 1, 0, 2, 1),
-    intArrayOf(0, 0, 1, -2, 0), intArrayOf(-1, 0, 1, 0, 0), intArrayOf(-2, 1, 0, 0, 0),
-    intArrayOf(1, 0, 0, 0, 0), intArrayOf(0, 0, 1, 2, 0), intArrayOf(0, 0, -2, 2, 2),
-    intArrayOf(-1, -1, 1, 0, 0), intArrayOf(0, 1, 1, 0, 0), intArrayOf(0, -1, 1, 2, 2),
-    intArrayOf(2, -1, -1, 2, 2), intArrayOf(0, 0, 3, 2, 2), intArrayOf(2, -1, 0, 2, 2)
-)
-
-private data class NutationResult(val deltaPhi: Double, val deltaEps: Double, val eps: Double)
-
-private fun nutation(T: Double): NutationResult {
-    var D = 297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0
-    D = doubleNormalize0to360(D)
-    var M = 357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0
-    M = doubleNormalize0to360(M)
-    var Mprime = 134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250.0
-    Mprime = doubleNormalize0to360(Mprime)
-    var F = 93.27191 + 483202.017538 * T - 0.0036825 * T * T + T * T * T / 327270.0
-    F = doubleNormalize0to360(F)
-    var omega = 125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000.0
-    omega = doubleNormalize0to360(omega)
-
-    var dP = 0.0
-    var dE = 0.0
-    for (i in 0 until 63) {
-        val arg = (nutMults[i][0] * D + nutMults[i][1] * M + nutMults[i][2] * Mprime +
-                nutMults[i][3] * F + nutMults[i][4] * omega) * DEGREES_TO_RADIANS
-        dP += (nutSinCoef[i][0] + nutSinCoef[i][1] * T) * sin(arg)
-        dE += (nutCosCoef[i][0] + nutCosCoef[i][1] * T) * cos(arg)
-    }
-    val deltaPhi = dP * 0.0001
-    val deltaEps = dE * 0.0001
-
-    val U = T / 100.0
-    var eps = -(4680.93 / 3600.0) * U -
-            (1.55 / 3600.0) * U * U +
-            (1999.25 / 3600.0) * U * U * U -
-            (51.38 / 3600.0) * U.pow(4) -
-            (249.67 / 3600.0) * U.pow(5) -
-            (39.05 / 3600.0) * U.pow(6) +
-            (7.12 / 3600.0) * U.pow(7) +
-            (27.87 / 3600.0) * U.pow(8) +
-            (5.79 / 3600.0) * U.pow(9) +
-            (2.45 / 3600.0) * U.pow(10)
-    eps += 23.0 + 26.0 / 60.0 + 21.448 / 3600.0 + deltaEps / 3600.0
-
-    return NutationResult(deltaPhi, deltaEps, eps)
-}
+// Nutation: uses calculateNutation() from AstroMath.kt
 
 // Moon position coefficients (Meeus Chapter 47)
 private val argMultlr = arrayOf(
@@ -451,7 +339,7 @@ private data class MoonPositionResult(
 
 private fun moonPosition(jDE: Double): MoonPositionResult {
     val T = (jDE - 2451545.0) / 36525.0
-    val nut = nutation(T)
+    val nut = calculateNutation(T)
 
     var Lprime = 218.3164477 + 481267.88123421 * T - 0.00157860 * T * T +
             T * T * T / 538841.0 - T * T * T * T / 65194000.0

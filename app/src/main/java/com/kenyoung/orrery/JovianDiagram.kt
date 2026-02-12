@@ -26,12 +26,7 @@ fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
     val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
     val deltaAU = jupBody.distGeo
 
-    val T = (jdTT - 2451545.0) / 36525.0
-    val precessionDeg = 1.396971 * T + 0.0003086 * T * T
-    val jupLamDegDate = jupBody.eclipticLon + precessionDeg
-    val jupBetaDeg = jupBody.eclipticLat
-
-    val moons = JovianPrecision.highAccuracyJovSats(jdTT, deltaAU, jupLamDegDate, jupBetaDeg)
+    val moons = JovianPrecision.highAccuracyJovSats(jdTT, deltaAU, jupBody.eclipticLon, jupBody.eclipticLat)
 
     val sunState = AstroEngine.getBodyState("Sun", jdTT)
     var raDiff = sunState.ra - jupBody.ra
