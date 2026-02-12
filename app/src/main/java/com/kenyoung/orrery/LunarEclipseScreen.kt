@@ -1144,57 +1144,58 @@ private fun EclipseDetailView(
             .background(Color.Black)
     ) {
         if (showCanvas) {
-            // Eclipse visualization canvas (full screen)
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation)
-            }
-
-            // Bottom row with Back button and time zone radio buttons
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 4.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Back button
-                TextButton(onClick = onBack) {
-                    Text("← Back", color = Color(0xFF00BFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Eclipse visualization canvas (uses remaining space above buttons)
+                Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation)
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // UT radio button
+                // Bottom row with Back button and time zone radio buttons
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { useStandardTime = false }
+                    modifier = Modifier
+                        .padding(start = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    RadioButton(
-                        selected = !useStandardTime,
-                        onClick = { useStandardTime = false },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = Color(0xFF00BFFF),
-                            unselectedColor = Color.Gray
-                        )
-                    )
-                    Text("UT", color = Color.White, fontSize = 14.sp)
-                }
+                    // Back button
+                    TextButton(onClick = onBack) {
+                        Text("← Back", color = Color(0xFF00BFFF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
 
-                // Standard Time radio button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { useStandardTime = true }
-                ) {
-                    RadioButton(
-                        selected = useStandardTime,
-                        onClick = { useStandardTime = true },
-                        colors = RadioButtonDefaults.colors(
-                            selectedColor = Color(0xFF00BFFF),
-                            unselectedColor = Color.Gray
+                    // UT radio button
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { useStandardTime = false }
+                    ) {
+                        RadioButton(
+                            selected = !useStandardTime,
+                            onClick = { useStandardTime = false },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = Color(0xFF00BFFF),
+                                unselectedColor = Color.Gray
+                            )
                         )
-                    )
-                    Text("Standard Time", color = Color.White, fontSize = 14.sp)
+                        Text("UT", color = Color.White, fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Standard Time radio button
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { useStandardTime = true }
+                    ) {
+                        RadioButton(
+                            selected = useStandardTime,
+                            onClick = { useStandardTime = true },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = Color(0xFF00BFFF),
+                                unselectedColor = Color.Gray
+                            )
+                        )
+                        Text("Standard Time", color = Color.White, fontSize = 14.sp)
+                    }
                 }
             }
         } else {
@@ -1280,12 +1281,12 @@ private fun renderEclipse(
     val umbraMapHeight = minOf(220f * scaleFactor, (height - umbraMapTop) * 0.30f)
     val umbraMapOffsetY = umbraMapTop + umbraMapHeight / 2
 
-    // Earth map - use remaining space with proper aspect ratio (2:1 for equirectangular)
+    // Earth map - use remaining space with 2:1 aspect ratio for equirectangular projection
     val earthMapTop = umbraMapTop + umbraMapHeight + 10f * scaleFactor
     val mapWidth = width - 2 * margin
-    // Earth map should have 2:1 aspect ratio (width:height) for proper equirectangular projection
-    // Increase by 15% to use more vertical space
-    val earthMapHeight = minOf(mapWidth / 2f * 1.15f, height - earthMapTop - margin)
+    val earthMapHeight = minOf(mapWidth / 2f, height - earthMapTop - margin)
+    val earthMapWidth = earthMapHeight * 2f
+    val earthMapLeft = margin + (mapWidth - earthMapWidth) / 2f
 
     val umbraMapScale = umbraMapHeight / (14.0 * MOON_RADIUS)
     val eta = 23.44 * DEGREES_TO_RADIANS
@@ -1347,14 +1348,14 @@ private fun renderEclipse(
 
     // Helper functions
     fun cmToPixels(x: Double, y: Double): Pair<Float, Float> {
-        val px = (x * umbraMapScale + mapWidth * 0.5).toFloat() + margin
+        val px = (x * umbraMapScale + earthMapWidth * 0.5).toFloat() + earthMapLeft
         val py = (-y * umbraMapScale + umbraMapOffsetY).toFloat()
         return Pair(px, py)
     }
 
     fun latLonToPixels(lat: Float, lon: Float): Pair<Float, Float> {
         val py = (-(lat / Math.PI.toFloat() + 0.5f) * earthMapHeight) + earthMapTop + earthMapHeight
-        val px = ((lon / M_2PI.toFloat() + 0.5f) * mapWidth) + margin
+        val px = ((lon / M_2PI.toFloat() + 0.5f) * earthMapWidth) + earthMapLeft
         return Pair(px, py)
     }
 
@@ -1543,11 +1544,11 @@ private fun renderEclipse(
     // ========== DRAW UMBRA MAP ==========
 
     // Background
-    drawScope.drawRect(colorWhite, Offset(margin, umbraMapTop),
-        androidx.compose.ui.geometry.Size(mapWidth, umbraMapHeight))
+    drawScope.drawRect(colorWhite, Offset(earthMapLeft, umbraMapTop),
+        androidx.compose.ui.geometry.Size(earthMapWidth, umbraMapHeight))
 
     // Center crosshairs
-    val cx = margin + mapWidth / 2
+    val cx = earthMapLeft + earthMapWidth / 2
     val cy = umbraMapOffsetY
     drawScope.drawLine(colorBlack, Offset(cx - 5, cy), Offset(cx + 5, cy), 2f)
     drawScope.drawLine(colorBlack, Offset(cx, cy - 5), Offset(cx, cy + 5), 2f)
@@ -1566,7 +1567,7 @@ private fun renderEclipse(
 
     // Ecliptic line
     val eclipticSlope = tan(eta * cos(sun.ra)).toFloat()
-    var eclipticX = mapWidth * 0.5f
+    var eclipticX = earthMapWidth * 0.5f
     var eclipticY = eclipticX * eclipticSlope
     if (abs(eclipticY) > umbraMapHeight * 0.5f) {
         eclipticY = umbraMapHeight * 0.5f * if (eclipticY > 0) 1f else -1f
@@ -1668,8 +1669,8 @@ private fun renderEclipse(
     // ========== DRAW EARTH MAP ==========
 
     // Background - white so total visibility regions are pure white
-    drawScope.drawRect(colorWhite, Offset(margin, earthMapTop),
-        androidx.compose.ui.geometry.Size(mapWidth, earthMapHeight))
+    drawScope.drawRect(colorWhite, Offset(earthMapLeft, earthMapTop),
+        androidx.compose.ui.geometry.Size(earthMapWidth, earthMapHeight))
 
     // Analytical visibility shading - compute longitude ranges per row
     // Pre-compute Moon positions and GMST for all key times
@@ -1687,7 +1688,7 @@ private fun renderEclipse(
 
     // Process each row analytically
     val pixelHeight = earthMapHeight.toInt()
-    val pixelWidth = mapWidth.toInt()
+    val pixelWidth = earthMapWidth.toInt()
 
     // Track previous row positions for terminator lines (null means no valid position)
     var prevTotEndSetX: Float? = null
@@ -1740,7 +1741,7 @@ private fun renderEclipse(
         var segmentStart = 0
 
         for (px in 0..pixelWidth) {
-            val lonDeg = ((px.toFloat() / mapWidth) - 0.5f) * 360.0
+            val lonDeg = ((px.toFloat() / earthMapWidth) - 0.5f) * 360.0
 
             // Determine visibility level: highest applicable level wins
             val level = when {
@@ -1760,7 +1761,7 @@ private fun renderEclipse(
                         else -> colorLightGrey
                     }
                     drawScope.drawRect(color,
-                        Offset(margin + segmentStart, screenY),
+                        Offset(earthMapLeft + segmentStart, screenY),
                         androidx.compose.ui.geometry.Size((px - segmentStart).toFloat(), 1f))
                 }
                 currentLevel = level
@@ -1769,8 +1770,8 @@ private fun renderEclipse(
         }
 
         // Calculate x positions for terminator lines and draw lines to previous row
-        fun lonToX(lonDeg: Double): Float = ((lonDeg / 360.0 + 0.5) * mapWidth).toFloat() + margin
-        val maxLineLength = mapWidth / 20
+        fun lonToX(lonDeg: Double): Float = ((lonDeg / 360.0 + 0.5) * earthMapWidth).toFloat() + earthMapLeft
+        val maxLineLength = earthMapWidth / 20
 
         // Moon sets when total phase ends
         val curTotEndSetX = if (!totEndRange.neverUp && !totEndRange.alwaysUp) lonToX(totEndRange.lon2) else null
@@ -1829,7 +1830,7 @@ private fun renderEclipse(
                 val (px1s, py1s) = latLonToPixels(lat1, lon1)
                 val (px2s, py2s) = latLonToPixels(lat2, lon2)
 
-                if (abs(px2s - px1s) < mapWidth / 2) {
+                if (abs(px2s - px1s) < earthMapWidth / 2) {
                     drawScope.drawLine(colorBlack, Offset(px1s, py1s), Offset(px2s, py2s), 1f)
                 }
             }
@@ -2054,7 +2055,7 @@ private fun renderEclipse(
 
         // East label (doesn't conflict with lines)
         leftTextPaint.color = colorBlack.toArgb()
-        canvas.nativeCanvas.drawText("East", margin + 5f, cy + 4f, leftTextPaint)
+        canvas.nativeCanvas.drawText("East", earthMapLeft + 5f, cy + 4f, leftTextPaint)
 
         // Moonset label
         if (moonsetTJD != null) {
@@ -2171,7 +2172,7 @@ private fun renderEclipse(
         // Search rightward from center
         for (i in 0..10) {
             val testX = cx + (20f + i * 15f) * scaleFactor
-            if (testX + northWidth < width - margin &&
+            if (testX + northWidth < earthMapLeft + earthMapWidth &&
                 !labelOverlapsLine(testX, northWidth, verticalLineXPositions)) {
                 northX = testX
                 found = true
@@ -2183,7 +2184,7 @@ private fun renderEclipse(
         if (!found) {
             for (i in 1..10) {
                 val testX = cx - (i * 15f + northWidth) * scaleFactor
-                if (testX > margin &&
+                if (testX > earthMapLeft &&
                     !labelOverlapsLine(testX, northWidth, verticalLineXPositions)) {
                     northX = testX
                     found = true
@@ -2279,7 +2280,7 @@ private fun renderEclipse(
                     val ecLabelTop = testY - labelHeight
                     val ecLabelBottom = testY + 2f
 
-                    if (testX > margin && testX + eclipticWidth < width - margin &&
+                    if (testX > earthMapLeft && testX + eclipticWidth < earthMapLeft + earthMapWidth &&
                         testY > umbraMapTop + labelHeight &&
                         !labelOverlapsLine(testX, eclipticWidth, verticalLineXPositions) &&
                         !rectIntersectsEclipticLine(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom) &&
@@ -2307,7 +2308,7 @@ private fun renderEclipse(
                     val ecLabelTop = testY - labelHeight
                     val ecLabelBottom = testY + 2f
 
-                    if (testX > margin && testX + eclipticWidth < width - margin &&
+                    if (testX > earthMapLeft && testX + eclipticWidth < earthMapLeft + earthMapWidth &&
                         testY < umbraMapBottom &&
                         !labelOverlapsLine(testX, eclipticWidth, verticalLineXPositions) &&
                         !rectIntersectsEclipticLine(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom) &&
