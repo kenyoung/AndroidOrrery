@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,12 +55,17 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
     val paints = remember { CompassPaints(labelColorInt, redColorInt, whiteColorInt, grayColorInt, tickColorInt, grayTickColorInt, tableHeaderColorInt) }
 
-    // --- ASYNC CALCULATION ---
+    // Keep a ref to the latest `now` so the loop always reads the current value
+    val currentNow by rememberUpdatedState(now)
+
+    // --- ASYNC CALCULATION (recalculates ~1s before each minute-boundary redraw) ---
     LaunchedEffect(epochDay, lat, lon) {
-        withContext(Dispatchers.Default) {
+        while (true) {
+            val snapNow = currentNow
+            withContext(Dispatchers.Default) {
             val offset = lon / 15.0
             // Derive JD from the UT Instant, not epochDay which encodes local time
-            val jdStart = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+            val jdStart = snapNow.epochSecond.toDouble() / 86400.0 + 2440587.5
             val newList = mutableListOf<PlotObject>()
 
             // 1. Sun
@@ -165,6 +171,13 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             }
 
             plotData = newList
+        }
+        // Wait until ~1 second before the next minute boundary so fresh
+        // data is ready when the once-per-minute redraw fires at :00.
+        val nowMillis = System.currentTimeMillis()
+        val millisInMinute = nowMillis % 60_000
+        val delayMs = if (millisInMinute < 59_000) 59_000 - millisInMinute else 60_000 + 59_000 - millisInMinute
+        delay(delayMs)
         }
     }
 
