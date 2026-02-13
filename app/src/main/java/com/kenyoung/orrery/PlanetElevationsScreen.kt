@@ -358,14 +358,20 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
 
-        // Dec: Use Transit Dec for general ticks (good enough for 20,40,60)
-        var moonDec = AstroEngine.getBodyState("Moon", moonEpochBase + 2440587.5 + 0.5).dec
+        // Dec: Use apparent topocentric dec at transit for tick marks
+        var moonDec = run {
+            val fallbackJD = moonEpochBase + 2440587.5 + 0.5
+            val st = AstroEngine.getBodyState("Moon", fallbackJD)
+            val (ar, ad) = j2000ToApparent(st.ra, st.dec, fallbackJD)
+            val lst = calculateLSTHours(fallbackJD, lon)
+            toTopocentric(ar, ad, st.distGeo, lat, lon, lst).dec
+        }
         if (!moonEv.transit.isNaN()) {
             val transitJD = moonEpochBase + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
             val mTrans = AstroEngine.getBodyState("Moon", transitJD)
-            // LST at Transit
+            val (appRa, appDec) = j2000ToApparent(mTrans.ra, mTrans.dec, transitJD)
             val lstAtTransit = calculateLSTHours(transitJD, lon)
-            moonDec = toTopocentric(mTrans.ra, mTrans.dec, mTrans.distGeo, lat, lon, lstAtTransit).dec
+            moonDec = toTopocentric(appRa, appDec, mTrans.distGeo, lat, lon, lstAtTransit).dec
         }
 
         val moonY = chartTop + 2 * rowHeight
@@ -397,12 +403,14 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val yPos = chartTop + (i + 3) * rowHeight
             // Use Standard Calculator (matches TransitsScreen)
             val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
-            // Dec at transit time for tick marks and max-alt display
+            // Apparent dec at transit time for tick marks and max-alt display
             val transitDec = if (!ev.transit.isNaN()) {
                 val transitJD = jd + ((ev.transit - offsetHours) / 24.0)
-                AstroEngine.getBodyState(p.name, transitJD).dec
+                val s = AstroEngine.getBodyState(p.name, transitJD)
+                j2000ToApparent(s.ra, s.dec, transitJD).second
             } else {
-                AstroEngine.getBodyState(p.name, jd).dec
+                val s = AstroEngine.getBodyState(p.name, jd)
+                j2000ToApparent(s.ra, s.dec, jd).second
             }
             var pIsUp = false
             var rNorm = ev.rise; var sNorm = ev.set
