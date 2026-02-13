@@ -170,7 +170,17 @@ private val nutMults = arrayOf(
     intArrayOf(2, -1, -1, 2, 2), intArrayOf(0, 0, 3, 2, 2), intArrayOf(2, -1, 0, 2, 2)
 )
 
+// Cache: nutation changes negligibly over ~1 day, so reuse the last result
+// when T is within 1 day (1/36525 century). Eliminates >99% of 63-term
+// evaluations during the Transits cache build.
+@Volatile private var cachedNutT = Double.NaN
+@Volatile private var cachedNutResult: NutationResult? = null
+private const val NUT_CACHE_TOL = 1.0 / 36525.0 // ~1 day in Julian centuries
+
 fun calculateNutation(T: Double): NutationResult {
+    val cached = cachedNutResult
+    if (cached != null && abs(T - cachedNutT) < NUT_CACHE_TOL) return cached
+
     var D = normalizeDegrees(297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0)
     var M = normalizeDegrees(357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0)
     var Mprime = normalizeDegrees(134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250.0)
@@ -201,7 +211,10 @@ fun calculateNutation(T: Double): NutationResult {
             (2.45 / 3600.0) * U.pow(10)
     eps += 23.0 + 26.0 / 60.0 + 21.448 / 3600.0 + deltaEps / 3600.0
 
-    return NutationResult(deltaPhi, deltaEps, eps)
+    val result = NutationResult(deltaPhi, deltaEps, eps)
+    cachedNutT = T
+    cachedNutResult = result
+    return result
 }
 
 // --- PRECESSION (Meeus 21.3) ---
@@ -651,6 +664,18 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     }
     fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
     return PlanetEvents(toLocal(tRise), toLocal(tTransit), toLocal(tSet))
+}
+
+// Estimate the epoch day (fractional) when the Moon transits at a given longitude.
+// epochDay should be an integer (start of day at 0h UT). Accuracy ~±1 hour.
+fun estimateMoonTransitEpochDay(epochDay: Double, lonDeg: Double): Double {
+    val jd0 = epochDay + 2440587.5
+    val moonRaHours = AstroEngine.getBodyState("Moon", jd0).ra / 15.0
+    val lst0 = calculateLSTHours(jd0, lonDeg)
+    var wait = moonRaHours - lst0
+    if (wait < 0) wait += 24.0
+    if (wait >= 24.0) wait -= 24.0
+    return epochDay + wait / 24.0
 }
 
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
