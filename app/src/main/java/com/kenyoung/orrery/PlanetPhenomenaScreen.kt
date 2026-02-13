@@ -123,7 +123,7 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
                                 canvas.nativeCanvas.drawText(dateText, baseX, currentY, datePaint)
                                 canvas.nativeCanvas.drawText(hourText, baseX + hourOffset, currentY, datePaint)
                                 if (ev.angle != null) {
-                                    val angText = "${ev.angle.toInt()}°"
+                                    val angText = "${round(ev.angle).toInt()}°"
                                     canvas.nativeCanvas.drawText(angText, baseX + angleOffset, currentY, datePaint)
                                 }
                             }
