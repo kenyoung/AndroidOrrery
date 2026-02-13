@@ -426,13 +426,32 @@ fun CompassCanvas(
             var anyAsterisk = false
             // Current display-timezone date for asterisk evaluation
             val currentDisplayDate = floor(now.epochSecond.toDouble() / 86400.0 + displayOffsetHours / 24.0).toLong()
+            val currentUtEpochDay = now.epochSecond.toDouble() / 86400.0
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0
-                val (_, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val haNorm = normalizeHourAngle(lst - raHours)
-                // Use geometric alt vs same target as rise/set calculation
-                val isUp = currAlt > obj.targetAlt
+
+                // Determine isUp/isPre/isPost by comparing current time against the
+                // displayed event times, avoiding the mismatch between apparent RA/Dec
+                // (used by altitude calc) and J2000 RA/Dec (used by rise/set solver).
+                val currentLocalSolar = (currentUtEpochDay - floor(obj.anchorEpochDay)) * 24.0 + offset
+                val riseH = obj.events.rise
+                val transitH = obj.events.transit + if (obj.transitTomorrow) 24.0 else 0.0
+                val setH = obj.events.set + if (obj.setTomorrow) 24.0 else 0.0
+                val isUp: Boolean
+                val isPre: Boolean
+                val isPost: Boolean
+                if (riseH.isNaN() || obj.events.set.isNaN() || obj.events.transit.isNaN()) {
+                    val (_, currAlt) = calculateAzAlt(lst, lat, raHours, obj.dec)
+                    isUp = currAlt > obj.targetAlt
+                    isPre = isUp && haNorm < 0
+                    isPost = isUp && haNorm > 0
+                } else {
+                    isUp = currentLocalSolar >= riseH && currentLocalSolar <= setH
+                    isPre = isUp && currentLocalSolar < transitH
+                    isPost = isUp && currentLocalSolar >= transitH
+                }
                 val anchorDate = floor(obj.anchorEpochDay).toLong()
 
                 // Name
@@ -461,7 +480,6 @@ fun CompassCanvas(
                 val transDisplay = normalizeTime(transRaw)
                 val transTomorrow = anchorDate + floor(transRaw / 24.0).toLong() > currentDisplayDate
                 val transStr = formatTimeMM(transDisplay, false) + if (transTomorrow) "*" else ""
-                val isPre = (isUp && haNorm < 0)
                 val transColor = if (isPre) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = transColor
                 nc.drawText(transStr, cols[4], currY, paints.tableDataLeft)
@@ -475,7 +493,6 @@ fun CompassCanvas(
                 val setDisplay = normalizeTime(setRaw)
                 val setIsTomorrow = anchorDate + floor(setRaw / 24.0).toLong() > currentDisplayDate
                 val setStr = formatTimeMM(setDisplay, false) + if (setIsTomorrow) "*" else ""
-                val isPost = (isUp && haNorm > 0)
                 val setColor = if (isPost) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = setColor
                 nc.drawText(setStr, cols[6], currY, paints.tableDataLeft)

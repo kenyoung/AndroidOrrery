@@ -561,19 +561,23 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     // Iteratively find Sun transit (recomputes position each step)
     var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
-        val state = AstroEngine.getBodyState("Sun", tGuess + 2440587.5)
-        val raHours = state.ra / 15.0
-        val lst = calculateLSTHours(tGuess + 2440587.5, lon)
+        val jd = tGuess + 2440587.5
+        val state = AstroEngine.getBodyState("Sun", jd)
+        val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
+        val raHours = appRa / 15.0
+        val lst = calculateLSTHours(jd, lon)
         val ha = normalizeHourAngle(lst - raHours)
         tGuess -= (ha / 24.0) * 0.99727
     }
     val tTransit = tGuess
 
     fun getAlt(t: Double): Double {
-        val state = AstroEngine.getBodyState("Sun", t + 2440587.5)
-        val lst = calculateLSTHours(t + 2440587.5, lon)
-        val haHours = lst - state.ra / 15.0
-        return calculateAltitude(haHours, lat, state.dec)
+        val jd = t + 2440587.5
+        val state = AstroEngine.getBodyState("Sun", jd)
+        val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
+        val lst = calculateLSTHours(jd, lon)
+        val haHours = lst - appRa / 15.0
+        return calculateAltitude(haHours, lat, appDec)
     }
 
     // Polar day/night check
@@ -603,11 +607,12 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
 fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
     val jd = floor(epochDay) + 2440587.5 + 0.5
     val sunNoon = AstroEngine.getBodyState("Sun", jd)
+    val (appRa, appDec) = j2000ToApparent(sunNoon.ra, sunNoon.dec, jd)
     val n = jd - 2451545.0
     val gmst = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (gmst < 0) gmst + 24.0 else gmst
-    val transitUT = normalizeTime(sunNoon.ra / 15.0 - lon / 15.0 - gmstFixed)
-    return Pair(normalizeTime(transitUT + timezoneOffset), sunNoon.dec)
+    val transitUT = normalizeTime(appRa / 15.0 - lon / 15.0 - gmstFixed)
+    return Pair(normalizeTime(transitUT + timezoneOffset), appDec)
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {
@@ -616,19 +621,22 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     val epochDayInt = floor(epochDay)
     var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
-        val state = AstroEngine.getBodyState(p.name, tGuess + 2440587.5)
-        val raHours = state.ra / 15.0
         val jd = tGuess + 2440587.5
+        val state = AstroEngine.getBodyState(p.name, jd)
+        val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
+        val raHours = appRa / 15.0
         val lst = calculateLSTHours(jd, lon)
         val ha = normalizeHourAngle(lst - raHours)
         tGuess -= (ha / 24.0) * 0.99727
     }
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
-        val state = AstroEngine.getBodyState(p.name, t + 2440587.5)
-        val lst = calculateLSTHours(t + 2440587.5, lon)
-        val haHours = lst - state.ra / 15.0
-        return calculateAltitude(haHours, lat, state.dec)
+        val jd = t + 2440587.5
+        val state = AstroEngine.getBodyState(p.name, jd)
+        val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
+        val lst = calculateLSTHours(jd, lon)
+        val haHours = lst - appRa / 15.0
+        return calculateAltitude(haHours, lat, appDec)
     }
     val targetAlt = -0.5667
     var tRise = tTransit - 0.25
@@ -666,8 +674,9 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     fun getMoonState(t: Double): Pair<Double, Double> {
         val jd = t + 2440587.5
         val state = AstroEngine.getBodyState("Moon", jd)
+        val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
         val lst = calculateLSTHours(jd, lon)
-        val topo = toTopocentric(state.ra, state.dec, state.distGeo, lat, lon, lst)
+        val topo = toTopocentric(appRa, appDec, state.distGeo, lat, lon, lst)
         val haHours = lst - topo.ra / 15.0
         val alt = calculateAltitude(haHours, lat, topo.dec)
         val sdDeg = Math.toDegrees(asin(moonRadiusM / (state.distGeo * AU_METERS)))
