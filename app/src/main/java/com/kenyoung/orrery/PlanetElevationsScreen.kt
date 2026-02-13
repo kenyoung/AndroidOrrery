@@ -321,7 +321,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                             val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
                             val tColor = Color(tickColor)
                             drawLine(tColor, Offset(xTick, yPos), Offset(xTick, yPos + tickHalf + 2f), strokeWidth = 2f)
-                            drawIntoCanvas { it.nativeCanvas.drawText(maxAlt.toInt().toString(), xTick, yPos + tickNumberOffset, tickTextPaint.apply { color = tickColor }) }
+                            drawIntoCanvas { it.nativeCanvas.drawText(round(maxAlt).toInt().toString(), xTick, yPos + tickNumberOffset, tickTextPaint.apply { color = tickColor }) }
                         }
                     }
                 }
@@ -422,7 +422,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val pLst = calculateLSTHours(currentJD, lon)
                 val currentAlt = applyRefraction(calculateAltitude(pLst - pAppRa / 15.0, lat, pAppDec))
                 if (currentAlt > 0) {
-                    drawIntoCanvas { it.nativeCanvas.drawText(currentAlt.toInt().toString(), xNow + 5f, yPos + elevReadoutOffset, currentElevationPaint) }
+                    drawIntoCanvas { it.nativeCanvas.drawText(round(currentAlt).toInt().toString(), xNow + 5f, yPos + elevReadoutOffset, currentElevationPaint) }
                 }
             }
         }
@@ -454,7 +454,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val mTopo = toTopocentric(mAppRa, mAppDec, moonSt.distGeo, lat, lon, mLst)
             val currAlt = applyRefraction(calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec))
             if (currAlt > 0) {
-                drawIntoCanvas { it.nativeCanvas.drawText(currAlt.toInt().toString(), xNow + 5f, moonY + elevReadoutOffset, currentElevationPaint) }
+                drawIntoCanvas { it.nativeCanvas.drawText(round(currAlt).toInt().toString(), xNow + 5f, moonY + elevReadoutOffset, currentElevationPaint) }
             }
         }
 
