@@ -376,6 +376,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         val moonY = chartTop + 2 * rowHeight
         val isNightNow = (xNow >= xSS && xNow <= xSR)
+        currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
         // Determine if Moon is up at current time (handles midnight wrap correctly)
         var moonIsUp = false
         for (shift in listOf(-24.0, 0.0, 24.0)) {
@@ -423,7 +424,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb())
 
             // Planet Current Elevation (using apparent coordinates)
-            if (isNightNow && pIsUp) {
+            if (pIsUp) {
                 val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
                 val pState = AstroEngine.getBodyState(p.name, currentJD)
                 val (pAppRa, pAppDec) = j2000ToApparent(pState.ra, pState.dec, currentJD)
@@ -453,7 +454,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 }
             }
         }
-        if (isNightNow && moonLineAtXNow) {
+        if (moonLineAtXNow) {
             // Use apparent topocentric coordinates for Moon elevation readout
             val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
             val moonSt = AstroEngine.getBodyState("Moon", currentJD)
