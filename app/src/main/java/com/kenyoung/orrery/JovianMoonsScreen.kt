@@ -249,16 +249,22 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 val tickStepRad = tickStepArcsec / arcsecPerRadius
                 val tickPx = tickStepRad * graphScalePxPerRad
 
+                val tickPx500 = 2 * tickPx
                 fun drawScale(cX: Float) {
-                    val tickY = scaleY + 10f; val numY = scaleY + 40f
+                    val tickY = scaleY + 10f; val numY = scaleY + 40f; val unitY = numY + 24f
                     drawLine(Color.White, Offset(cX, tickY), Offset(cX, tickY+10f))
                     drawLine(Color.White, Offset(cX - tickPx.toFloat(), tickY), Offset(cX - tickPx.toFloat(), tickY+10f))
                     drawLine(Color.White, Offset(cX + tickPx.toFloat(), tickY), Offset(cX + tickPx.toFloat(), tickY+10f))
+                    drawLine(Color.White, Offset(cX - tickPx500.toFloat(), tickY), Offset(cX - tickPx500.toFloat(), tickY+10f))
+                    drawLine(Color.White, Offset(cX + tickPx500.toFloat(), tickY), Offset(cX + tickPx500.toFloat(), tickY+10f))
                     drawIntoCanvas {
                         textPaint.textAlign = Paint.Align.CENTER; textPaint.textSize = 24f
                         it.nativeCanvas.drawText("0", cX, numY, textPaint)
                         it.nativeCanvas.drawText("250", cX + tickPx.toFloat(), numY, textPaint)
                         it.nativeCanvas.drawText("-250", cX - tickPx.toFloat(), numY, textPaint)
+                        it.nativeCanvas.drawText("500", cX + tickPx500.toFloat(), numY, textPaint)
+                        it.nativeCanvas.drawText("-500", cX - tickPx500.toFloat(), numY, textPaint)
+                        it.nativeCanvas.drawText("(arcsec)", cX, unitY, textPaint)
                     }
                 }
                 drawScale(col1X); drawScale(col2X)
