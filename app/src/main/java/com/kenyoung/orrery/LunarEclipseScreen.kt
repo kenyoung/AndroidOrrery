@@ -1,6 +1,7 @@
 package com.kenyoung.orrery
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -15,12 +16,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -1014,8 +1019,14 @@ private fun EclipseDetailView(
     now: Instant,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var showCanvas by remember { mutableStateOf(false) }
     var useStandardTime by remember { mutableStateOf(false) }
+
+    // Load Full Moon image once from assets
+    val moonBitmap = remember {
+        context.assets.open("SmallFullMoon.png").use { BitmapFactory.decodeStream(it).asImageBitmap() }
+    }
 
     // Calculate standard timezone offset from longitude (15° per hour)
     val standardTimeOffsetHours = longitude / 15.0
@@ -1042,7 +1053,7 @@ private fun EclipseDetailView(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Eclipse visualization canvas (uses remaining space above buttons)
                 Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation, currentTJD)
+                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation, currentTJD, moonBitmap)
                 }
 
                 // Bottom row with Back button and time zone radio buttons
@@ -1122,7 +1133,8 @@ private fun renderEclipse(
     useStandardTime: Boolean,
     standardTimeOffsetHours: Double,
     timeZoneAbbreviation: String,
-    currentTJD: Double
+    currentTJD: Double,
+    moonBitmap: ImageBitmap
 ) {
     // Time offset: 0 for UT, standardTimeOffsetHours for standard time
     val timeOffset = if (useStandardTime) standardTimeOffsetHours else 0.0
@@ -1520,8 +1532,8 @@ private fun renderEclipse(
     // Moon at maximum eclipse
     drawScope.drawCircle(colorYellow, moonRadiusPixels.toFloat(), Offset(shadowPx, shadowPy), style = Stroke(2f))
 
-    // Current Moon position (green filled circle) if within ±6 hours of penumbral phase
-    // and the circle fits entirely inside the Moon path diagram
+    // Current Moon position (Full Moon image) if within ±6 hours of penumbral phase
+    // and the image fits entirely inside the Moon path diagram
     if (currentTJD >= penEclipseStartTJD - 6.0 / 24.0 && currentTJD <= penEclipseEndTJD + 6.0 / 24.0) {
         val curSun = sunPosition(currentTJD)
         val curMoon = moonPosition(currentTJD)
@@ -1534,7 +1546,14 @@ private fun renderEclipse(
         val r = moonRadiusPixels.toFloat()
         if (curPx - r >= earthMapLeft && curPx + r <= earthMapLeft + earthMapWidth &&
             curPy - r >= umbraMapTop && curPy + r <= umbraMapTop + umbraMapHeight) {
-            drawScope.drawCircle(colorGreen, r, Offset(curPx, curPy))
+            val diameter = (2 * moonRadiusPixels).coerceAtLeast(1)
+            drawScope.drawImage(
+                moonBitmap,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(moonBitmap.width, moonBitmap.height),
+                dstOffset = IntOffset((curPx - r).toInt(), (curPy - r).toInt()),
+                dstSize = IntSize(diameter, diameter)
+            )
         }
     }
 
