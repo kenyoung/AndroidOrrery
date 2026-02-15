@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.time.Instant
 import java.util.TimeZone
 import kotlin.math.*
 
@@ -709,7 +710,8 @@ private fun filterEclipses(
 @Composable
 fun LunarEclipseScreen(
     latitude: Double,
-    longitude: Double
+    longitude: Double,
+    now: Instant
 ) {
     val context = LocalContext.current
 
@@ -745,6 +747,7 @@ fun LunarEclipseScreen(
             shoreline = shoreline ?: emptyList(),
             latitude = latitude,
             longitude = longitude,
+            now = now,
             onBack = { selectedEclipse = null }
         )
     } else {
@@ -1008,6 +1011,7 @@ private fun EclipseDetailView(
     shoreline: List<ShoreSegment>,
     latitude: Double,
     longitude: Double,
+    now: Instant,
     onBack: () -> Unit
 ) {
     var showCanvas by remember { mutableStateOf(false) }
@@ -1026,6 +1030,9 @@ private fun EclipseDetailView(
         showCanvas = true
     }
 
+    // Convert current instant to TJD for eclipse comparison
+    val currentTJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1035,7 +1042,7 @@ private fun EclipseDetailView(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Eclipse visualization canvas (uses remaining space above buttons)
                 Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation)
+                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation, currentTJD)
                 }
 
                 // Bottom row with Back button and time zone radio buttons
@@ -1114,7 +1121,8 @@ private fun renderEclipse(
     userLongitude: Double,
     useStandardTime: Boolean,
     standardTimeOffsetHours: Double,
-    timeZoneAbbreviation: String
+    timeZoneAbbreviation: String,
+    currentTJD: Double
 ) {
     // Time offset: 0 for UT, standardTimeOffsetHours for standard time
     val timeOffset = if (useStandardTime) standardTimeOffsetHours else 0.0
@@ -1511,6 +1519,24 @@ private fun renderEclipse(
 
     // Moon at maximum eclipse
     drawScope.drawCircle(colorYellow, moonRadiusPixels.toFloat(), Offset(shadowPx, shadowPy), style = Stroke(2f))
+
+    // Current Moon position (green filled circle) if within ±6 hours of penumbral phase
+    // and the circle fits entirely inside the Moon path diagram
+    if (currentTJD >= penEclipseStartTJD - 6.0 / 24.0 && currentTJD <= penEclipseEndTJD + 6.0 / 24.0) {
+        val curSun = sunPosition(currentTJD)
+        val curMoon = moonPosition(currentTJD)
+        val curDistCM = curMoon.distanceKM * 1.0e5
+        val curSpRA = curSun.ra - Math.PI - curMoon.ra
+        val curSpDec = -curSun.dec - curMoon.dec
+        val curSpX = sin(curSpRA) * curDistCM
+        val curSpY = -sin(curSpDec) * curDistCM
+        val (curPx, curPy) = cmToPixels(curSpX, curSpY)
+        val r = moonRadiusPixels.toFloat()
+        if (curPx - r >= earthMapLeft && curPx + r <= earthMapLeft + earthMapWidth &&
+            curPy - r >= umbraMapTop && curPy + r <= umbraMapTop + umbraMapHeight) {
+            drawScope.drawCircle(colorGreen, r, Offset(curPx, curPy))
+        }
+    }
 
     // Moonset indicator
     var moonsetPx = 0f
