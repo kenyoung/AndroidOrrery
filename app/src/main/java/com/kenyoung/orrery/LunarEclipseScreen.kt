@@ -1023,9 +1023,15 @@ private fun EclipseDetailView(
     var showCanvas by remember { mutableStateOf(false) }
     var useStandardTime by remember { mutableStateOf(false) }
 
-    // Load Full Moon image once from assets
-    val moonBitmap = remember {
-        context.assets.open("SmallFullMoon.png").use { BitmapFactory.decodeStream(it).asImageBitmap() }
+    // Load Full Moon image once from assets; rotate 180° for southern hemisphere
+    val moonBitmap = remember(latitude) {
+        val original = context.assets.open("SmallFullMoon.png").use { BitmapFactory.decodeStream(it) }
+        if (latitude < 0.0) {
+            val matrix = android.graphics.Matrix().apply { postRotate(180f) }
+            android.graphics.Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true).asImageBitmap()
+        } else {
+            original.asImageBitmap()
+        }
     }
 
     // Calculate standard timezone offset from longitude (15° per hour)
