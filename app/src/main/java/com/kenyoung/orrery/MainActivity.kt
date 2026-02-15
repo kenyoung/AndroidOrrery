@@ -214,7 +214,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     val cache by produceState<AstroCache?>(initialValue = null, currentScreen, effectiveDate.toEpochDay(), effectiveLat, effectiveLon) {
         if (currentScreen == Screen.TRANSITS) {
             value = withContext(Dispatchers.Default) {
-                calculateCache(effectiveDate, effectiveLat, effectiveLon, zoneId)
+                calculateCache(effectiveDate, effectiveLat, effectiveLon)
             }
         }
     }
@@ -385,7 +385,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
                 when (currentScreen) {
-                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, zoneId, locationMode == 0 && usePhoneTime) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
+                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch)
                     Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
@@ -405,7 +405,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 }
 
 // --- MATH FUNCTIONS (Cache Only) ---
-fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId): AstroCache {
+fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double): AstroCache {
     val startDate = nowDate.minusMonths(1).withDayOfMonth(1)
     val endDate = nowDate.plusMonths(14).withDayOfMonth(1)
     val startEpochDay = startDate.toEpochDay().toDouble()
@@ -418,7 +418,7 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double, zoneId: ZoneId)
     val planetMap = mutableMapOf<String, Triple<DoubleArray, DoubleArray, DoubleArray>>()
     for (p in planets) planetMap[p.name] = Triple(DoubleArray(daysCount), DoubleArray(daysCount), DoubleArray(daysCount))
 
-    val offsetHours = zoneId.rules.getStandardOffset(nowDate.atStartOfDay(ZoneOffset.UTC).toInstant()).totalSeconds / 3600.0
+    val offsetHours = lon / 15.0
 
     for (i in 0 until daysCount) {
         val currentEpochDay = startEpochDay + i

@@ -18,14 +18,13 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zoneId: ZoneId, isLive: Boolean) {
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, isLive: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
@@ -33,14 +32,13 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             val paddingLeft = 35f
             val paddingRight = 42f
             val drawingWidth = w - paddingLeft - paddingRight
-            val centerX = paddingLeft + (drawingWidth / 2f)
 
-            val offsetHours = zoneId.rules.getStandardOffset(now).totalSeconds / 3600.0
+            val offsetHours = lon / 15.0
 
-            // Determine the "observing date" based on the standard timezone offset.
+            // Determine the "observing date" based on the local solar time offset.
             // If local time is before noon, we're in the morning portion of the
             // previous night, so use yesterday's date.
-            val currentOffset = ZoneOffset.ofTotalSeconds(zoneId.rules.getStandardOffset(now).totalSeconds)
+            val currentOffset = ZoneOffset.ofTotalSeconds((lon / 15.0 * 3600.0).roundToInt())
             val localDateTime = now.atOffset(currentOffset).toLocalDateTime()
             val observingDate = if (localDateTime.hour < 12) {
                 localDateTime.toLocalDate().minusDays(1)
@@ -62,11 +60,23 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
 
             // Moon figures are placed at sunrise_x + 15f with radius 10f, so need 26f margin.
             // Reduce drawing width for scale calculation to leave room on the right for moons.
-            // The sunrise side of the night extends further than sunset side from centerX,
-            // so we need extra margin. Using 50f to account for equation of time variations
-            // (latest sunrise can be ~2 weeks after winter solstice).
             val moonMargin = 50f
             val pixelsPerHour = (drawingWidth - moonMargin) / nMaxDuration
+
+            fun normalizeGraphTime(time: Double): Double {
+                var diff = time - 24.0
+                if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
+                return diff
+            }
+
+            // With standard timezone offsets the night may be asymmetric around
+            // midnight (solar noon != 12:00 standard time), so position centerX
+            // based on the solstice sunset extent to keep the full night in view.
+            val centerX = if (solsticeSet.isNaN() || solsticeRise.isNaN()) {
+                paddingLeft + (drawingWidth / 2f)
+            } else {
+                (paddingLeft - normalizeGraphTime(solsticeSet) * pixelsPerHour).toFloat()
+            }
             val textHeight = 40f
             val textY = 30f
 
@@ -77,13 +87,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
             fun getXSunsetForDate(date: LocalDate): Float {
                 val epochDay = date.toEpochDay().toDouble()
                 val (_, setTimePrev) = cache.getSunTimes(epochDay - 1.0, false)
-                return (centerX + ((setTimePrev - 24.0) * pixelsPerHour)).toFloat()
-            }
-
-            fun normalizeGraphTime(time: Double): Double {
-                var diff = time - 24.0
-                if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
-                return diff
+                return (centerX + (normalizeGraphTime(setTimePrev) * pixelsPerHour)).toFloat()
             }
 
             val planets = getOrreryPlanets().filter { it.name != "Earth" }
@@ -339,11 +343,12 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, zo
 
             drawIntoCanvas { canvas ->
                 val timePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
-                for (k in -14..14) {
+                for (utHour in 0..23) {
+                    val localSolar = normalizeTime(utHour.toDouble() + offsetHours)
+                    val k = normalizeGraphTime(localSolar)
                     val xPos = centerX + (k * pixelsPerHour)
                     if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
-                        var hour = (k % 24); if (hour < 0) hour += 24
-                        canvas.nativeCanvas.drawText(hour.toString(), xPos.toFloat(), textY, timePaint)
+                        canvas.nativeCanvas.drawText(utHour.toString(), xPos.toFloat(), textY, timePaint)
                     }
                 }
                 val mainTextPaint = Paint().apply { textSize = 42f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) }
