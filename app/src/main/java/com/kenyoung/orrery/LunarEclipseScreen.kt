@@ -35,7 +35,6 @@ import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
-import java.util.TimeZone
 import kotlin.math.*
 
 // ============================================================================
@@ -716,7 +715,9 @@ private fun filterEclipses(
 fun LunarEclipseScreen(
     latitude: Double,
     longitude: Double,
-    now: Instant
+    now: Instant,
+    stdOffsetHours: Double,
+    stdTimeLabel: String
 ) {
     val context = LocalContext.current
 
@@ -753,6 +754,8 @@ fun LunarEclipseScreen(
             latitude = latitude,
             longitude = longitude,
             now = now,
+            stdOffsetHours = stdOffsetHours,
+            stdTimeLabel = stdTimeLabel,
             onBack = { selectedEclipse = null }
         )
     } else {
@@ -1017,6 +1020,8 @@ private fun EclipseDetailView(
     latitude: Double,
     longitude: Double,
     now: Instant,
+    stdOffsetHours: Double,
+    stdTimeLabel: String,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1034,12 +1039,8 @@ private fun EclipseDetailView(
         }
     }
 
-    // Calculate standard timezone offset from longitude (15° per hour)
-    val standardTimeOffsetHours = longitude / 15.0
-
-    // Get timezone abbreviation (e.g., "CST", "EST")
-    val timeZone = TimeZone.getDefault()
-    val timeZoneAbbreviation = timeZone.getDisplayName(false, TimeZone.SHORT)
+    val standardTimeOffsetHours = stdOffsetHours
+    val timeZoneAbbreviation = stdTimeLabel
 
     // Delay showing canvas to allow loading indicator to render first
     LaunchedEffect(Unit) {

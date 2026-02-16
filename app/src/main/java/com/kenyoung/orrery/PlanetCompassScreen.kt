@@ -27,18 +27,16 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.TimeZone
 import kotlin.math.*
 
 @Composable
-fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant) {
+fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String) {
     // Basic setup
     val planets = remember { getOrreryPlanets() }
 
     // Time zone state
     var useLocalTime by remember { mutableStateOf(false) }
-    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
-    val timeLabel = if (useLocalTime) timeZoneAbbreviation else "UT"
+    val timeLabel = if (useLocalTime) stdTimeLabel else "UT"
 
     // State to hold calculated data
     var plotData by remember { mutableStateOf<List<PlotObject>>(emptyList()) }
@@ -298,7 +296,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     now = now,
                     paints = paints,
                     useLocalTime = useLocalTime,
-                    timeLabel = timeLabel
+                    timeLabel = timeLabel,
+                    stdOffsetHours = stdOffsetHours
                 )
             }
         }
@@ -329,7 +328,8 @@ fun CompassCanvas(
     now: Instant,
     paints: CompassPaints,
     useLocalTime: Boolean,
-    timeLabel: String
+    timeLabel: String,
+    stdOffsetHours: Double
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
@@ -340,19 +340,14 @@ fun CompassCanvas(
         val smallTickLength = 12.5f
 
         // Time Strings
-        val standardOffsetMs = TimeZone.getDefault().rawOffset
-        val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds(standardOffsetMs / 1000) else ZoneOffset.UTC
+        val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
         val displayTimeStr = timeFormatter.format(now)
         val lst = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
         val lstStr = "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 
         // Offset in hours to convert UT to display time
-        val displayOffsetHours = if (useLocalTime) {
-            standardOffsetMs.toDouble() / 3600000.0
-        } else {
-            0.0
-        }
+        val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
 
         // Header text parts for multi-color rendering
         val headerPart1 = "Planet positions at  $timeLabel "

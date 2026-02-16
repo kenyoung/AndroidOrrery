@@ -109,6 +109,11 @@ enum class Screen {
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     val context = LocalContext.current
 
+    // Load timezone data early so it's available for Transits screen
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { loadTimezoneIndex(context) }
+    }
+
     // --- NAVIGATION STATE ---
     var currentScreen by remember { mutableStateOf(Screen.TRANSITS) }
 
@@ -384,17 +389,31 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             }
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
+                val (stdOffsetHours, stdTimeLabel) = if (locationMode == 0) {
+                    val offset = zoneId.rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
+                    val label = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.SHORT)
+                    offset to label
+                } else {
+                    val tzName = lookupTimezone(effectiveLat, effectiveLon)
+                    if (tzName != null) {
+                        try {
+                            val offset = ZoneId.of(tzName).rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
+                            val label = java.util.TimeZone.getTimeZone(tzName).getDisplayName(false, java.util.TimeZone.SHORT)
+                            offset to label
+                        } catch (_: Exception) { effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0) }
+                    } else effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0)
+                }
                 when (currentScreen) {
-                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
+                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
-                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch)
-                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
+                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours)
+                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel)
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
-                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant)
+                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel)
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
-                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon)
+                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId, currentInstant)
@@ -437,6 +456,14 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double): AstroCache {
 }
 
 // --- UTILITIES ---
+fun formatUtOffset(hours: Double): String {
+    val sign = if (hours >= 0) "+" else "\u2212"
+    val absH = abs(hours)
+    val h = floor(absH).toInt()
+    val m = round((absH - h) * 60).toInt()
+    return if (m == 0) "UT${sign}$h" else "UT${sign}$h:%02d".format(m)
+}
+
 fun degToDms(valDeg: Double): Triple<String, String, String> {
     val absVal = abs(valDeg)
     val d = floor(absVal).toInt()
@@ -526,6 +553,13 @@ fun LocationDialog(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { CityData.load(context) }
     }
+    // null = still loading, empty = loaded OK, non-empty = error message
+    val tzError = remember { mutableStateOf<String?>(null) }
+    val tzDone = remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        tzError.value = withContext(Dispatchers.IO) { loadTimezoneIndex(context) }
+        tzDone.value = true
+    }
 
     var mode by remember { mutableStateOf(currentMode) } // 0=Phone, 1=Custom, 2=From List
 
@@ -561,6 +595,41 @@ fun LocationDialog(
     var continentExpanded by remember { mutableStateOf(false) }
     var countryExpanded by remember { mutableStateOf(false) }
     var cityExpanded by remember { mutableStateOf(false) }
+
+    // Resolve IANA timezone from current coordinates
+    fun parseDmsOrNull(): Pair<Double, Double>? {
+        val ld = latDeg.toIntOrNull() ?: return null
+        val lm = latMin.toIntOrNull() ?: return null
+        val ls = latSec.toDoubleOrNull() ?: return null
+        val lod = lonDeg.toIntOrNull() ?: return null
+        val lom = lonMin.toIntOrNull() ?: return null
+        val los = lonSec.toDoubleOrNull() ?: return null
+        if (abs(ld) > 90 || lm !in 0..59 || ls < 0 || ls >= 60) return null
+        if (abs(lod) > 180 || lom !in 0..59 || los < 0 || los >= 60) return null
+        val latSign = if (ld < 0) -1.0 else 1.0
+        val lat = (abs(ld) + lm / 60.0 + ls / 3600.0) * latSign
+        val lonSign = if (lod < 0) -1.0 else 1.0
+        val lon = (abs(lod) + lom / 60.0 + los / 3600.0) * lonSign
+        return lat to lon
+    }
+    val tzCoords = when (mode) {
+        0 -> phoneLat to phoneLon
+        1 -> parseDmsOrNull()
+        2 -> selectedCity?.let { it.lat to it.lon }
+        else -> null
+    }
+    val timezoneDisplay = if (tzDone.value && tzError.value == null && tzCoords != null) {
+        lookupTimezone(tzCoords.first, tzCoords.second)?.let { tz ->
+            val offsetStr = try {
+                val offsetSec = ZoneId.of(tz).rules.getStandardOffset(Instant.now()).totalSeconds
+                val h = offsetSec / 3600
+                val m = abs(offsetSec % 3600) / 60
+                val sign = if (offsetSec >= 0) "+" else "\u2212"
+                if (m == 0) "UT${sign}${abs(h)}" else "UT${sign}${abs(h)}:%02d".format(m)
+            } catch (_: Exception) { null }
+            if (offsetStr != null) "$tz ($offsetStr)" else tz
+        }
+    } else null
 
     // When switching to Phone mode, restore phone DMS values
     LaunchedEffect(mode) {
@@ -709,6 +778,16 @@ fun LocationDialog(
                                 color = Color.Green, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
                         }
                     }
+                }
+
+                // Show resolved IANA timezone
+                Spacer(modifier = Modifier.height(8.dp))
+                if (timezoneDisplay != null) {
+                    Text("Timezone: $timezoneDisplay", color = Color.Cyan, fontSize = 13.sp)
+                } else if (tzError.value != null) {
+                    Text("TZ error: ${tzError.value}", color = Color.Red, fontSize = 11.sp)
+                } else if (tzDone.value && mode == 1 && tzCoords == null) {
+                    Text("Timezone: (enter valid coordinates)", color = Color.Gray, fontSize = 13.sp)
                 }
 
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }

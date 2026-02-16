@@ -36,7 +36,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.TimeZone
 import kotlin.math.*
 
 // --- DATA CLASSES ---
@@ -76,7 +75,7 @@ private data class RawEvent(
 // --- COMPOSABLE ---
 
 @Composable
-fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Double, lon: Double) {
+fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
@@ -84,9 +83,8 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
 
     // --- TIME ZONE STATE ---
     var useLocalTime by remember { mutableStateOf(false) }
-    val zoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds(TimeZone.getDefault().rawOffset / 1000) else ZoneOffset.UTC
-    val timeZoneAbbreviation = TimeZone.getDefault().getDisplayName(false, TimeZone.SHORT)
-    val timeLabel = if (useLocalTime) " $timeZoneAbbreviation" else " UT"
+    val zoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
+    val timeLabel = if (useLocalTime) " $stdTimeLabel" else " UT"
 
     // Calculate start MJD based on the "Today" of the selected zone
     val zonedDateTime = currentInstant.atZone(zoneId)

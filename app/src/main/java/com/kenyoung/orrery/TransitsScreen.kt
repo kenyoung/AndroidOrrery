@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, isLive: Boolean) {
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, isLive: Boolean, stdOffsetHours: Double) {
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
@@ -348,7 +348,8 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, is
                     val k = normalizeGraphTime(localSolar)
                     val xPos = centerX + (k * pixelsPerHour)
                     if (xPos >= paddingLeft && xPos <= (w - paddingRight)) {
-                        canvas.nativeCanvas.drawText(utHour.toString(), xPos.toFloat(), textY, timePaint)
+                        val stdHour = ((utHour + round(stdOffsetHours).toInt()) % 24 + 24) % 24
+                        canvas.nativeCanvas.drawText(stdHour.toString(), xPos.toFloat(), textY, timePaint)
                     }
                 }
                 val mainTextPaint = Paint().apply { textSize = 42f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD) }

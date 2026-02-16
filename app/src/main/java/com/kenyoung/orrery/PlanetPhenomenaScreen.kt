@@ -21,13 +21,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.TimeZone
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
 @Composable
-fun PlanetPhenomenaScreen(epochDay: Double) {
+fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
@@ -39,9 +38,7 @@ fun PlanetPhenomenaScreen(epochDay: Double) {
 
     // Time zone state
     var useLocalTime by remember { mutableStateOf(false) }
-    val displayOffsetHours = if (useLocalTime) {
-        TimeZone.getDefault().rawOffset.toDouble() / 3600000.0
-    } else 0.0
+    val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
 
     var phenomenaData by remember { mutableStateOf<List<PlanetPhenomenaData>?>(null) }
 
