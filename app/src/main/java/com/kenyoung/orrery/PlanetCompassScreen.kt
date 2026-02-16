@@ -65,9 +65,11 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
     // --- ASYNC CALCULATION (recalculates ~1s before each minute-boundary redraw) ---
     // Event recalculation is conditional per object:
-    //   Sun: on JD tag reset (manual time / midnight / app start) or 25h staleness
-    //   Moon: on JD tag reset, set time in past, or 30h staleness
-    //   Planets: on JD tag reset, set time in past, or 25h staleness
+    //   All: on cache reset (manual time / app start) or set time in past (auto-advance)
+    //   Sun: also on midnight epochDay rollover or 25h staleness
+    //   Moon: also on 30h staleness
+    //   Planets: also on 25h staleness
+    // When set time passes, each object independently advances to the next day's events.
     // Visual positions (RA/Dec) are always recomputed.
     LaunchedEffect(epochDay, lat, lon) {
         while (true) {
@@ -91,14 +93,31 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
 
             // === SUN ===
             val sunCache = eventCaches["Sun"]
-            val needSunCalc = sunCache == null || (jdStart - sunCache.calcJd) > 25.0 / 24.0
+            val needSunCalc = run {
+                if (sunCache == null) return@run true
+                if ((jdStart - sunCache.calcJd) > 25.0 / 24.0) return@run true
+                // Check if set time is in the past
+                val baseMidnightUT = floor(sunCache.anchorEpochDay) - offset / 24.0
+                baseMidnightUT + sunCache.events.set / 24.0 < currentUtEpochDay
+            }
             val sunEventData = if (needSunCalc) {
-                val (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
-                val (sunTransit, _) = calculateSunTransit(epochDay, lon, offset)
+                var sunAnchor = epochDay
+                var (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
+                var (sunTransit, _) = calculateSunTransit(epochDay, lon, offset)
+
+                // If set is in the past, advance to next day's events
+                val baseMidnightUT = floor(epochDay) - offset / 24.0
+                if (baseMidnightUT + sunSet / 24.0 < currentUtEpochDay) {
+                    sunAnchor = epochDay + 1.0
+                    val (r, s) = calculateSunTimes(epochDay + 1.0, lat, lon, offset)
+                    val (t, _) = calculateSunTransit(epochDay + 1.0, lon, offset)
+                    sunRise = r; sunSet = s; sunTransit = t
+                }
+
                 EventCache(
                     events = PlanetEvents(sunRise, sunTransit, sunSet),
                     calcJd = jdStart,
-                    anchorEpochDay = epochDay
+                    anchorEpochDay = sunAnchor
                 ).also { eventCaches["Sun"] = it }
             } else sunCache!!
 
@@ -187,7 +206,6 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                 moonEventData.riseDec, moonEventData.transitDec, moonEventData.setDec))
 
             // === PLANETS ===
-            val pAnchorMidnightJD = floor(eventEpochDay) + 2440587.5 - offset / 24.0
             for (p in planets) {
                 if (p.name != "Earth") {
                     val pCache = eventCaches[p.name]
@@ -206,16 +224,31 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     val col = p.color.toArgb()
 
                     val planetEventData = if (needPlanetCalc) {
-                        val evD = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
-                        val evD1 = calculatePlanetEvents(eventEpochDay + 1.0, lat, lon, offset, p)
-                        val pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
-                        val pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
+                        var pAnchor = eventEpochDay
+                        var evD = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
+                        var evD1 = calculatePlanetEvents(eventEpochDay + 1.0, lat, lon, offset, p)
+
+                        // Assemble events ensuring rise < transit < set
+                        var pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
+                        var pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
+
+                        // If set is in the past, advance to next day's events
+                        val baseMidnightUT = floor(eventEpochDay) - offset / 24.0
+                        if (baseMidnightUT + pSetAbs / 24.0 < currentUtEpochDay) {
+                            pAnchor = eventEpochDay + 1.0
+                            evD = evD1
+                            evD1 = calculatePlanetEvents(eventEpochDay + 2.0, lat, lon, offset, p)
+                            pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
+                            pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
+                        }
+
                         val pTransitTomorrow = pTransitAbs >= 24.0
                         val pSetTomorrow = pSetAbs >= 24.0
                         val events = PlanetEvents(evD.rise,
                             if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
                             if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
+                        val pAnchorMidnightJD = floor(pAnchor) + 2440587.5 - offset / 24.0
                         val pRiseJD = pAnchorMidnightJD + evD.rise / 24.0
                         val pTransitJD = pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0
                         val pSetJD = pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0
@@ -226,7 +259,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                         EventCache(
                             events = events,
                             calcJd = jdStart,
-                            anchorEpochDay = eventEpochDay,
+                            anchorEpochDay = pAnchor,
                             transitTomorrow = pTransitTomorrow,
                             setTomorrow = pSetTomorrow,
                             riseDec = pRiseDec,
