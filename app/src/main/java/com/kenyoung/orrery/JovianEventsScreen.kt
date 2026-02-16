@@ -75,14 +75,13 @@ private data class RawEvent(
 // --- COMPOSABLE ---
 
 @Composable
-fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String) {
+fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
     val bgColor = Color.Black
 
     // --- TIME ZONE STATE ---
-    var useLocalTime by remember { mutableStateOf(false) }
     val zoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
     val timeLabel = if (useLocalTime) " $stdTimeLabel" else " UT"
 
@@ -280,7 +279,7 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = !useLocalTime,
-                    onClick = { useLocalTime = false }
+                    onClick = { onTimeDisplayChange(false) }
                 )
                 Text("Universal Time", color = Color.White, fontSize = 14.sp)
             }
@@ -288,7 +287,7 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = useLocalTime,
-                    onClick = { useLocalTime = true }
+                    onClick = { onTimeDisplayChange(true) }
                 )
                 Text("Standard Time", color = Color.White, fontSize = 14.sp)
             }

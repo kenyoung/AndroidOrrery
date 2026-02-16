@@ -5,9 +5,11 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -15,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,7 +27,8 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant) {
+fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+
     // 1. Setup Time and Date
     val offsetHours = lon / 15.0
 
@@ -80,7 +85,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     // Data Preparation
     val planetList = remember { getOrreryPlanets().filter { it.name != "Earth" } }
 
-    Canvas(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Canvas(modifier = Modifier.fillMaxSize().weight(1f)) {
         val w = size.width
         val h = size.height
 
@@ -91,7 +97,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val titlePaintWhite = Paint().apply { color = android.graphics.Color.WHITE; textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
         val subTitlePaint = Paint().apply { color = textYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
         val labelPaint = Paint().apply { color = standardGray.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
-        val objectLabelPaint = Paint().apply { textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+        val objectLabelPaint = Paint().apply { textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
         val tickTextPaint = Paint().apply { textSize = 24f; textAlign = Paint.Align.CENTER }
         val currentElevationPaint = Paint().apply { color = currentLineGreen.toArgb(); textSize = 24f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD }
         val blackFillPaint = Paint().apply { color = android.graphics.Color.BLACK; style = Paint.Style.FILL }
@@ -106,16 +112,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val labelGap = 4f
         val boxPad = 6f
 
-        // Header layout (top-down band stacking — each text element gets its own row)
+        // Header layout (top-down band stacking — subtitle removed, timezone in title)
         val titleBaseline = topMargin - titlePaintYellow.ascent()
-        val subtitleBaseline = titleBaseline + titlePaintYellow.descent() + sectionGap - subTitlePaint.ascent()
-        val currentUtBaseline = subtitleBaseline + subTitlePaint.descent() + sectionGap - nowPaint.ascent()
+        val currentUtBaseline = titleBaseline + titlePaintYellow.descent() + sectionGap - nowPaint.ascent()
         val utAxisNumberBaseline = currentUtBaseline + nowPaint.descent() + sectionGap - axisTextPaint.ascent()
         val headerHeight = utAxisNumberBaseline + axisTextPaint.descent() + labelGap
 
-        // Footer layout (bottom-up band stacking)
-        val footerHeight = labelGap - axisTextPaint.ascent() + axisTextPaint.descent() + sectionGap - nowPaint.ascent() + nowPaint.descent() + sectionGap - subTitlePaint.ascent() + subTitlePaint.descent() + bottomMargin
-        val lstSubtitleBaseline = h - bottomMargin - subTitlePaint.descent()
+        // Footer layout (bottom-up band stacking — halved bottomMargin to move LST label closer to radio buttons)
+        val halfBottomMargin = bottomMargin / 2f
+        val footerHeight = labelGap - axisTextPaint.ascent() + axisTextPaint.descent() + sectionGap - nowPaint.ascent() + nowPaint.descent() + sectionGap - subTitlePaint.ascent() + subTitlePaint.descent() + halfBottomMargin
+        val lstSubtitleBaseline = h - halfBottomMargin - subTitlePaint.descent()
         val currentLstBaseline = lstSubtitleBaseline + subTitlePaint.ascent() - sectionGap - nowPaint.descent()
         val lstAxisNumberBaseline = currentLstBaseline + nowPaint.ascent() - sectionGap - axisTextPaint.descent()
 
@@ -167,14 +173,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- DRAW HEADER ---
         val dateStr = nowDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
+        val tzSuffix = if (useLocalTime) " ($stdTimeLabel)" else " (UT)"
         val titlePart1 = "Planet Elevations for "
         drawIntoCanvas {
-            val totalTitleWidth = titlePaintYellow.measureText(titlePart1) + titlePaintWhite.measureText(dateStr)
+            val totalTitleWidth = titlePaintYellow.measureText(titlePart1) + titlePaintWhite.measureText(dateStr) + titlePaintYellow.measureText(tzSuffix)
             var titleX = (w - totalTitleWidth) / 2f
             it.nativeCanvas.drawText(titlePart1, titleX, titleBaseline, titlePaintYellow)
             titleX += titlePaintYellow.measureText(titlePart1)
             it.nativeCanvas.drawText(dateStr, titleX, titleBaseline, titlePaintWhite)
-            it.nativeCanvas.drawText("Universal Time", w/2, subtitleBaseline, subTitlePaint)
+            titleX += titlePaintWhite.measureText(dateStr)
+            it.nativeCanvas.drawText(tzSuffix, titleX, titleBaseline, titlePaintYellow)
             it.nativeCanvas.drawText("Local Sidereal Time", w/2, lstSubtitleBaseline, subTitlePaint)
         }
 
@@ -182,8 +190,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val startTickUT = floor(startHour - offsetHours).toInt()
         val endTickUT = ceil(endHour - offsetHours).toInt()
         drawLine(blueAxis, Offset(0f, chartTop), Offset(w, chartTop), strokeWidth = 2f)
+        val stdOffsetInt = round(stdOffsetHours).toInt()
         for (h_ut in startTickUT..endTickUT) {
-            val hourDisplay = (h_ut % 24 + 24) % 24
+            val hourDisplay = if (useLocalTime) ((h_ut + stdOffsetInt) % 24 + 24) % 24 else (h_ut % 24 + 24) % 24
             val t_std = h_ut.toDouble() + offsetHours
             val x = timeToX(t_std)
             if (x >= -2f && x <= w + 2f) {
@@ -332,6 +341,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val numBodies = planetList.size + 2  // Sun + Moon + planets
         val rowHeight = chartH / (numBodies + 1).toFloat()
 
+        val isNightNow = (xNow >= xSS && xNow <= xSR)
+        currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
+
         // --- DRAW SUN LINE (Row 1) ---
         val sunY = chartTop + rowHeight
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
@@ -341,6 +353,37 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
             val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED)
+        }
+        // Sun Current Elevation
+        val sunEvList = listOfNotNull(
+            if (!riseToday.isNaN() && !sunsetToday.isNaN()) PlanetEvents(riseToday, 0.0, sunsetToday) else null,
+            if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) PlanetEvents(sunriseTomorrow, 0.0, setTomorrow) else null
+        )
+        var sunLineAtXNow = false
+        for (sEv in sunEvList) {
+            for (shift in listOf(-24.0, 0.0, 24.0)) {
+                val r = sEv.rise + shift
+                var sFinal = sEv.set + shift
+                if (sFinal < r) sFinal += 24.0
+                val overlapStart = max(startHour, r)
+                val overlapEnd = min(endHour, sFinal)
+                if (overlapEnd > overlapStart) {
+                    val x1 = timeToX(overlapStart)
+                    val x2 = timeToX(overlapEnd)
+                    if (xNow >= x1 && xNow <= x2) { sunLineAtXNow = true; break }
+                }
+            }
+            if (sunLineAtXNow) break
+        }
+        if (sunLineAtXNow) {
+            val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+            val sunState = AstroEngine.getBodyState("Sun", currentJD)
+            val (sAppRa, sAppDec) = j2000ToApparent(sunState.ra, sunState.dec, currentJD)
+            val sLst = calculateLSTHours(currentJD, lon)
+            val sunAlt = applyRefraction(calculateAltitude(sLst - sAppRa / 15.0, lat, sAppDec))
+            if (sunAlt > 0) {
+                drawIntoCanvas { it.nativeCanvas.drawText(round(sunAlt).toInt().toString(), xNow + 5f, sunY + elevReadoutOffset, currentElevationPaint) }
+            }
         }
 
         // --- DRAW MOON (Row 2) ---
@@ -375,8 +418,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         val moonY = chartTop + 2 * rowHeight
-        val isNightNow = (xNow >= xSS && xNow <= xSR)
-        currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
         // Determine if Moon is up at current time (handles midnight wrap correctly)
         var moonIsUp = false
         for (shift in listOf(-24.0, 0.0, 24.0)) {
@@ -423,8 +464,23 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
             drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb())
 
-            // Planet Current Elevation (using apparent coordinates)
-            if (pIsUp) {
+            // Planet Current Elevation — check all shifts like Moon code
+            var pLineAtXNow = false
+            if (!ev.rise.isNaN() && !ev.set.isNaN()) {
+                for (shift in listOf(-24.0, 0.0, 24.0)) {
+                    val r = ev.rise + shift
+                    var sFinal = ev.set + shift
+                    if (sFinal < r) sFinal += 24.0
+                    val overlapStart = max(startHour, r)
+                    val overlapEnd = min(endHour, sFinal)
+                    if (overlapEnd > overlapStart) {
+                        val x1 = timeToX(overlapStart)
+                        val x2 = timeToX(overlapEnd)
+                        if (xNow >= x1 && xNow <= x2) { pLineAtXNow = true; break }
+                    }
+                }
+            }
+            if (pLineAtXNow) {
                 val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
                 val pState = AstroEngine.getBodyState(p.name, currentJD)
                 val (pAppRa, pAppDec) = j2000ToApparent(pState.ra, pState.dec, currentJD)
@@ -471,9 +527,10 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val nowColor = if (isNightNow) currentLineGreen else currentLineGray
         nowPaint.color = nowColor.toArgb()
         drawLine(nowColor, Offset(xNow, chartTop), Offset(xNow, h - footerHeight), strokeWidth = 3f)
-        val utInstant = now.atZone(ZoneId.of("UTC")).toLocalTime()
-        val utStr = "%02d:%02d".format(utInstant.hour, utInstant.minute)
-        drawIntoCanvas { it.nativeCanvas.drawText(utStr, xNow, currentUtBaseline, nowPaint) }
+        val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
+        val displayInstant = now.atZone(displayZoneId).toLocalTime()
+        val displayStr = "%02d:%02d".format(displayInstant.hour, displayInstant.minute)
+        drawIntoCanvas { it.nativeCanvas.drawText(displayStr, xNow, currentUtBaseline, nowPaint) }
         val lstNow = calculateLST(now, lon)
         drawIntoCanvas { it.nativeCanvas.drawText(lstNow, xNow, currentLstBaseline, nowPaint) }
 
@@ -493,4 +550,20 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
     }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
+            Text("Universal Time", color = Color.White, fontSize = 14.sp)
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
+            Text("Standard Time", color = Color.White, fontSize = 14.sp)
+        }
+    }
+    } // Column
 }

@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
 @Composable
-fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double) {
+fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
@@ -36,8 +36,6 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double) {
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 
-    // Time zone state
-    var useLocalTime by remember { mutableStateOf(false) }
     val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
 
     var phenomenaData by remember { mutableStateOf<List<PlanetPhenomenaData>?>(null) }
@@ -138,12 +136,12 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = !useLocalTime, onClick = { useLocalTime = false })
+            RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
             Text("Universal Time", color = Color.White, fontSize = 14.sp)
         }
         Spacer(modifier = Modifier.width(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = useLocalTime, onClick = { useLocalTime = true })
+            RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
             Text("Standard Time", color = Color.White, fontSize = 14.sp)
         }
     }

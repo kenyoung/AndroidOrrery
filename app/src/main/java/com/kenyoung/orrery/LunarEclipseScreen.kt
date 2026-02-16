@@ -717,7 +717,9 @@ fun LunarEclipseScreen(
     longitude: Double,
     now: Instant,
     stdOffsetHours: Double,
-    stdTimeLabel: String
+    stdTimeLabel: String,
+    useStandardTime: Boolean,
+    onTimeDisplayChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -756,6 +758,8 @@ fun LunarEclipseScreen(
             now = now,
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
+            useStandardTime = useStandardTime,
+            onTimeDisplayChange = onTimeDisplayChange,
             onBack = { selectedEclipse = null }
         )
     } else {
@@ -1022,11 +1026,12 @@ private fun EclipseDetailView(
     now: Instant,
     stdOffsetHours: Double,
     stdTimeLabel: String,
+    useStandardTime: Boolean,
+    onTimeDisplayChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     var showCanvas by remember { mutableStateOf(false) }
-    var useStandardTime by remember { mutableStateOf(false) }
 
     // Load Full Moon image once from assets; rotate 180° for southern hemisphere
     val moonBitmap = remember(latitude) {
@@ -1079,11 +1084,11 @@ private fun EclipseDetailView(
                     // UT radio button
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { useStandardTime = false }
+                        modifier = Modifier.clickable { onTimeDisplayChange(false) }
                     ) {
                         RadioButton(
                             selected = !useStandardTime,
-                            onClick = { useStandardTime = false },
+                            onClick = { onTimeDisplayChange(false) },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = Color(0xFF00BFFF),
                                 unselectedColor = Color.Gray
@@ -1097,11 +1102,11 @@ private fun EclipseDetailView(
                     // Standard Time radio button
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { useStandardTime = true }
+                        modifier = Modifier.clickable { onTimeDisplayChange(true) }
                     ) {
                         RadioButton(
                             selected = useStandardTime,
-                            onClick = { useStandardTime = true },
+                            onClick = { onTimeDisplayChange(true) },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = Color(0xFF00BFFF),
                                 unselectedColor = Color.Gray

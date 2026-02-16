@@ -30,12 +30,10 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String) {
+fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     // Basic setup
     val planets = remember { getOrreryPlanets() }
 
-    // Time zone state
-    var useLocalTime by remember { mutableStateOf(false) }
     val timeLabel = if (useLocalTime) stdTimeLabel else "UT"
 
     // State to hold calculated data
@@ -307,12 +305,12 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = !useLocalTime, onClick = { useLocalTime = false })
+                RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
                 Text("Universal Time", color = Color.White, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = useLocalTime, onClick = { useLocalTime = true })
+                RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
                 Text("Standard Time", color = Color.White, fontSize = 14.sp)
             }
         }

@@ -117,6 +117,13 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     // --- NAVIGATION STATE ---
     var currentScreen by remember { mutableStateOf(Screen.TRANSITS) }
 
+    // --- TIME DISPLAY STATE ---
+    val prefs = context.getSharedPreferences("orrery_prefs", Context.MODE_PRIVATE)
+    var useStandardTime by remember { mutableStateOf(prefs.getBoolean("useStandardTime", false)) }
+    LaunchedEffect(useStandardTime) {
+        prefs.edit().putBoolean("useStandardTime", useStandardTime).apply()
+    }
+
     // --- LOCATION STATE ---
     // locationMode: 0=Phone, 1=Custom, 2=From List
     var locationMode by remember { mutableStateOf(0) }
@@ -405,15 +412,15 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 }
                 when (currentScreen) {
                     Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
-                    Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
-                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours)
-                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel)
+                    Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours, useStandardTime) { useStandardTime = it }
+                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
-                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel)
+                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
-                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel)
+                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, zoneId, currentInstant)
