@@ -97,7 +97,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val titlePaintWhite = Paint().apply { color = android.graphics.Color.WHITE; textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
         val subTitlePaint = Paint().apply { color = textYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
         val labelPaint = Paint().apply { color = standardGray.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
-        val objectLabelPaint = Paint().apply { textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+        val objectLabelPaint = Paint().apply { textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
         val tickTextPaint = Paint().apply { textSize = 24f; textAlign = Paint.Align.CENTER }
         val currentElevationPaint = Paint().apply { color = currentLineGreen.toArgb(); textSize = 24f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD }
         val blackFillPaint = Paint().apply { color = android.graphics.Color.BLACK; style = Paint.Style.FILL }
@@ -337,15 +337,23 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
 
-        // --- Uniform vertical spacing for all bodies ---
+        // --- Bounding-box-aware vertical spacing ---
+        // aboveCenter: from body Y up to label box top (label baseline + ascent - boxPad)
+        val aboveCenter = tickHalf + labelGap + objectLabelPaint.descent() - objectLabelPaint.ascent() + boxPad
+        // belowCenter: from body Y down to elevation readout bottom
+        val belowCenter = elevReadoutOffset + currentElevationPaint.descent()
+        // Reserve space at chart bottom for Sunset/Sunrise labels
+        val sunsetLabelHeight = labelGap + labelPaint.descent() - labelPaint.ascent()
         val numBodies = planetList.size + 2  // Sun + Moon + planets
-        val rowHeight = chartH / (numBodies + 1).toFloat()
+        val firstBodyY = chartTop + aboveCenter
+        val lastBodyY = chartTop + chartH - sunsetLabelHeight - belowCenter
+        val bodySpacing = if (numBodies > 1) (lastBodyY - firstBodyY) / (numBodies - 1).toFloat() else 0f
 
         val isNightNow = (xNow >= xSS && xNow <= xSR)
         currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
 
         // --- DRAW SUN LINE (Row 1) ---
-        val sunY = chartTop + rowHeight
+        val sunY = firstBodyY
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
             drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
@@ -417,7 +425,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             moonDec = toTopocentric(appRa, appDec, mTrans.distGeo, lat, lon, lstAtTransit).dec
         }
 
-        val moonY = chartTop + 2 * rowHeight
+        val moonY = firstBodyY + bodySpacing
         // Determine if Moon is up at current time (handles midnight wrap correctly)
         var moonIsUp = false
         for (shift in listOf(-24.0, 0.0, 24.0)) {
@@ -442,7 +450,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val jd = epochDayInt + 2440587.5
 
         planetList.forEachIndexed { i, p ->
-            val yPos = chartTop + (i + 3) * rowHeight
+            val yPos = firstBodyY + (i + 2) * bodySpacing
             // Use Standard Calculator (matches TransitsScreen)
             val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
             // Apparent dec at transit time for tick marks and max-alt display
