@@ -4,18 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 
-```bash
-./gradlew build                    # Full build
-./gradlew assembleDebug            # Debug APK only
-./gradlew assembleRelease          # Release APK only
-./gradlew test                     # Unit tests
-./gradlew connectedAndroidTest     # Instrumented tests (requires device/emulator)
-./gradlew installDebug             # Install debug APK to connected device
-```
-
 ## Project Overview
 
-Android Orrery is an astronomical visualization app built entirely with Jetpack Compose. It displays planet positions, rise/set times, lunar phases, Jovian moon events, meteor showers, and other astronomical phenomena. The app is inspired by Sky & Telescope's "Sky Gazer's Almanac" but customized to the user's location and time.
+Android Orrery is an astronomical visualization app built entirely with Jetpack Compose. It displays planet positions, rise/set times, lunar phases, Jovian moon events, meteor showers, and other astronomical phenomena.
 
 **Package:** `com.kenyoung.orrery`
 **Min SDK:** 26 | **Target SDK:** 36
@@ -89,4 +80,5 @@ Data covers 2021-01-01 to 2031-01-01 at 6-hour resolution.
 
 Uses Compose `Canvas` with `drawIntoCanvas { canvas.nativeCanvas... }` for custom astronomical graphics. Gestural input via `pointerInput()` for pan/zoom on applicable screens.
 
-Don't try to compile, build or run the app. I will do that in Android Studio.
+Don't compile, build or run the app. Builds and testing will be done in Android Studio/
+Ask questions before generating new code if a prompt is unclear or ambiguous
