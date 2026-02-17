@@ -119,7 +119,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
 
     // --- TIME DISPLAY STATE ---
     val prefs = context.getSharedPreferences("orrery_prefs", Context.MODE_PRIVATE)
-    var useStandardTime by remember { mutableStateOf(prefs.getBoolean("useStandardTime", false)) }
+    var useStandardTime by remember { mutableStateOf(prefs.getBoolean("useStandardTime", true)) }
     LaunchedEffect(useStandardTime) {
         prefs.edit().putBoolean("useStandardTime", useStandardTime).apply()
     }
