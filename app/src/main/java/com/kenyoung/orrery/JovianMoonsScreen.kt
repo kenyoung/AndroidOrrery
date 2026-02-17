@@ -78,13 +78,13 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
 
     // Determine "Effective Time"
     val effectiveJD = if (isAnimating || animDayOffset > 0.0) {
-        startEpoch + animDayOffset + 2440587.5
+        startEpoch + animDayOffset + UNIX_EPOCH_JD
     } else {
-        currentInstant.toEpochMilli() / 86400000.0 + 2440587.5
+        currentInstant.toEpochMilli() / MILLIS_PER_DAY + UNIX_EPOCH_JD
     }
 
     // Display Time String
-    val displayInstant = Instant.ofEpochMilli(((effectiveJD - 2440587.5) * 86400000.0).toLong())
+    val displayInstant = Instant.ofEpochMilli(((effectiveJD - UNIX_EPOCH_JD) * MILLIS_PER_DAY).toLong())
     val displayTimeStr = DateTimeFormatter.ofPattern("dd MMM HH:mm")
         .withZone(ZoneId.of("UTC"))
         .format(displayInstant)
@@ -101,7 +101,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
         moonNames.associateWith { name ->
             Array(steps + 1) { i ->
                 val tDay = i.toDouble() / pointsPerDay.toDouble()
-                val calcJD = startEpoch + tDay + 2440587.5
+                val calcJD = startEpoch + tDay + UNIX_EPOCH_JD
                 // Keep using the existing low-precision calc for the graph lines
                 calculateJovianMoons(calcJD)[name]!!
             }
@@ -210,7 +210,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 // Visual consistency implies using the same model as the diagram.
                 // But the lines are low precision. If we plot high prec dots on low prec lines, they might drift.
                 // Let's use the High Precision pos to match the top diagram.
-                val currentFracTotal = effectiveJD - 2440587.5 - startEpoch
+                val currentFracTotal = effectiveJD - UNIX_EPOCH_JD - startEpoch
                 val currentDayInt = floor(currentFracTotal).toInt() + 1
                 val currentFrac = currentFracTotal - floor(currentFracTotal)
                 val isCol1 = currentDayInt <= daysSplit
@@ -245,7 +245,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                 // Scale (Bottom)
                 val scaleY = topSectionH + graphSectionH + 20f
                 val tickStepArcsec = 250.0
-                val arcsecPerRadius = (197.0 / AstroEngine.getBodyState("Jupiter", epochDay+2440587.5).distGeo) / 2.0
+                val arcsecPerRadius = (197.0 / AstroEngine.getBodyState("Jupiter", epochDay+UNIX_EPOCH_JD).distGeo) / 2.0
                 val tickStepRad = tickStepArcsec / arcsecPerRadius
                 val tickPx = tickStepRad * graphScalePxPerRad
 

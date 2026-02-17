@@ -21,11 +21,11 @@ import kotlin.math.*
 @Composable
 fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     // 1. Time Calculations
-    val epochDay = instant.toEpochMilli() / 86400000.0
-    // JD = (Millis / 86400000) + 2440587.5
-    val jd = epochDay + 2440587.5
+    val epochDay = instant.toEpochMilli() / MILLIS_PER_DAY
+    // JD = (Millis / MILLIS_PER_DAY) + UNIX_EPOCH_JD
+    val jd = epochDay + UNIX_EPOCH_JD
     val mjd = jd - 2400000.5
-    val n = jd - 2451545.0 // Days since J2000.0
+    val n = jd - J2000_JD // Days since J2000.0
 
     // UT String
     val utFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SS").withZone(ZoneId.of("UTC"))

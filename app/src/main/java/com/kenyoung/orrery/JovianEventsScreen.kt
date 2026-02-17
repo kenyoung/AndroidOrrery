@@ -4,20 +4,16 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +24,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -90,9 +85,9 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
     val todayDate = zonedDateTime.toLocalDate()
     val startOfDayInstant = todayDate.atStartOfDay(zoneId).toInstant()
 
-    // MJD = JD - 2400000.5. JD of Instant is (millis/86400000) + 2440587.5
-    val startMJD = (startOfDayInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
-    val nowMJD = (currentInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
+    // MJD = JD - 2400000.5. JD of Instant is (millis/MILLIS_PER_DAY) + UNIX_EPOCH_JD
+    val startMJD = (startOfDayInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
+    val nowMJD = (currentInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
 
     var eventList by remember { mutableStateOf<List<JovianEventItem>?>(null) }
 
@@ -269,36 +264,14 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
         }
 
         // --- BOTTOM: Radio Buttons ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = !useLocalTime,
-                    onClick = { onTimeDisplayChange(false) }
-                )
-                Text("Universal Time", color = Color.White, fontSize = 14.sp)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = useLocalTime,
-                    onClick = { onTimeDisplayChange(true) }
-                )
-                Text("Standard Time", color = Color.White, fontSize = 14.sp)
-            }
-        }
+        TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
     }
 }
 
 // --- GENERATION LOGIC ---
 
 private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, lat: Double, lon: Double): List<JovianEventItem> {
-    val nowMJD = (nowInstant.toEpochMilli() / 86400000.0) + 2440587.5 - 2400000.5
+    val nowMJD = (nowInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
     // Increase range to 3 days to check if they fit
     val endMJD = startMJD + 3.0
     val stepSize = 1.0 / 1440.0
@@ -360,7 +333,7 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
         finalItems.add(JovianEventItem(raw.mjd, raw.text + altString, pixelType, false))
 
         if (raw.isStart) {
-            val checkMJD = raw.mjd + (1.0 / 86400.0)
+            val checkMJD = raw.mjd + (1.0 / SECONDS_PER_DAY)
             val checkState = getSystemStateMJD(checkMJD)
             val transitCount = checkState.values.count { it.transit }
             val shadowCount = checkState.values.count { it.shadowTransit }
@@ -399,7 +372,7 @@ fun getSystemState(jd: Double): Map<String, MoonInstantState> {
 }
 
 private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
-    val jdTT = jd + (69.184 / 86400.0)
+    val jdTT = jd + (69.184 / SECONDS_PER_DAY)
     val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
     val deltaAU = jupBody.distGeo
 

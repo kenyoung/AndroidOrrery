@@ -6,10 +6,7 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -17,8 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -146,7 +141,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         while (currentH < startHour) currentH += 24.0
         while (currentH > endHour) currentH -= 24.0
         val xNow = timeToX(currentH)
-        val currentUtEpochDay = now.epochSecond.toDouble() / 86400.0
+        val currentUtEpochDay = now.epochSecond.toDouble() / SECONDS_PER_DAY
 
         // Asterisk tracking — same algorithm as Compass page
         val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
@@ -217,7 +212,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         drawLine(blueAxis, Offset(0f, h - footerHeight), Offset(w, h - footerHeight), strokeWidth = 2f)
         // Place tick marks at integer LST hours by inverting LST→local-time
-        val currentLST = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
+        val currentLST = calculateLSTHours(now.epochSecond / SECONDS_PER_DAY + UNIX_EPOCH_JD, lon)
         val lstAtStart = currentLST + ((startHour - currentH) * 1.0027379)
         val firstLSTHour = ceil(lstAtStart).toInt()
         for (i in 0..25) {
@@ -412,7 +407,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             if (sunLineAtXNow) break
         }
         if (sunLineAtXNow) {
-            val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+            val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
             val sunState = AstroEngine.getBodyState("Sun", currentJD)
             val (sAppRa, sAppDec) = j2000ToApparent(sunState.ra, sunState.dec, currentJD)
             val sLst = calculateLSTHours(currentJD, lon)
@@ -439,14 +434,14 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // Dec: Use apparent topocentric dec at transit for tick marks
         var moonDec = run {
-            val fallbackJD = moonEpochBase + 2440587.5 + 0.5
+            val fallbackJD = moonEpochBase + UNIX_EPOCH_JD + 0.5
             val st = AstroEngine.getBodyState("Moon", fallbackJD)
             val (ar, ad) = j2000ToApparent(st.ra, st.dec, fallbackJD)
             val lst = calculateLSTHours(fallbackJD, lon)
             toTopocentric(ar, ad, st.distGeo, lat, lon, lst).dec
         }
         if (!moonEv.transit.isNaN()) {
-            val transitJD = moonEpochBase + 2440587.5 + ((moonEv.transit - offsetHours) / 24.0)
+            val transitJD = moonEpochBase + UNIX_EPOCH_JD + ((moonEv.transit - offsetHours) / 24.0)
             val mTrans = AstroEngine.getBodyState("Moon", transitJD)
             val (appRa, appDec) = j2000ToApparent(mTrans.ra, mTrans.dec, transitJD)
             val lstAtTransit = calculateLSTHours(transitJD, lon)
@@ -494,7 +489,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 }
             }
 
-            val jd = planetEpochBase + 2440587.5
+            val jd = planetEpochBase + UNIX_EPOCH_JD
             // Apparent dec at transit time for tick marks and max-alt display
             val transitDec = if (!ev.transit.isNaN()) {
                 val transitJD = jd + ((ev.transit - offsetHours) / 24.0)
@@ -534,7 +529,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 }
             }
             if (pLineAtXNow) {
-                val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+                val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
                 val pState = AstroEngine.getBodyState(p.name, currentJD)
                 val (pAppRa, pAppDec) = j2000ToApparent(pState.ra, pState.dec, currentJD)
                 val pLst = calculateLSTHours(currentJD, lon)
@@ -565,7 +560,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
         if (moonLineAtXNow) {
             // Use apparent topocentric coordinates for Moon elevation readout
-            val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+            val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
             val moonSt = AstroEngine.getBodyState("Moon", currentJD)
             val (mAppRa, mAppDec) = j2000ToApparent(moonSt.ra, moonSt.dec, currentJD)
             val mLst = calculateLSTHours(currentJD, lon)
@@ -616,20 +611,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
-            Text("Universal Time", color = Color.White, fontSize = 14.sp)
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
-            Text("Standard Time", color = Color.White, fontSize = 14.sp)
-        }
-    }
+    TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
     } // Column
 }

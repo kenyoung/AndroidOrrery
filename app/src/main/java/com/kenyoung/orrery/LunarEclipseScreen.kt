@@ -207,7 +207,7 @@ private suspend fun loadShorelineData(context: Context): List<ShoreSegment> {
 private fun buildTJD(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): Double {
     var y = year
     var m = month
-    val d = day + hour / 24.0 + minute / 1440.0 + second / 86400.0
+    val d = day + hour / 24.0 + minute / 1440.0 + second / SECONDS_PER_DAY
 
     if (m < 3) {
         y -= 1
@@ -343,7 +343,7 @@ private data class MoonPositionResult(
 )
 
 private fun moonPosition(jDE: Double): MoonPositionResult {
-    val T = (jDE - 2451545.0) / 36525.0
+    val T = (jDE - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val nut = calculateNutation(T)
 
     var Lprime = 218.3164477 + 481267.88123421 * T - 0.00157860 * T * T +
@@ -445,7 +445,7 @@ private data class SunPositionResult(
 )
 
 private fun sunPosition(tJD: Double): SunPositionResult {
-    val T = (tJD - 2451545.0) / 36525.0
+    val T = (tJD - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T
 
@@ -1054,7 +1054,7 @@ private fun EclipseDetailView(
     }
 
     // Convert current instant to TJD for eclipse comparison
-    val currentTJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+    val currentTJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
 
     Box(
         modifier = Modifier

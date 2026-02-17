@@ -6,7 +6,6 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,8 +20,6 @@ import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -72,8 +69,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val snapNow = currentNow
             withContext(Dispatchers.Default) {
             val offset = lon / 15.0
-            val jdStart = snapNow.epochSecond.toDouble() / 86400.0 + 2440587.5
-            val currentUtEpochDay = jdStart - 2440587.5
+            val jdStart = snapNow.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+            val currentUtEpochDay = jdStart - UNIX_EPOCH_JD
             val newList = mutableListOf<PlotObject>()
 
             // Detect epochDay changes: midnight (+1.0) resets Sun only;
@@ -173,7 +170,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     if (moonSetTomorrow) moonSetAbs - 24.0 else moonSetAbs)
 
                 // Compute Moon's topocentric dec at each event time for accurate Az/El
-                val anchorMidnightJD = floor(moonAnchor) + 2440587.5 - offset / 24.0
+                val anchorMidnightJD = floor(moonAnchor) + UNIX_EPOCH_JD - offset / 24.0
                 val moonDecAt = { jd: Double ->
                     val st = AstroEngine.getBodyState("Moon", jd)
                     val (appRa, appDec) = j2000ToApparent(st.ra, st.dec, jd)
@@ -244,7 +241,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                             if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
                             if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
 
-                        val pAnchorMidnightJD = floor(pAnchor) + 2440587.5 - offset / 24.0
+                        val pAnchorMidnightJD = floor(pAnchor) + UNIX_EPOCH_JD - offset / 24.0
                         val pRiseJD = pAnchorMidnightJD + evD.rise / 24.0
                         val pTransitJD = pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0
                         val pSetJD = pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0
@@ -299,21 +296,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                 )
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
-                Text("Universal Time", color = Color.White, fontSize = 14.sp)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
-                Text("Standard Time", color = Color.White, fontSize = 14.sp)
-            }
-        }
+        TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
     }
 }
 
@@ -341,7 +324,7 @@ fun CompassCanvas(
         val displayZoneId: ZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
         val displayTimeStr = timeFormatter.format(now)
-        val lst = calculateLSTHours(now.epochSecond / 86400.0 + 2440587.5, lon)
+        val lst = calculateLSTHours(now.epochSecond / SECONDS_PER_DAY + UNIX_EPOCH_JD, lon)
         val lstStr = "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 
         // Offset in hours to convert UT to display time
@@ -524,8 +507,8 @@ fun CompassCanvas(
             val offset = lon / 15.0
             var anyAsterisk = false
             // Current display-timezone date for asterisk evaluation
-            val currentDisplayDate = floor(now.epochSecond.toDouble() / 86400.0 + displayOffsetHours / 24.0).toLong()
-            val currentUtEpochDay = now.epochSecond.toDouble() / 86400.0
+            val currentDisplayDate = floor(now.epochSecond.toDouble() / SECONDS_PER_DAY + displayOffsetHours / 24.0).toLong()
+            val currentUtEpochDay = now.epochSecond.toDouble() / SECONDS_PER_DAY
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0

@@ -153,8 +153,8 @@ fun MeteorShowerScreen(
             rowData = calculatedRows
 
             // 2. Calculate "Tonight's" Dark Hours
-            val nowEpochDay = currentInstant.toEpochMilli() / 86400000.0
-            val sunStateNow = AstroEngine.getBodyState("Sun", nowEpochDay + 2440587.5)
+            val nowEpochDay = currentInstant.toEpochMilli() / MILLIS_PER_DAY
+            val sunStateNow = AstroEngine.getBodyState("Sun", nowEpochDay + UNIX_EPOCH_JD)
             val sunAltNow = getAltitude(sunStateNow.ra, sunStateNow.dec, nowEpochDay, lat, lon)
             val sunAboveHorizon = sunAltNow >= HORIZON_REFRACTED
             val epochFloor = floor(nowEpochDay)
@@ -371,7 +371,7 @@ fun moonDarkThreshold(illumPercent: Double): Double {
 }
 
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
-    val jd = epochDay + 2440587.5
+    val jd = epochDay + UNIX_EPOCH_JD
 
     // 1. Sun below nautical twilight
     val sunState = AstroEngine.getBodyState("Sun", jd)
@@ -390,7 +390,7 @@ fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
 }
 
 fun getAltitude(raDeg: Double, decDeg: Double, epochDay: Double, lat: Double, lon: Double): Double {
-    val lst = calculateLSTHours(epochDay + 2440587.5, lon)
+    val lst = calculateLSTHours(epochDay + UNIX_EPOCH_JD, lon)
     val haHours = lst - (raDeg / 15.0)
     return calculateAltitude(haHours, lat, decDeg)
 }

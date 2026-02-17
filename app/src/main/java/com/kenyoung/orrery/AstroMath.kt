@@ -20,6 +20,13 @@ const val CIVIL_TWILIGHT = -6.0
 const val NAUTICAL_TWILIGHT = -12.0
 const val ASTRONOMICAL_TWILIGHT = -18.0
 
+// Julian Date epoch constants
+const val J2000_JD = 2451545.0                  // J2000.0 epoch (2000 Jan 1.5 UT)
+const val UNIX_EPOCH_JD = 2440587.5              // Unix epoch (1970 Jan 1.0 UT) in JD
+const val DAYS_PER_JULIAN_CENTURY = 36525.0
+const val SECONDS_PER_DAY = 86400.0
+const val MILLIS_PER_DAY = 86400000.0
+
 // --- RAW MATH FUNCTIONS ---
 
 fun solveKepler(M: Double, e: Double): Double {
@@ -40,7 +47,7 @@ fun normalizeDegrees(deg: Double): Double {
 // Calculate Greenwich Mean Sidereal Time from Julian Date
 // Returns GMST in hours (0-24)
 fun calculateGMST(jd: Double): Double {
-    val d = jd - 2451545.0
+    val d = jd - J2000_JD
     var gmst = 18.697374558 + 24.06570982441908 * d
     gmst %= 24.0
     if (gmst < 0) gmst += 24.0
@@ -68,7 +75,7 @@ fun sphericalToCartesian(dist: Double, lonDeg: Double, latDeg: Double): Vector3 
 
 // Calculate Obliquity of Ecliptic for a given JD
 fun calculateObliquity(jd: Double): Double {
-    val t = (jd - 2451545.0) / 36525.0
+    val t = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     return 23.439291 - 0.0130042 * t
 }
 
@@ -76,7 +83,7 @@ fun calculateObliquity(jd: Double): Double {
 // RA/Dec are J2000 (ICRF); obliquity is of-date; general precession in
 // ecliptic longitude shifts the result from J2000 equinox to equinox of date.
 fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
-    val t = (jd - 2451545.0) / 36525.0
+    val t = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val eps = Math.toRadians(calculateObliquity(jd))
     val alpha = Math.toRadians(raDeg)
     val delta = Math.toRadians(decDeg)
@@ -175,7 +182,7 @@ private val nutMults = arrayOf(
 // evaluations during the Transits cache build.
 @Volatile private var cachedNutT = Double.NaN
 @Volatile private var cachedNutResult: NutationResult? = null
-private const val NUT_CACHE_TOL = 1.0 / 36525.0 // ~1 day in Julian centuries
+private const val NUT_CACHE_TOL = 1.0 / DAYS_PER_JULIAN_CENTURY // ~1 day in Julian centuries
 
 fun calculateNutation(T: Double): NutationResult {
     val cached = cachedNutResult
@@ -220,7 +227,7 @@ fun calculateNutation(T: Double): NutationResult {
 // --- PRECESSION (Meeus 21.3) ---
 // Converts J2000 (ICRF) equatorial coordinates to mean-of-date equatorial coordinates
 fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
-    val T = (jd - 2451545.0) / 36525.0
+    val T = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T
 
@@ -265,7 +272,7 @@ fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Dou
     val (meanRa, meanDec) = precessJ2000ToDate(raDeg, decDeg, jd)
 
     // Step 2: apply nutation (mean → true of date)
-    val T = (jd - 2451545.0) / 36525.0
+    val T = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val nut = calculateNutation(T)
     val dPsiDeg = nut.deltaPhi / 3600.0  // arcsec → degrees
     val dEpsDeg = nut.deltaEps / 3600.0
@@ -372,6 +379,10 @@ fun normalizeTime(t: Double): Double {
     return v
 }
 
+// Convert a Julian day fraction to local hours using the given timezone offset
+fun jdFracToLocalHours(jd: Double, timezoneOffset: Double): Double =
+    normalizeTime((jd - floor(jd)) * 24.0 + timezoneOffset)
+
 // Normalize hour angle to -12 to +12 range
 fun normalizeHourAngle(ha: Double): Double {
     if (!ha.isFinite()) return Double.NaN
@@ -393,7 +404,7 @@ fun formatTimeMM(t: Double, isSigned: Boolean): String {
 // --- KEPLERIAN CALCULATORS ---
 
 fun calculateSunPositionKepler(jd: Double): BodyState {
-    val n = jd - 2451545.0
+    val n = jd - J2000_JD
     val L = normalizeDegrees(280.460 + 0.9856474 * n)
     val g = normalizeDegrees(357.528 + 0.9856003 * n)
     val lambdaRad = Math.toRadians(L + 1.915 * sin(Math.toRadians(g)) + 0.020 * sin(2 * Math.toRadians(g)))
@@ -410,7 +421,7 @@ fun calculateSunPositionKepler(jd: Double): BodyState {
 }
 
 fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
-    val d = jd - 2451545.0
+    val d = jd - J2000_JD
     val Me = Math.toRadians((357.529 + 0.98560028 * d) % 360.0)
     val Le_earth = Math.toRadians((280.466 + 0.98564736 * d) % 360.0) + Math.toRadians(1.915 * sin(Me) + 0.020 * sin(2 * Me)) + Math.PI
     val Re = 1.00014 - 0.01671 * cos(Me)
@@ -444,7 +455,7 @@ fun calculatePlanetStateKeplerian(jd: Double, p: PlanetElements): BodyState {
 // --- JOVIAN MOONS (Meeus Chapter 44 - Accurate Implementation with Shadows) ---
 
 fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
-    val d = jd - 2451545.0
+    val d = jd - J2000_JD
     val deg2rad = Math.PI / 180.0
 
     // Local trigonometric helpers working in RADIANS
@@ -574,7 +585,7 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     // Iteratively find Sun transit (recomputes position each step)
     var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
-        val jd = tGuess + 2440587.5
+        val jd = tGuess + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState("Sun", jd)
         val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
         val raHours = appRa / 15.0
@@ -585,7 +596,7 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     val tTransit = tGuess
 
     fun getAlt(t: Double): Double {
-        val jd = t + 2440587.5
+        val jd = t + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState("Sun", jd)
         val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
         val lst = calculateLSTHours(jd, lon)
@@ -613,15 +624,14 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
         if (abs(rate) < 1.0) break; tSet -= (diff / rate)
     }
 
-    fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
-    return Pair(toLocal(tRise), toLocal(tSet))
+    return Pair(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
 }
 
 fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
-    val jd = floor(epochDay) + 2440587.5 + 0.5
+    val jd = floor(epochDay) + UNIX_EPOCH_JD + 0.5
     val sunNoon = AstroEngine.getBodyState("Sun", jd)
     val (appRa, appDec) = j2000ToApparent(sunNoon.ra, sunNoon.dec, jd)
-    val n = jd - 2451545.0
+    val n = jd - J2000_JD
     val gmst = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (gmst < 0) gmst + 24.0 else gmst
     val transitUT = normalizeTime(appRa / 15.0 - lon / 15.0 - gmstFixed)
@@ -634,7 +644,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     val epochDayInt = floor(epochDay)
     var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
     for (i in 0..4) {
-        val jd = tGuess + 2440587.5
+        val jd = tGuess + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState(p.name, jd)
         val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
         val raHours = appRa / 15.0
@@ -644,7 +654,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     }
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
-        val jd = t + 2440587.5
+        val jd = t + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState(p.name, jd)
         val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
         val lst = calculateLSTHours(jd, lon)
@@ -662,14 +672,13 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
         if (abs(rate) < 1.0) break; tSet -= (diff / rate)
     }
-    fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
-    return PlanetEvents(toLocal(tRise), toLocal(tTransit), toLocal(tSet))
+    return PlanetEvents(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tTransit, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
 }
 
 // Estimate the epoch day (fractional) when the Moon transits at a given longitude.
 // epochDay should be an integer (start of day at 0h UT). Accuracy ~±1 hour.
 fun estimateMoonTransitEpochDay(epochDay: Double, lonDeg: Double): Double {
-    val jd0 = epochDay + 2440587.5
+    val jd0 = epochDay + UNIX_EPOCH_JD
     val moonRaHours = AstroEngine.getBodyState("Moon", jd0).ra / 15.0
     val lst0 = calculateLSTHours(jd0, lonDeg)
     var wait = moonRaHours - lst0
@@ -679,7 +688,7 @@ fun estimateMoonTransitEpochDay(epochDay: Double, lonDeg: Double): Double {
 }
 
 fun calculateMoonPhaseAngle(epochDay: Double): Double {
-    val jd = epochDay + 2440587.5
+    val jd = epochDay + UNIX_EPOCH_JD
     val moonLon = AstroEngine.getBodyState("Moon", jd).eclipticLon
     val sunLon = AstroEngine.getBodyState("Sun", jd).eclipticLon
     var diff = (moonLon - sunLon) % 360.0; if (diff < 0) diff += 360.0
@@ -697,7 +706,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 
     // Combined moon altitude and hour angle at time t (topocentric)
     fun getMoonState(t: Double): Pair<Double, Double> {
-        val jd = t + 2440587.5
+        val jd = t + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState("Moon", jd)
         val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
         val lst = calculateLSTHours(jd, lon)
@@ -764,12 +773,11 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
         transit = findNext(dayStartUT, 2.0, "transit")
     }
 
-    fun toLocal(t: Double): Double = normalizeTime((t - floor(t)) * 24.0 + timezoneOffset)
-    return PlanetEvents(toLocal(rise), toLocal(transit), toLocal(set))
+    return PlanetEvents(jdFracToLocalHours(rise, timezoneOffset), jdFracToLocalHours(transit, timezoneOffset), jdFracToLocalHours(set, timezoneOffset))
 }
 
 fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
-    val jd = epochDay + 2440587.5; val n = jd - 2451545.0
+    val jd = epochDay + UNIX_EPOCH_JD; val n = jd - J2000_JD
     var L = (280.460 + 0.9856474 * n) % 360.0; if (L < 0) L += 360.0
     val alphaDeg = AstroEngine.getBodyState("Sun", jd).ra
     var eDeg = L - alphaDeg
@@ -777,11 +785,11 @@ fun calculateEquationOfTimeMinutes(epochDay: Double): Double {
     return eDeg * 4.0
 }
 fun calculateSunDeclination(epochDay: Double): Double {
-    val jd = epochDay + 2440587.5 + 0.5
+    val jd = epochDay + UNIX_EPOCH_JD + 0.5
     return Math.toRadians(AstroEngine.getBodyState("Sun", jd).dec)
 }
 fun calculateMoonPosition(epochDay: Double): RaDec {
-    val T = (epochDay + 2440587.5 - 2451545.0) / 36525.0
+    val T = (epochDay + UNIX_EPOCH_JD - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val L_prime = Math.toRadians(218.3164477 + 481267.88123421 * T)
     val M_prime = Math.toRadians(134.9633964 + 477198.8675055 * T)
     val F = Math.toRadians(93.2720950 + 483202.0175233 * T)
@@ -796,7 +804,7 @@ fun calculateMoonPosition(epochDay: Double): RaDec {
     return RaDec(ra, dec)
 }
 fun calculateLST(instant: Instant, lon: Double): String {
-    val jd = instant.epochSecond / 86400.0 + 2440587.5
+    val jd = instant.epochSecond / SECONDS_PER_DAY + UNIX_EPOCH_JD
     val lst = calculateLSTHours(jd, lon)
     return "%02d:%02d".format(floor(lst).toInt(), floor((lst - floor(lst)) * 60).toInt())
 }

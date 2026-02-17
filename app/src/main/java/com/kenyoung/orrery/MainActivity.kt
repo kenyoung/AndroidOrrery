@@ -169,7 +169,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         val days = localDateTime.toLocalDate().toEpochDay()
         val sec = localDateTime.toLocalTime().toSecondOfDay()
         val nano = localDateTime.toLocalTime().nano
-        return days + ((sec + (nano / 1_000_000_000.0)) / 86400.0)
+        return days + ((sec + (nano / 1_000_000_000.0)) / SECONDS_PER_DAY)
     }
 
     LaunchedEffect(isAnimating) {
@@ -914,7 +914,7 @@ fun DateDialog(
             if (min !in 0..59) { errorMsg = "Minute must be 0-59"; return }
             if (s < 0.0 || s >= 60.0) { errorMsg = "Second must be 0-59.9"; return }
 
-            val timeFraction = (h * 3600.0 + min * 60.0 + s) / 86400.0
+            val timeFraction = (h * 3600.0 + min * 60.0 + s) / SECONDS_PER_DAY
             val finalEpochDay = dateEpoch + timeFraction
 
             val inputStrings = listOf(dayString, monthString, yearString, hourString, minString, secString)

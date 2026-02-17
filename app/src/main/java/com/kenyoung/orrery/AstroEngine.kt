@@ -33,7 +33,7 @@ object AstroEngine {
         if (name == "Sun") return calculateSunPositionKepler(jd)
         if (name == "Moon") {
             // Fallback Moon: Use simple low-precision logic and wrap in BodyState
-            val radec = calculateMoonPosition(jd - 2440587.5) // function expects epochDay
+            val radec = calculateMoonPosition(jd - UNIX_EPOCH_JD) // function expects epochDay
             val (eLon, eLat) = equatorialToEcliptic(radec.ra * 15.0, radec.dec, jd)
             // Fake distance for fallback
             return BodyState(Vector3(0.0,0.0,0.0), radec.ra * 15.0, radec.dec, 1.0, 0.00257, eLon, eLat)

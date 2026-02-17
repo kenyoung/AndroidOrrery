@@ -231,12 +231,12 @@ object JovianPrecision {
         RP[3] = 14.98832 * (1.0 + rP3)
         RP[4] = 26.36273 * (1.0 + rP4)
 
-        val T0 = (jD - 2433282.423) / 36525.0
+        val T0 = (jD - 2433282.423) / DAYS_PER_JULIAN_CENTURY
         val P = 1.3966626 * T0 + 0.0003088 * T0 * T0
         L[1] += P; L[2] += P; L[3] += P; L[4] += P; psi += P
 
         // FIX: Use T (1900 Epoch) for Inclination I
-        val T_1900 = (jD - 2415020.5) / 36525.0
+        val T_1900 = (jD - 2415020.5) / DAYS_PER_JULIAN_CENTURY
         val I = 3.120262 + 0.0006 * T_1900
 
         val tX = DoubleArray(6)
@@ -259,7 +259,7 @@ object JovianPrecision {
             c1[i] = tY[i] * sinI + tZ[i] * cosI
         }
 
-        val Te = (jD - 2451545.0) / 36525.0
+        val Te = (jD - J2000_JD) / DAYS_PER_JULIAN_CENTURY
         val Omega = 100.464407 + 1.0209774 * Te + 0.00040315 * Te * Te + 0.000000404 * Te * Te * Te
         val orbI = 1.303267 - 0.0054965 * Te + 0.00000466 * Te * Te - 0.000000002 * Te * Te * Te
         val Phi = psi - Omega

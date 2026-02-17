@@ -7,10 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -21,8 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
 @Composable
@@ -130,21 +125,7 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
             }
         }
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
-            Text("Universal Time", color = Color.White, fontSize = 14.sp)
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
-            Text("Standard Time", color = Color.White, fontSize = 14.sp)
-        }
-    }
+    TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
     }
 }
 
@@ -186,7 +167,7 @@ fun findPhenomenaRow(
 
     // Returns signed difference or elongation value
     fun getCrossingVal(t: Double): Double {
-        val jd = t + 2440587.5
+        val jd = t + UNIX_EPOCH_JD
         val planetState = AstroEngine.getBodyState(bodyName, jd)
         val sunState = AstroEngine.getBodyState("Sun", jd)
 
@@ -255,7 +236,7 @@ fun findPhenomenaRow(
             if (abs(val1 - val2) > 180) return false
             if (eventType == EventType.CONJUNCTION_INF || eventType == EventType.CONJUNCTION_SUP) {
                 val tEvent = refineTime(t1, t1 + 1.0)
-                val jd = tEvent + 2440587.5
+                val jd = tEvent + UNIX_EPOCH_JD
                 val pState = AstroEngine.getBodyState(bodyName, jd)
                 val sunState = AstroEngine.getBodyState("Sun", jd)
 

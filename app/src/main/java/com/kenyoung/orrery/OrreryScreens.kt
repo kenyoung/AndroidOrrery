@@ -270,7 +270,7 @@ fun ScaleOrrery(epochDay: Double) {
                 canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint)
             }
 
-            val jd = epochDay + 2440587.5
+            val jd = epochDay + UNIX_EPOCH_JD
 
             for (p in planetList) {
                 val orbitPath = buildOrbitPath(p, cx, cy, currentPixelsPerAU.toFloat())
@@ -411,7 +411,7 @@ fun SchematicOrrery(epochDay: Double) {
         val sunTextOffset = (textPaint.descent() + textPaint.ascent()) / 2
         drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("☉", cx, cy - sunTextOffset, textPaint) }
 
-        val jd = epochDay + 2440587.5
+        val jd = epochDay + UNIX_EPOCH_JD
 
         for (i in 0 until planetList.size) {
             val p = planetList[i]
