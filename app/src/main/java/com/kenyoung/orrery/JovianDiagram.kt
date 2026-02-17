@@ -21,7 +21,7 @@ data class MoonPosHighPrec(
 )
 
 fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
-    val jdTT = jd + (69.184 / SECONDS_PER_DAY)
+    val jdTT = jd + (DELTA_T_SECONDS / SECONDS_PER_DAY)
 
     val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
     val deltaAU = jupBody.distGeo

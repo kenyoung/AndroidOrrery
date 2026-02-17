@@ -24,7 +24,7 @@ fun TimesScreen(instant: Instant, lat: Double, lon: Double) {
     val epochDay = instant.toEpochMilli() / MILLIS_PER_DAY
     // JD = (Millis / MILLIS_PER_DAY) + UNIX_EPOCH_JD
     val jd = epochDay + UNIX_EPOCH_JD
-    val mjd = jd - 2400000.5
+    val mjd = jd - MJD_OFFSET
     val n = jd - J2000_JD // Days since J2000.0
 
     // UT String

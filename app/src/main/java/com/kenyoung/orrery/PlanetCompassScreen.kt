@@ -143,7 +143,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val lstVal = calculateLSTHours(jdStart, lon)
             val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
             val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
-            val moonTargetAlt = -(0.5667 + moonSdDeg)
+            val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
 
             val moonEventData = if (needMoonCalc) {
                 var moonEvBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
@@ -262,7 +262,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                     } else pCache!!
 
                     newList.add(PlotObject(p.name, p.symbol, col, pAppRa, pAppDec,
-                        planetEventData.events, -0.5667,
+                        planetEventData.events, PLANET_HORIZON_ALT,
                         planetEventData.transitTomorrow, planetEventData.setTomorrow, planetEventData.anchorEpochDay,
                         planetEventData.riseDec, planetEventData.transitDec, planetEventData.setDec))
                 }

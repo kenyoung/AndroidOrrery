@@ -16,6 +16,7 @@ const val DEGREES_PER_CIRCLE = 360.0
 
 // Horizon and twilight altitude thresholds (degrees)
 const val HORIZON_REFRACTED = -0.833      // Sun/Moon apparent rise/set
+const val PLANET_HORIZON_ALT = -0.5667    // Refraction-corrected horizon for point sources
 const val CIVIL_TWILIGHT = -6.0
 const val NAUTICAL_TWILIGHT = -12.0
 const val ASTRONOMICAL_TWILIGHT = -18.0
@@ -26,6 +27,10 @@ const val UNIX_EPOCH_JD = 2440587.5              // Unix epoch (1970 Jan 1.0 UT)
 const val DAYS_PER_JULIAN_CENTURY = 36525.0
 const val SECONDS_PER_DAY = 86400.0
 const val MILLIS_PER_DAY = 86400000.0
+const val SIDEREAL_SOLAR_RATIO = 0.99727   // Sidereal day / solar day
+const val DELTA_T_SECONDS = 69.184         // TT - UTC ≈ 32.184 + 37 leap seconds (valid 2017–next leap second)
+const val MJD_OFFSET = 2400000.5           // JD - MJD
+const val UNIX_EPOCH_MJD = 40587.0         // MJD of Unix epoch (1970 Jan 1.0)
 
 // --- RAW MATH FUNCTIONS ---
 
@@ -591,7 +596,7 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
         val raHours = appRa / 15.0
         val lst = calculateLSTHours(jd, lon)
         val ha = normalizeHourAngle(lst - raHours)
-        tGuess -= (ha / 24.0) * 0.99727
+        tGuess -= (ha / 24.0) * SIDEREAL_SOLAR_RATIO
     }
     val tTransit = tGuess
 
@@ -650,7 +655,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val raHours = appRa / 15.0
         val lst = calculateLSTHours(jd, lon)
         val ha = normalizeHourAngle(lst - raHours)
-        tGuess -= (ha / 24.0) * 0.99727
+        tGuess -= (ha / 24.0) * SIDEREAL_SOLAR_RATIO
     }
     val tTransit = tGuess
     fun getAlt(t: Double): Double {
@@ -661,7 +666,7 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val haHours = lst - appRa / 15.0
         return calculateAltitude(haHours, lat, appDec)
     }
-    val targetAlt = -0.5667
+    val targetAlt = PLANET_HORIZON_ALT
     var tRise = tTransit - 0.25
     for (i in 0..9) {
         val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
@@ -714,7 +719,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
         val haHours = lst - topo.ra / 15.0
         val alt = calculateAltitude(haHours, lat, topo.dec)
         val sdDeg = Math.toDegrees(asin(moonRadiusM / (state.distGeo * AU_METERS)))
-        val targetAlt = -(0.5667 + sdDeg)
+        val targetAlt = PLANET_HORIZON_ALT - sdDeg
         return Pair(alt - targetAlt, normalizeHourAngle(haHours))
     }
 

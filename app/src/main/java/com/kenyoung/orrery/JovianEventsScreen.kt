@@ -85,9 +85,9 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
     val todayDate = zonedDateTime.toLocalDate()
     val startOfDayInstant = todayDate.atStartOfDay(zoneId).toInstant()
 
-    // MJD = JD - 2400000.5. JD of Instant is (millis/MILLIS_PER_DAY) + UNIX_EPOCH_JD
-    val startMJD = (startOfDayInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
-    val nowMJD = (currentInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
+    // MJD = JD - MJD_OFFSET. JD of Instant is (millis/MILLIS_PER_DAY) + UNIX_EPOCH_JD
+    val startMJD = (startOfDayInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - MJD_OFFSET
+    val nowMJD = (currentInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - MJD_OFFSET
 
     var eventList by remember { mutableStateOf<List<JovianEventItem>?>(null) }
 
@@ -271,7 +271,7 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
 // --- GENERATION LOGIC ---
 
 private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, lat: Double, lon: Double): List<JovianEventItem> {
-    val nowMJD = (nowInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - 2400000.5
+    val nowMJD = (nowInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - MJD_OFFSET
     // Increase range to 3 days to check if they fit
     val endMJD = startMJD + 3.0
     val stepSize = 1.0 / 1440.0
@@ -317,10 +317,10 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
     var nextEventFound = false
 
     for (raw in sortedRaw) {
-        val jd = raw.mjd + 2400000.5
+        val jd = raw.mjd + MJD_OFFSET
         val sunAlt = getAltitude(jd, "Sun", lat, lon)
         val jupAlt = getAltitude(jd, "Jupiter", lat, lon)
-        val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > -0.5667)
+        val isVisible = (sunAlt < HORIZON_REFRACTED) && (jupAlt > PLANET_HORIZON_ALT)
         var pixelType = if (isVisible) JovEventPixel.VISIBLE else JovEventPixel.HIDDEN
 
         if (raw.mjd > nowMJD && isVisible && !nextEventFound) {
@@ -349,10 +349,10 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
 
 // --- MATH HELPERS (MJD AWARE) ---
 
-private fun mjdToJD(mjd: Double): Double = mjd + 2400000.5
+private fun mjdToJD(mjd: Double): Double = mjd + MJD_OFFSET
 
 private fun mjdToInstant(mjd: Double): Instant {
-    val unixDay = (mjd - 40587.0).toLong()
+    val unixDay = (mjd - UNIX_EPOCH_MJD).toLong()
     val fracDay = mjd - floor(mjd)
     val nanos = (fracDay * 86_400_000_000_000L).toLong()
     val date = LocalDate.ofEpochDay(unixDay)
@@ -372,7 +372,7 @@ private fun getSystemState(jd: Double): Map<String, MoonInstantState> {
 }
 
 private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
-    val jdTT = jd + (69.184 / SECONDS_PER_DAY)
+    val jdTT = jd + (DELTA_T_SECONDS / SECONDS_PER_DAY)
     val jupBody = AstroEngine.getBodyState("Jupiter", jdTT)
     val deltaAU = jupBody.distGeo
 
