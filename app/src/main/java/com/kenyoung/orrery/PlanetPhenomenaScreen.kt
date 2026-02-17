@@ -31,8 +31,8 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
     val density = LocalDensity.current
 
     val bgColor = Color.Black
-    val headerYellow = LabelColor
-    val planetYellow = LabelColor
+    val headerLabelColor = LabelColor
+    val planetLabelColor = LabelColor
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 
@@ -64,10 +64,10 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
 
         Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
             val w = size.width
-            val titlePaintYellow = Paint().apply { color = headerYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val titlePaintYellow = Paint().apply { color = headerLabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val titlePaintWhite = Paint().apply { color = textWhite.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val colHeaderPaint = Paint().apply { color = eventBlue.toArgb(); textSize = 40f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
-            val planetNamePaint = Paint().apply { color = planetYellow.toArgb(); textSize = 42f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
+            val planetNamePaint = Paint().apply { color = planetLabelColor.toArgb(); textSize = 42f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val eventNamePaint = Paint().apply { color = eventBlue.toArgb(); textSize = 34f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val datePaint = Paint().apply { color = textWhite.toArgb(); textSize = 34f; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
 

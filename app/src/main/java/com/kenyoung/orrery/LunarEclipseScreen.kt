@@ -1164,7 +1164,7 @@ private fun renderEclipse(
     val colorGreen = Color.Green
     val colorMediumGrey = Color(0xFF757575)  // For connecting lines
     val colorBlue = Color(0xFF0080FF)
-    val colorYellow = LabelColor
+    val colorLabel = LabelColor
     val colorLightBlue = Color(0xFF87CEEB)
     val colorDarkBlueGreen = Color(0xFF006464)
 
@@ -1537,12 +1537,12 @@ private fun renderEclipse(
     }
 
     if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
-        drawScope.drawCircle(colorYellow, moonRadiusPixels.toFloat(), Offset(moonPosX[4], moonPosY[4]), style = Stroke(2f))
-        drawScope.drawCircle(colorYellow, moonRadiusPixels.toFloat(), Offset(moonPosX[5], moonPosY[5]), style = Stroke(2f))
+        drawScope.drawCircle(colorLabel, moonRadiusPixels.toFloat(), Offset(moonPosX[4], moonPosY[4]), style = Stroke(2f))
+        drawScope.drawCircle(colorLabel, moonRadiusPixels.toFloat(), Offset(moonPosX[5], moonPosY[5]), style = Stroke(2f))
     }
 
     // Moon at maximum eclipse
-    drawScope.drawCircle(colorYellow, moonRadiusPixels.toFloat(), Offset(shadowPx, shadowPy), style = Stroke(2f))
+    drawScope.drawCircle(colorLabel, moonRadiusPixels.toFloat(), Offset(shadowPx, shadowPy), style = Stroke(2f))
 
     // Current Moon position (Full Moon image) if within ±6 hours of penumbral phase
     // and the image fits entirely inside the Moon path diagram
@@ -1838,7 +1838,7 @@ private fun renderEclipse(
         val prefixWidth = textPaint.measureText(titlePrefix)
         val dateWidth = textPaint.measureText(titleDate)
         val titleStartX = (width - prefixWidth - dateWidth) / 2
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(titlePrefix, titleStartX, titleY, textPaint)
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(titleDate, titleStartX + prefixWidth, titleY, textPaint)
@@ -1849,10 +1849,10 @@ private fun renderEclipse(
             neverWasUp -> "This eclipse is not visible from your location." to colorRed
             alwaysWasUp -> "All of this eclipse is visible from your location." to colorGreen
             eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && willSeeTot -> "You can see the total eclipse." to colorGreen
-            eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && willSeePar -> "You can only see a partial eclipse." to colorYellow
-            eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE -> "You can only see the penumbral phase." to colorYellow
+            eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE && willSeePar -> "You can only see a partial eclipse." to colorLabel
+            eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE -> "You can only see the penumbral phase." to colorLabel
             eclipse.eclipseType == PARTIAL_LUNAR_ECLIPSE && willSeePar -> "You can see the partial eclipse." to colorGreen
-            eclipse.eclipseType == PARTIAL_LUNAR_ECLIPSE -> "You can only see the penumbral phase." to colorYellow
+            eclipse.eclipseType == PARTIAL_LUNAR_ECLIPSE -> "You can only see the penumbral phase." to colorLabel
             else -> "You can see the penumbral eclipse." to colorGreen
         }
         textPaint.color = visibilityColor.toArgb()
@@ -1877,25 +1877,25 @@ private fun renderEclipse(
         val durWidth4 = textPaint.measureText(durPart4)
         val durTotalWidth = durWidth1 + durWidthN1 + durWidth2 + durWidthN2 + durWidth3 + durWidthN3 + durWidth4
         var durX = (width - durTotalWidth) / 2
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(durPart1, durX, durationY, textPaint)
         durX += durWidth1
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(durNum1, durX, durationY, textPaint)
         durX += durWidthN1
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(durPart2, durX, durationY, textPaint)
         durX += durWidth2
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(durNum2, durX, durationY, textPaint)
         durX += durWidthN2
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(durPart3, durX, durationY, textPaint)
         durX += durWidth3
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(durNum3, durX, durationY, textPaint)
         durX += durWidthN3
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(durPart4, durX, durationY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER
 
@@ -1912,11 +1912,11 @@ private fun renderEclipse(
         val magValueWidth = textPaint.measureText(magValue)
         val sarosTotalWidth = sarosLabelWidth + sarosNumWidth + magLabelWidth + magValueWidth
         val sarosStartX = (width - sarosTotalWidth) / 2
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(sarosLabel, sarosStartX, sarosY, textPaint)
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(sarosNum, sarosStartX + sarosLabelWidth, sarosY, textPaint)
-        textPaint.color = colorYellow.toArgb()
+        textPaint.color = colorLabel.toArgb()
         canvas.nativeCanvas.drawText(magLabel, sarosStartX + sarosLabelWidth + sarosNumWidth, sarosY, textPaint)
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(magValue, sarosStartX + sarosLabelWidth + sarosNumWidth + magLabelWidth, sarosY, textPaint)

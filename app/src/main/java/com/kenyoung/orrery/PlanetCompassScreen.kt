@@ -404,17 +404,17 @@ fun CompassCanvas(
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
             // Draw header with yellow labels and white time values
-            val totalWidth = paints.headerYellow.measureText(headerPart1) +
+            val totalWidth = paints.headerLabel.measureText(headerPart1) +
                     paints.header.measureText(headerPart2) +
-                    paints.headerYellow.measureText(headerPart3) +
+                    paints.headerLabel.measureText(headerPart3) +
                     paints.header.measureText(headerPart4)
             var x = (w - totalWidth) / 2f
-            nc.drawText(headerPart1, x, textY, paints.headerYellow)
-            x += paints.headerYellow.measureText(headerPart1)
+            nc.drawText(headerPart1, x, textY, paints.headerLabel)
+            x += paints.headerLabel.measureText(headerPart1)
             nc.drawText(headerPart2, x, textY, paints.header)
             x += paints.header.measureText(headerPart2)
-            nc.drawText(headerPart3, x, textY, paints.headerYellow)
-            x += paints.headerYellow.measureText(headerPart3)
+            nc.drawText(headerPart3, x, textY, paints.headerLabel)
+            x += paints.headerLabel.measureText(headerPart3)
             nc.drawText(headerPart4, x, textY, paints.header)
 
             // 1. Azimuth Circle (Right)
@@ -505,13 +505,14 @@ fun CompassCanvas(
 
             val row1Y = tableTop; val row2Y = tableTop + rowHeight
 
-            nc.drawText("Rising", cols[2] + (cols[3]-cols[2]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
+            nc.drawText("Rising", (cols[2] - 17f + cols[3] + 45f) / 2f, row1Y, paints.tableHeaderCenter)
             nc.drawText("Transit", cols[4] + (cols[5]-cols[4]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
             nc.drawText("Setting", cols[6] + (cols[7]-cols[6]+45f)*0.5f, row1Y, paints.tableHeaderCenter)
 
             val timeColHeader = "Time $timeLabel"
             nc.drawText("Planet", cols[0], row2Y, paints.tableHeaderLeft)
-            nc.drawText("HA", cols[1], row2Y, paints.tableHeaderRight)
+            val haCharWidth = paints.tableDataRight.measureText("0")
+            nc.drawText("HA", cols[1] + 45f - 2.5f * haCharWidth, row2Y, paints.tableHeaderCenter)
             nc.drawText(timeColHeader, cols[2] - 17f, row2Y, paints.tableHeaderLeft)
             nc.drawText(timeColHeader, cols[4], row2Y, paints.tableHeaderLeft)
             nc.drawText(timeColHeader, cols[6], row2Y, paints.tableHeaderLeft)
@@ -632,7 +633,7 @@ class CompassPaints(
     tickCol: Int, grayTickCol: Int, headerCol: Int
 ) {
     val header = Paint().apply { color=android.graphics.Color.WHITE; textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
-    val headerYellow = Paint().apply { color=LabelColor.toArgb(); textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
+    val headerLabel = Paint().apply { color=LabelColor.toArgb(); textSize=45f; textAlign=Paint.Align.LEFT; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); isAntiAlias=true }
     val label = Paint().apply { color=greenInt; textSize=40f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL); isAntiAlias=true }
     val labelRed = Paint().apply { color=redInt; textSize=40f; textAlign=Paint.Align.CENTER; typeface=Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL); isAntiAlias=true }
     val triangleTick = Paint().apply { color=tickCol; style=Paint.Style.FILL; isAntiAlias=true }

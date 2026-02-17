@@ -150,8 +150,8 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                 val dateHeaderHeight = 60f
                 val bottomPadding = 20f
                 val textSizeContent = 40f
-                val headerYellow = LabelColor
-                val dateYellow = LabelColor
+                val headerLabelColor = LabelColor
+                val dateLabelColor = LabelColor
                 val textGray = Color.Gray
                 val textGreen = Color(0xFF00FF00)
                 val textRed = Color.Red
@@ -193,7 +193,7 @@ fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Do
                         val titlePaint = Paint().apply { color = LabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
                         val timeHeaderYellow = Paint().apply { color = LabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
                         val timeHeaderWhite = Paint().apply { color = Color.White.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
-                        val dateHeaderPaint = Paint().apply { color = dateYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
+                        val dateHeaderPaint = Paint().apply { color = dateLabelColor.toArgb(); textSize = 36f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
 
                         val paintGray = Paint().apply { color = textGray.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }
                         val paintGreen = Paint().apply { color = textGreen.toArgb(); textSize = textSizeContent; textAlign = Paint.Align.LEFT; typeface = Typeface.SANS_SERIF; isAntiAlias = true }

@@ -76,7 +76,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
     val brightBlue = Color(0xFF9999FF)
     val blueAxis = neptuneBlue
     val standardGray = Color.Gray
-    val textYellow = LabelColor
+    val textLabelColor = LabelColor
     val labelRed = Color.Red
     val labelGreen = Color.Green
     val currentLineGreen = Color(0xFF00FF00)
@@ -93,9 +93,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         // Native Paints
         val axisTextPaint = Paint().apply { color = brightBlue.toArgb(); textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
         val whiteAxisTextPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
-        val titlePaintYellow = Paint().apply { color = textYellow.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
+        val titlePaintYellow = Paint().apply { color = textLabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
         val titlePaintWhite = Paint().apply { color = android.graphics.Color.WHITE; textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT }
-        val subTitlePaint = Paint().apply { color = textYellow.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
+        val subTitlePaint = Paint().apply { color = textLabelColor.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT }
         val labelPaint = Paint().apply { color = standardGray.toArgb(); textSize = 30f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
         val objectLabelPaint = Paint().apply { textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
         val tickTextPaint = Paint().apply { textSize = 24f; textAlign = Paint.Align.CENTER }
@@ -607,7 +607,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         if (anyAsterisk) {
             drawIntoCanvas {
                 val tomorrowPaint = Paint().apply {
-                    color = brightBlue.toArgb()
+                    color = textLabelColor.toArgb()
                     textSize = 36f
                     textAlign = Paint.Align.LEFT
                     typeface = Typeface.DEFAULT
