@@ -26,8 +26,7 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
     val density = LocalDensity.current
 
     val bgColor = Color.Black
-    val headerLabelColor = LabelColor
-    val planetLabelColor = LabelColor
+    val labelColor = LabelColor
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
     val textWhite = Color.White
 
@@ -59,10 +58,10 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
 
         Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
             val w = size.width
-            val titlePaintYellow = Paint().apply { color = headerLabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val titlePaintYellow = Paint().apply { color = labelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val titlePaintWhite = Paint().apply { color = textWhite.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val colHeaderPaint = Paint().apply { color = eventBlue.toArgb(); textSize = 40f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
-            val planetNamePaint = Paint().apply { color = planetLabelColor.toArgb(); textSize = 42f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
+            val planetNamePaint = Paint().apply { color = labelColor.toArgb(); textSize = 42f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val eventNamePaint = Paint().apply { color = eventBlue.toArgb(); textSize = 34f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT; isAntiAlias = true }
             val datePaint = Paint().apply { color = textWhite.toArgb(); textSize = 34f; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
 
@@ -137,7 +136,7 @@ enum class EventType { CONJUNCTION_INF, CONJUNCTION_SUP, OPPOSITION, ELONGATION_
 
 // --- CALCULATION LOGIC (Using AstroEngine) ---
 
-suspend fun calculatePhenomena(epochDay: Double): List<PlanetPhenomenaData> {
+private suspend fun calculatePhenomena(epochDay: Double): List<PlanetPhenomenaData> {
     val planets = getOrreryPlanets().filter { it.name != "Earth" }
     val results = mutableListOf<PlanetPhenomenaData>()
 
@@ -160,7 +159,7 @@ suspend fun calculatePhenomena(epochDay: Double): List<PlanetPhenomenaData> {
     return results
 }
 
-fun findPhenomenaRow(
+private fun findPhenomenaRow(
     label: String, centerEpoch: Double, bodyName: String, rangeDays: Int,
     targetVal: Double = 0.0, eventType: EventType
 ): PhenomenaRow {
@@ -321,7 +320,7 @@ fun findPhenomenaRow(
     return PhenomenaRow(label, lastEvent ?: fallback, nextEvent ?: fallback)
 }
 
-fun makeEvent(epochDay: Double, angle: Double?): PhenomenonEvent {
+private fun makeEvent(epochDay: Double, angle: Double?): PhenomenonEvent {
     val dayFrac = epochDay - floor(epochDay)
     var hour = (dayFrac * 24.0).roundToInt()
     var dateOffset = 0L

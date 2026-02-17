@@ -179,12 +179,10 @@ object EphemerisManager {
     }
 
     private fun cubicInterp(p0: Double, p1: Double, p2: Double, p3: Double, t: Double, tSq: Double, tCub: Double): Double {
-        val m0 = p0; val m1 = p1; val m2 = p2; val m3 = p3
-
-        val c0 = 2.0 * m1
-        val c1 = -m0 + m2
-        val c2 = 2.0 * m0 - 5.0 * m1 + 4.0 * m2 - m3
-        val c3 = -m0 + 3.0 * m1 - 3.0 * m2 + m3
+        val c0 = 2.0 * p1
+        val c1 = -p0 + p2
+        val c2 = 2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3
+        val c3 = -p0 + 3.0 * p1 - 3.0 * p2 + p3
 
         return 0.5 * (c0 + c1 * t + c2 * tSq + c3 * tCub)
     }

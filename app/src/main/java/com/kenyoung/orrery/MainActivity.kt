@@ -420,7 +420,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
                     Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
-                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(displayEpoch, currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
@@ -463,7 +463,7 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double): AstroCache {
 }
 
 // --- UTILITIES ---
-fun formatUtOffset(hours: Double): String {
+private fun formatUtOffset(hours: Double): String {
     val sign = if (hours >= 0) "+" else "\u2212"
     val absH = abs(hours)
     val h = floor(absH).toInt()
@@ -471,7 +471,7 @@ fun formatUtOffset(hours: Double): String {
     return if (m == 0) "UT${sign}$h" else "UT${sign}$h:%02d".format(m)
 }
 
-fun degToDms(valDeg: Double): Triple<String, String, String> {
+private fun degToDms(valDeg: Double): Triple<String, String, String> {
     val absVal = abs(valDeg)
     val d = floor(absVal).toInt()
     val mPart = (absVal - d) * 60.0

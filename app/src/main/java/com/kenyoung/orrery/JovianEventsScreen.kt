@@ -48,7 +48,7 @@ data class JovianEventItem(
     val isSimultaneousAlert: Boolean = false
 )
 
-data class MoonInstantState(
+private data class MoonInstantState(
     val transit: Boolean,
     val occultation: Boolean,
     val shadowTransit: Boolean,
@@ -70,7 +70,7 @@ private data class RawEvent(
 // --- COMPOSABLE ---
 
 @Composable
-fun JovianEventsScreen(currentEpochDay: Double, currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
@@ -364,7 +364,7 @@ private fun getSystemStateMJD(mjd: Double): Map<String, MoonInstantState> {
     return getSystemState(mjdToJD(mjd))
 }
 
-fun getSystemState(jd: Double): Map<String, MoonInstantState> {
+private fun getSystemState(jd: Double): Map<String, MoonInstantState> {
     val completeState = getCompleteSystemState(jd)
     return completeState.mapValues { (_, state) ->
         MoonInstantState(state.isTransit, state.isOccultation, state.isShadowTransit, state.isEclipse)
@@ -397,9 +397,7 @@ private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
     val resultMap = mutableMapOf<String, MoonCompleteState>()
     val moonRadii = mapOf("Io" to 0.0255, "Europa" to 0.0218, "Ganymede" to 0.0368, "Callisto" to 0.0337)
 
-    val jFlat = 15f / 16f
-    val FLATTENING = 1.0 - jFlat
-    val yScale = 1.0 / (1.0 - FLATTENING)
+    val yScale = 16.0 / 15.0 // Jupiter equatorial/polar radius ratio
 
     for ((name, vec) in moonsMap) {
         val x = vec.x; val y = vec.y; val z = -vec.z // Invert Z

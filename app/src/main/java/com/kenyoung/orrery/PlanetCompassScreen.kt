@@ -634,7 +634,7 @@ class CompassPaints(
 
 // --- SHARED MATH HELPERS ---
 
-fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, altitude: Double): Double {
+private fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, altitude: Double): Double {
     val latRad = Math.toRadians(lat)
     val decRad = Math.toRadians(dec)
     val altRad = Math.toRadians(altitude)

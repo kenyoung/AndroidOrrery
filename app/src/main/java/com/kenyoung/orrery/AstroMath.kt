@@ -74,7 +74,7 @@ fun sphericalToCartesian(dist: Double, lonDeg: Double, latDeg: Double): Vector3 
 }
 
 // Calculate Obliquity of Ecliptic for a given JD
-fun calculateObliquity(jd: Double): Double {
+private fun calculateObliquity(jd: Double): Double {
     val t = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     return 23.439291 - 0.0130042 * t
 }
@@ -188,11 +188,11 @@ fun calculateNutation(T: Double): NutationResult {
     val cached = cachedNutResult
     if (cached != null && abs(T - cachedNutT) < NUT_CACHE_TOL) return cached
 
-    var D = normalizeDegrees(297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0)
-    var M = normalizeDegrees(357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0)
-    var Mprime = normalizeDegrees(134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250.0)
-    var F = normalizeDegrees(93.27191 + 483202.017538 * T - 0.0036825 * T * T + T * T * T / 327270.0)
-    var omega = normalizeDegrees(125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000.0)
+    val D = normalizeDegrees(297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0)
+    val M = normalizeDegrees(357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0)
+    val Mprime = normalizeDegrees(134.96298 + 477198.867398 * T + 0.0086972 * T * T + T * T * T / 56250.0)
+    val F = normalizeDegrees(93.27191 + 483202.017538 * T - 0.0036825 * T * T + T * T * T / 327270.0)
+    val omega = normalizeDegrees(125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000.0)
 
     var dP = 0.0
     var dE = 0.0
@@ -226,7 +226,7 @@ fun calculateNutation(T: Double): NutationResult {
 
 // --- PRECESSION (Meeus 21.3) ---
 // Converts J2000 (ICRF) equatorial coordinates to mean-of-date equatorial coordinates
-fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+private fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
     val T = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T
