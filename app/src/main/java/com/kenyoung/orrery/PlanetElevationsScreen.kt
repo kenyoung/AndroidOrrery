@@ -146,6 +146,19 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         while (currentH < startHour) currentH += 24.0
         while (currentH > endHour) currentH -= 24.0
         val xNow = timeToX(currentH)
+        val currentUtEpochDay = now.epochSecond.toDouble() / 86400.0
+
+        // Asterisk tracking — same algorithm as Compass page
+        val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
+        val currentDisplayDate = floor(currentUtEpochDay + displayOffsetHours / 24.0).toLong()
+        var anyAsterisk = false
+
+        fun isRiseTomorrow(ev: PlanetEvents, anchorEpochDay: Double): Boolean {
+            if (ev.rise.isNaN()) return false
+            val anchorDate = floor(anchorEpochDay).toLong()
+            val riseRaw = ev.rise - offsetHours + displayOffsetHours
+            return anchorDate + floor(riseRaw / 24.0).toLong() > currentDisplayDate
+        }
 
         // --- DRAW TWILIGHT SHADING ---
         if (!sunsetToday.isNaN() && !astroSetToday.isNaN()) {
@@ -353,14 +366,29 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
 
         // --- DRAW SUN LINE (Row 1) ---
+        // Sun asterisk: mirror Compass auto-advance to determine effective anchor
+        val sunEffectiveAnchor = if (!sunsetToday.isNaN()) {
+            val baseMidnightUT = floor(epochDayInt) - offsetHours / 24.0
+            if (baseMidnightUT + sunsetToday / 24.0 < currentUtEpochDay) epochDayInt + 1.0 else epochDayInt
+        } else epochDayInt
+        val sunAsterisk = if (sunEffectiveAnchor > epochDayInt && !sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
+            val (st, _) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
+            isRiseTomorrow(PlanetEvents(sunriseTomorrow, st, setTomorrow), sunEffectiveAnchor)
+        } else if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
+            val (st, _) = calculateSunTransit(epochDayInt, lon, offsetHours)
+            isRiseTomorrow(PlanetEvents(riseToday, st, sunsetToday), sunEffectiveAnchor)
+        } else false
+        if (sunAsterisk) anyAsterisk = true
+        val sunLabel = if (sunAsterisk) "Sun*" else "Sun"
+
         val sunY = firstBodyY
         if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
             val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
+            drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
         }
         if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
             val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, "Sun", PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED)
+            drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED)
         }
         // Sun Current Elevation
         val sunEvList = listOfNotNull(
@@ -403,7 +431,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         if (!moonEv.rise.isNaN() && !moonEv.set.isNaN()) {
             val moonDayStartUT = floor(epochDayInt) - offsetHours / 24.0
             val moonSetAbsLocal = if (moonEv.set >= moonEv.rise) moonEv.set else moonEv.set + 24.0
-            if (moonDayStartUT + moonSetAbsLocal / 24.0 < now.epochSecond.toDouble() / 86400.0) {
+            if (moonDayStartUT + moonSetAbsLocal / 24.0 < currentUtEpochDay) {
                 moonEv = calculateMoonEvents(epochDayInt + 1.0, lat, lon, offsetHours, pairedRiseSet = true)
                 moonEpochBase = epochDayInt + 1.0
             }
@@ -443,16 +471,30 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             }
         }
         val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
+        val moonAsterisk = isRiseTomorrow(moonEv, moonEpochBase)
+        if (moonAsterisk) anyAsterisk = true
+        val moonLabel = if (moonAsterisk) "Moon*" else "Moon"
 
-        drawObjectLineAndTicks(moonY, "Moon", moonEv, moonDec, moonLabelColor.toArgb())
+        drawObjectLineAndTicks(moonY, moonLabel, moonEv, moonDec, moonLabelColor.toArgb())
 
         // --- DRAW PLANETS (Rows 3+) ---
-        val jd = epochDayInt + 2440587.5
-
         planetList.forEachIndexed { i, p ->
             val yPos = firstBodyY + (i + 2) * bodySpacing
             // Use Standard Calculator (matches TransitsScreen)
-            val ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
+            var ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
+            var planetEpochBase = epochDayInt
+
+            // If planet has set, advance to next day's events (matches Compass auto-advance)
+            if (!ev.rise.isNaN() && !ev.set.isNaN()) {
+                val setAbs = if (ev.set >= ev.rise) ev.set else ev.set + 24.0
+                val baseMidnightUT = floor(epochDayInt) - offsetHours / 24.0
+                if (baseMidnightUT + setAbs / 24.0 < currentUtEpochDay) {
+                    ev = calculatePlanetEvents(epochDayInt + 1.0, lat, lon, offsetHours, p)
+                    planetEpochBase = epochDayInt + 1.0
+                }
+            }
+
+            val jd = planetEpochBase + 2440587.5
             // Apparent dec at transit time for tick marks and max-alt display
             val transitDec = if (!ev.transit.isNaN()) {
                 val transitJD = jd + ((ev.transit - offsetHours) / 24.0)
@@ -469,8 +511,11 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             while (cNorm2 < rNorm) cNorm2 += 24.0
             if (cNorm2 < sNorm) pIsUp = true
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
+            val planetAsterisk = isRiseTomorrow(ev, planetEpochBase)
+            if (planetAsterisk) anyAsterisk = true
+            val planetLabel = if (planetAsterisk) "${p.name}*" else p.name
 
-            drawObjectLineAndTicks(yPos, p.name, ev, transitDec, pLabelColor.toArgb())
+            drawObjectLineAndTicks(yPos, planetLabel, ev, transitDec, pLabelColor.toArgb())
 
             // Planet Current Elevation — check all shifts like Moon code
             var pLineAtXNow = false
@@ -555,6 +600,19 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val boxRight = item.x + textW/2 + boxPad
                 canvas.nativeCanvas.drawRect(boxLeft, boxTop, boxRight, boxBottom, blackFillPaint)
                 canvas.nativeCanvas.drawText(item.text, item.x, item.y, paint)
+            }
+        }
+
+        // "* Tomorrow" footnote if any object name has an asterisk
+        if (anyAsterisk) {
+            drawIntoCanvas {
+                val tomorrowPaint = Paint().apply {
+                    color = brightBlue.toArgb()
+                    textSize = 36f
+                    textAlign = Paint.Align.LEFT
+                    typeface = Typeface.DEFAULT
+                }
+                it.nativeCanvas.drawText("* Tomorrow", 20f, lstSubtitleBaseline, tomorrowPaint)
             }
         }
     }
