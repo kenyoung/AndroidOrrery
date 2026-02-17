@@ -194,7 +194,7 @@ private fun findPhenomenaRow(
         return (low + high) / 2.0
     }
 
-    // UPDATED: Golden Section Search for finding Max/Min (Elongations for Mercury and Venus)
+    // Golden Section Search for finding Max/Min (Elongations for Mercury and Venus)
     // precision ~ 1 minute (0.0007 days)
     fun findPeakTime(tStart: Double, tEnd: Double, isMax: Boolean): Double {
         val gr = (sqrt(5.0) - 1.0) / 2.0
@@ -239,7 +239,7 @@ private fun findPhenomenaRow(
                 val pState = AstroEngine.getBodyState(bodyName, jd)
                 val sunState = AstroEngine.getBodyState("Sun", jd)
 
-                // FIXED: Use Planet-Earth Dist vs Sun-Earth Dist to distinguish Inf/Sup
+                // Use planet-Earth distance vs Sun-Earth distance to distinguish Inf/Sup
                 val isInf = pState.distGeo < sunState.distGeo
 
                 if (eventType == EventType.CONJUNCTION_INF && !isInf) return false

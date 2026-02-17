@@ -235,7 +235,7 @@ object JovianPrecision {
         val P = 1.3966626 * T0 + 0.0003088 * T0 * T0
         L[1] += P; L[2] += P; L[3] += P; L[4] += P; psi += P
 
-        // FIX: Use T (1900 Epoch) for Inclination I
+        // Inclination I uses 1900 epoch (T_1900), not J2000
         val T_1900 = (jD - 2415020.5) / DAYS_PER_JULIAN_CENTURY
         val I = 3.120262 + 0.0006 * T_1900
 

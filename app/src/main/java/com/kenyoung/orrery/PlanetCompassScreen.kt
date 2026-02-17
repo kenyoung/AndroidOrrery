@@ -469,7 +469,7 @@ fun CompassCanvas(
             }
 
             for (obj in plotData) {
-                // FIXED: obj.ra is in DEGREES. Must convert to HOURS for calculateAzAlt.
+                // obj.ra is in degrees — convert to hours for calculateAzAlt
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val apparentAlt = applyRefraction(alt)

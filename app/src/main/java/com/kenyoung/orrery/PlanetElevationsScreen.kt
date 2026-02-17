@@ -288,7 +288,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                         tickIncrements.forEach { alt ->
                             if (alt == 0) {
                                 // --- HORIZON (0 DEGREE) CASE ---
-                                // FIXED: Use 'r' and 'sFinal' which account for the +24h wrap used in line drawing.
+                                // Use 'r' and 'sFinal' which account for the +24h wrap used in line drawing.
                                 // This ensures the ticks align with the drawn line endpoints.
                                 val tTickRise = r
                                 val tTickSet = sFinal
