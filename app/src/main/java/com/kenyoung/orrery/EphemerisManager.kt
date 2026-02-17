@@ -42,7 +42,6 @@ object EphemerisManager {
                     loadMoonFile(context)
                     isLoaded = true
                 } catch (e: Exception) {
-                    e.printStackTrace()
                     isLoaded = false
                 }
             }

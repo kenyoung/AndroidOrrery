@@ -96,7 +96,6 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
             try {
                 eventList = generateJovianEvents(startMJD, currentInstant, lat, lon)
             } catch (e: Exception) {
-                e.printStackTrace()
                 eventList = emptyList()
             }
         }

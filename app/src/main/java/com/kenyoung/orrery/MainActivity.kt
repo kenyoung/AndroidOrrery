@@ -80,13 +80,19 @@ class MainActivity : ComponentActivity() {
     private fun getLocationAndSetContent() {
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         try {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                val lat = location?.latitude ?: 0.0
-                val lon = location?.longitude ?: 0.0
-                setContent {
-                    OrreryApp(initialGpsLat = lat, initialGpsLon = lon)
+            fusedLocationClient.lastLocation
+                .addOnSuccessListener { location ->
+                    val lat = location?.latitude ?: 0.0
+                    val lon = location?.longitude ?: 0.0
+                    setContent {
+                        OrreryApp(initialGpsLat = lat, initialGpsLon = lon)
+                    }
                 }
-            }
+                .addOnFailureListener {
+                    setContent {
+                        OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0)
+                    }
+                }
         } catch (e: SecurityException) {
             setContent {
                 OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0)
