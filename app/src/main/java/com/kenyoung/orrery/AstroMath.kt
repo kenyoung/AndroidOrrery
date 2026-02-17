@@ -583,22 +583,38 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
 
 // --- RISE/SET/TRANSIT CALCULATIONS ---
 
-fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
-    // Use integer date — fractional epoch days from manual time entry shift the
-    // scan start forward, causing events between now and now+|offset| to be missed.
-    val epochDayInt = floor(epochDay)
-    // Iteratively find Sun transit (recomputes position each step)
-    var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
+private fun refineTransit(bodyName: String, tInitial: Double, lon: Double): Double {
+    var tGuess = tInitial
     for (i in 0..4) {
         val jd = tGuess + UNIX_EPOCH_JD
-        val state = AstroEngine.getBodyState("Sun", jd)
+        val state = AstroEngine.getBodyState(bodyName, jd)
         val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
         val raHours = appRa / 15.0
         val lst = calculateLSTHours(jd, lon)
         val ha = normalizeHourAngle(lst - raHours)
         tGuess -= (ha / 24.0) * SIDEREAL_SOLAR_RATIO
     }
-    val tTransit = tGuess
+    return tGuess
+}
+
+private fun refineRiseSet(getAlt: (Double) -> Double, tTransit: Double, targetAlt: Double, lat: Double, isRise: Boolean): Double {
+    var t = tTransit + if (isRise) -0.25 else 0.25
+    val rateSign = if (isRise) 1.0 else -1.0
+    for (i in 0..9) {
+        val alt = getAlt(t)
+        val diff = alt - targetAlt
+        val rate = rateSign * 360.0 * cos(Math.toRadians(lat))
+        if (abs(rate) < 1.0) break
+        t -= (diff / rate)
+    }
+    return t
+}
+
+fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
+    // Use integer date — fractional epoch days from manual time entry shift the
+    // scan start forward, causing events between now and now+|offset| to be missed.
+    val epochDayInt = floor(epochDay)
+    val tTransit = refineTransit("Sun", epochDayInt + 0.5 - (timezoneOffset / 24.0), lon)
 
     fun getAlt(t: Double): Double {
         val jd = t + UNIX_EPOCH_JD
@@ -615,19 +631,8 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
     val nadirAlt = getAlt(tTransit + 0.5)
     if (nadirAlt > altitude) return Pair(Double.NaN, Double.NaN)
 
-    // Iteratively refine rise time
-    var tRise = tTransit - 0.25
-    for (i in 0..9) {
-        val alt = getAlt(tRise); val diff = alt - altitude; val rate = 360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tRise -= (diff / rate)
-    }
-
-    // Iteratively refine set time
-    var tSet = tTransit + 0.25
-    for (i in 0..9) {
-        val alt = getAlt(tSet); val diff = alt - altitude; val rate = -360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tSet -= (diff / rate)
-    }
+    val tRise = refineRiseSet(::getAlt, tTransit, altitude, lat, isRise = true)
+    val tSet = refineRiseSet(::getAlt, tTransit, altitude, lat, isRise = false)
 
     return Pair(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
 }
@@ -647,17 +652,8 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
     // Use integer date — fractional epoch days from manual time entry shift the
     // scan start forward, causing events between now and now+|offset| to be missed.
     val epochDayInt = floor(epochDay)
-    var tGuess = epochDayInt + 0.5 - (timezoneOffset / 24.0)
-    for (i in 0..4) {
-        val jd = tGuess + UNIX_EPOCH_JD
-        val state = AstroEngine.getBodyState(p.name, jd)
-        val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
-        val raHours = appRa / 15.0
-        val lst = calculateLSTHours(jd, lon)
-        val ha = normalizeHourAngle(lst - raHours)
-        tGuess -= (ha / 24.0) * SIDEREAL_SOLAR_RATIO
-    }
-    val tTransit = tGuess
+    val tTransit = refineTransit(p.name, epochDayInt + 0.5 - (timezoneOffset / 24.0), lon)
+
     fun getAlt(t: Double): Double {
         val jd = t + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState(p.name, jd)
@@ -666,17 +662,10 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         val haHours = lst - appRa / 15.0
         return calculateAltitude(haHours, lat, appDec)
     }
-    val targetAlt = PLANET_HORIZON_ALT
-    var tRise = tTransit - 0.25
-    for (i in 0..9) {
-        val alt = getAlt(tRise); val diff = alt - targetAlt; val rate = 360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tRise -= (diff / rate)
-    }
-    var tSet = tTransit + 0.25
-    for (i in 0..9) {
-        val alt = getAlt(tSet); val diff = alt - targetAlt; val rate = -360.0 * cos(Math.toRadians(lat))
-        if (abs(rate) < 1.0) break; tSet -= (diff / rate)
-    }
+
+    val tRise = refineRiseSet(::getAlt, tTransit, PLANET_HORIZON_ALT, lat, isRise = true)
+    val tSet = refineRiseSet(::getAlt, tTransit, PLANET_HORIZON_ALT, lat, isRise = false)
+
     return PlanetEvents(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tTransit, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
 }
 
