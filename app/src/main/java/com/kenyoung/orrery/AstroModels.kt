@@ -1,9 +1,38 @@
 package com.kenyoung.orrery
 
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 // --- UI CONSTANTS ---
 val LabelColor = Color(0xFFADD8E6) // Light Blue
+
+// --- SHARED UI COMPONENTS ---
+
+@Composable
+fun TimeDisplayToggle(useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = !useLocalTime, onClick = { onTimeDisplayChange(false) })
+            Text("Universal Time", color = Color.White, fontSize = 14.sp)
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
+            Text("Standard Time", color = Color.White, fontSize = 14.sp)
+        }
+    }
+}
 
 // --- DATA CLASSES ---
 

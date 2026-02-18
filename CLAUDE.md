@@ -16,7 +16,7 @@ Android Orrery is an astronomical visualization app built entirely with Jetpack 
 ### Single Activity + Compose Navigation
 
 - `MainActivity.kt` is the only activity; all UI is Compose-based (no XML layouts)
-- Navigation uses a `Screen` enum with 12 screens, selected via dropdown menu
+- Navigation uses a `Screen` enum with 13 screens, selected via dropdown menu
 - State is managed directly in composables using `mutableStateOf()` (no ViewModels)
 
 ### Screen Enum
