@@ -555,7 +555,7 @@ fun CompassCanvas(
                 val riseDecVal = if (obj.riseDec.isNaN()) obj.dec else obj.riseDec
                 val riseAz = calculateAzAtRiseSet(lat, riseDecVal, true, obj.targetAlt)
                 paints.tableDataRight.color = riseColor
-                nc.drawText("%.0f".format(riseAz), cols[3]+45f, currY, paints.tableDataRight)
+                nc.drawText(if (riseAz.isNaN()) "---" else "%.0f".format(riseAz), cols[3]+45f, currY, paints.tableDataRight)
 
                 // Transit — restore 24h if pulled from next day, for correct date calc
                 val transRaw = (obj.events.transit + if (obj.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
@@ -568,7 +568,7 @@ fun CompassCanvas(
                 val transitDecVal = if (obj.transitDec.isNaN()) obj.dec else obj.transitDec
                 val transEl = 90.0 - abs(lat - transitDecVal)
                 paints.tableDataRight.color = transColor
-                nc.drawText("%.0f".format(transEl), cols[5]+45f, currY, paints.tableDataRight)
+                nc.drawText(if (transEl.isNaN()) "---" else "%.0f".format(transEl), cols[5]+45f, currY, paints.tableDataRight)
 
                 // Set — restore 24h if pulled from next day, for correct date calc
                 val setRaw = (obj.events.set + if (obj.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
@@ -581,7 +581,7 @@ fun CompassCanvas(
                 val setDecVal = if (obj.setDec.isNaN()) obj.dec else obj.setDec
                 val setAz = calculateAzAtRiseSet(lat, setDecVal, false, obj.targetAlt)
                 paints.tableDataRight.color = setColor
-                nc.drawText("%.0f".format(setAz), cols[7]+45f, currY, paints.tableDataRight)
+                nc.drawText(if (setAz.isNaN()) "---" else "%.0f".format(setAz), cols[7]+45f, currY, paints.tableDataRight)
 
                 if (riseTomorrow || transTomorrow || setIsTomorrow) anyAsterisk = true
                 currY += rowHeight
@@ -639,7 +639,7 @@ private fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, alti
     val decRad = Math.toRadians(dec)
     val altRad = Math.toRadians(altitude)
     val cosAz = (sin(decRad) - sin(latRad) * sin(altRad)) / (cos(latRad) * cos(altRad))
-    if (cosAz < -1.0 || cosAz > 1.0) return Double.NaN
+    if (cosAz.isNaN() || cosAz < -1.0 || cosAz > 1.0) return Double.NaN
     val azRad = acos(cosAz)
     val azDeg = Math.toDegrees(azRad)
     return if (isRise) azDeg else 360.0 - azDeg

@@ -663,10 +663,17 @@ fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOf
         return calculateAltitude(haHours, lat, appDec)
     }
 
+    // Polar day/night check: if planet never reaches horizon, or never goes below it
+    val transitAlt = getAlt(tTransit)
+    val transitTime = jdFracToLocalHours(tTransit, timezoneOffset)
+    if (transitAlt < PLANET_HORIZON_ALT) return PlanetEvents(Double.NaN, transitTime, Double.NaN)
+    val nadirAlt = getAlt(tTransit + 0.5)
+    if (nadirAlt > PLANET_HORIZON_ALT) return PlanetEvents(Double.NaN, transitTime, Double.NaN)
+
     val tRise = refineRiseSet(::getAlt, tTransit, PLANET_HORIZON_ALT, lat, isRise = true)
     val tSet = refineRiseSet(::getAlt, tTransit, PLANET_HORIZON_ALT, lat, isRise = false)
 
-    return PlanetEvents(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tTransit, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
+    return PlanetEvents(jdFracToLocalHours(tRise, timezoneOffset), transitTime, jdFracToLocalHours(tSet, timezoneOffset))
 }
 
 // Estimate the epoch day (fractional) when the Moon transits at a given longitude.

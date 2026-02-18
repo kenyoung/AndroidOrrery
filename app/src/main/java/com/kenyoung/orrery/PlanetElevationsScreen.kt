@@ -255,8 +255,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             drawIntoCanvas { it.nativeCanvas.drawText("Sunrise", xSR, h - footerHeight - labelGap - labelPaint.descent(), labelPaint) }
         }
 
-        val xNightStart = max(0f, xSS)
-        val xNightEnd = min(w, xSR)
+        // Polar night: Sun never rises, entire chart is night
+        val polarNight = sunsetToday.isNaN() && sunriseTomorrow.isNaN() && run {
+            val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+            val sunSt = AstroEngine.getBodyState("Sun", currentJD)
+            val (sRa, sDec) = j2000ToApparent(sunSt.ra, sunSt.dec, currentJD)
+            val sLst = calculateLSTHours(currentJD, lon)
+            calculateAltitude(sLst - sRa / 15.0, lat, sDec) < HORIZON_REFRACTED
+        }
+        val xNightStart = if (polarNight) 0f else max(0f, xSS)
+        val xNightEnd = if (polarNight) w else min(w, xSR)
         val hasNight = xNightEnd > xNightStart
 
         // HA Calculator (Only suitable for Planets with constant Dec)
@@ -279,8 +287,53 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         data class LabelData(val text: String, val x: Float, val y: Float, val color: Int)
         val labelsToDraw = mutableListOf<LabelData>()
 
-        fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int) {
-            if (!ev.rise.isNaN() && !ev.set.isNaN()) {
+        fun drawObjectLineAndTicks(yPos: Float, name: String, ev: PlanetEvents, dec: Double, labelColorInt: Int, isCircumpolar: Boolean = false) {
+            if (isCircumpolar) {
+                // Circumpolar: draw full-width line with transit and altitude ticks
+                val x1 = 0f
+                val x2 = w
+                drawLine(Color.Gray, Offset(x1, yPos), Offset(x2, yPos), strokeWidth = 6f)
+                val xW1 = max(x1, xNightStart)
+                val xW2 = min(x2, xNightEnd)
+                if (xW2 > xW1 && hasNight) {
+                    drawLine(Color.White, Offset(xW1, yPos), Offset(xW2, yPos), strokeWidth = 6f)
+                }
+                labelsToDraw.add(LabelData(name, (x1 + x2) / 2, yPos - tickHalf - labelGap - objectLabelPaint.descent(), labelColorInt))
+
+                // Altitude ticks (no horizon tick — object never crosses horizon)
+                if (!ev.transit.isNaN()) {
+                    tickIncrements.forEach { alt ->
+                        if (alt > 0) {
+                            val ha = getHA(alt.toDouble(), dec)
+                            if (!ha.isNaN()) {
+                                val times = listOf(ev.transit - ha, ev.transit + ha, ev.transit + 24.0 - ha, ev.transit + 24.0 + ha)
+                                times.forEach { tTick ->
+                                    if (tTick >= startHour && tTick <= endHour) {
+                                        val xTick = timeToX(tTick)
+                                        val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
+                                        val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
+                                        val tColor = Color(tickColor)
+                                        drawLine(tColor, Offset(xTick, yPos - tickHalf), Offset(xTick, yPos + tickHalf), strokeWidth = 2f)
+                                        drawIntoCanvas { it.nativeCanvas.drawText(alt.toString(), xTick, yPos + tickNumberOffset, tickTextPaint.apply { color = tickColor }) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Max Alt Tick (Transit)
+                    val maxAlt = 90.0 - abs(lat - dec)
+                    for (tTransit in listOf(ev.transit, ev.transit + 24.0)) {
+                        if (tTransit >= startHour && tTransit <= endHour) {
+                            val xTick = timeToX(tTransit)
+                            val isTickNight = (xTick >= xNightStart && xTick <= xNightEnd)
+                            val tickColor = if (isTickNight) android.graphics.Color.WHITE else android.graphics.Color.GRAY
+                            val tColor = Color(tickColor)
+                            drawLine(tColor, Offset(xTick, yPos), Offset(xTick, yPos + tickHalf + 2f), strokeWidth = 2f)
+                            drawIntoCanvas { it.nativeCanvas.drawText(round(maxAlt).toInt().toString(), xTick, yPos + tickNumberOffset, tickTextPaint.apply { color = tickColor }) }
+                        }
+                    }
+                }
+            } else if (!ev.rise.isNaN() && !ev.set.isNaN()) {
                 val candidates = listOf(-24.0, 0.0, 24.0)
                 candidates.forEach { shift ->
                     val r = ev.rise + shift
@@ -374,7 +427,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val lastBodyY = chartTop + chartH - sunsetLabelHeight - belowCenter
         val bodySpacing = if (numBodies > 1) (lastBodyY - firstBodyY) / (numBodies - 1).toFloat() else 0f
 
-        val isNightNow = (xNow >= xSS && xNow <= xSR)
+        val isNightNow = if (polarNight) true
+            else if (sunsetToday.isNaN() && sunriseTomorrow.isNaN()) false  // polar day
+            else xNow >= xSS && xNow <= xSR
         currentElevationPaint.color = if (isNightNow) currentLineGreen.toArgb() else currentLineGray.toArgb()
 
         // --- DRAW SUN LINE (Row 1) ---
@@ -394,34 +449,55 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val sunLabel = if (sunAsterisk) "Sun*" else "Sun"
 
         val sunY = firstBodyY
-        if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
-            val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, android.graphics.Color.RED)
+        // Detect circumpolar Sun (polar day): rise/set NaN but transit altitude above horizon
+        val sunCircumpolar = riseToday.isNaN() && sunsetToday.isNaN() && run {
+            val (_, sunDecCheck) = calculateSunTransit(epochDayInt, lon, offsetHours)
+            calculateAltitude(12.0, lat, sunDecCheck) > HORIZON_REFRACTED
         }
-        if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
-            val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
-            drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, android.graphics.Color.RED)
+        // Sun isUp: check current altitude
+        val sunIsUp = sunCircumpolar || run {
+            val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+            val sunSt = AstroEngine.getBodyState("Sun", currentJD)
+            val (sRa, sDec) = j2000ToApparent(sunSt.ra, sunSt.dec, currentJD)
+            val sLst = calculateLSTHours(currentJD, lon)
+            calculateAltitude(sLst - sRa / 15.0, lat, sDec) > HORIZON_REFRACTED
+        }
+        val sunLabelColor = if (sunIsUp) labelGreen else labelRed
+        if (sunCircumpolar) {
+            val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
+            drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(Double.NaN, transitToday, Double.NaN), sunDecToday, sunLabelColor.toArgb(), isCircumpolar = true)
+        } else {
+            if (!riseToday.isNaN() && !sunsetToday.isNaN()) {
+                val (transitToday, sunDecToday) = calculateSunTransit(epochDayInt, lon, offsetHours)
+                drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(riseToday, transitToday, sunsetToday), sunDecToday, sunLabelColor.toArgb())
+            }
+            if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) {
+                val (transitTomorrow, sunDecTomorrow) = calculateSunTransit(epochDayInt + 1.0, lon, offsetHours)
+                drawObjectLineAndTicks(sunY, sunLabel, PlanetEvents(sunriseTomorrow, transitTomorrow, setTomorrow), sunDecTomorrow, sunLabelColor.toArgb())
+            }
         }
         // Sun Current Elevation
-        val sunEvList = listOfNotNull(
-            if (!riseToday.isNaN() && !sunsetToday.isNaN()) PlanetEvents(riseToday, 0.0, sunsetToday) else null,
-            if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) PlanetEvents(sunriseTomorrow, 0.0, setTomorrow) else null
-        )
-        var sunLineAtXNow = false
-        for (sEv in sunEvList) {
-            for (shift in listOf(-24.0, 0.0, 24.0)) {
-                val r = sEv.rise + shift
-                var sFinal = sEv.set + shift
-                if (sFinal < r) sFinal += 24.0
-                val overlapStart = max(startHour, r)
-                val overlapEnd = min(endHour, sFinal)
-                if (overlapEnd > overlapStart) {
-                    val x1 = timeToX(overlapStart)
-                    val x2 = timeToX(overlapEnd)
-                    if (xNow >= x1 && xNow <= x2) { sunLineAtXNow = true; break }
+        var sunLineAtXNow = sunCircumpolar
+        if (!sunLineAtXNow) {
+            val sunEvList = listOfNotNull(
+                if (!riseToday.isNaN() && !sunsetToday.isNaN()) PlanetEvents(riseToday, 0.0, sunsetToday) else null,
+                if (!sunriseTomorrow.isNaN() && !setTomorrow.isNaN()) PlanetEvents(sunriseTomorrow, 0.0, setTomorrow) else null
+            )
+            for (sEv in sunEvList) {
+                for (shift in listOf(-24.0, 0.0, 24.0)) {
+                    val r = sEv.rise + shift
+                    var sFinal = sEv.set + shift
+                    if (sFinal < r) sFinal += 24.0
+                    val overlapStart = max(startHour, r)
+                    val overlapEnd = min(endHour, sFinal)
+                    if (overlapEnd > overlapStart) {
+                        val x1 = timeToX(overlapStart)
+                        val x2 = timeToX(overlapEnd)
+                        if (xNow >= x1 && xNow <= x2) { sunLineAtXNow = true; break }
+                    }
                 }
+                if (sunLineAtXNow) break
             }
-            if (sunLineAtXNow) break
         }
         if (sunLineAtXNow) {
             val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -466,19 +542,27 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         val moonY = firstBodyY + bodySpacing
-        // Determine if Moon is up at current time (handles midnight wrap correctly)
-        var moonIsUp = false
-        for (shift in listOf(-24.0, 0.0, 24.0)) {
-            val r = moonEv.rise + shift
-            var sFinal = moonEv.set + shift
-            if (sFinal < r) sFinal += 24.0
-            // Check if this window overlaps with the visible chart range
-            if (min(endHour, sFinal) > max(startHour, r)) {
-                var c = currentH
-                while (c < r) c += 24.0
-                if (c <= sFinal) {
-                    moonIsUp = true
-                    break
+        // Detect circumpolar Moon: rise/set NaN but currently above horizon
+        val moonCircumpolar = moonEv.rise.isNaN() && moonEv.set.isNaN() && run {
+            val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+            val mSt = AstroEngine.getBodyState("Moon", currentJD)
+            val (mRa, mDec) = j2000ToApparent(mSt.ra, mSt.dec, currentJD)
+            val mLst = calculateLSTHours(currentJD, lon)
+            val mTopo = toTopocentric(mRa, mDec, mSt.distGeo, lat, lon, mLst)
+            val moonSdDeg = Math.toDegrees(Math.asin(1737400.0 / (mSt.distGeo * AU_METERS)))
+            calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec) > PLANET_HORIZON_ALT - moonSdDeg
+        }
+        // Determine if Moon is up at current time
+        var moonIsUp = moonCircumpolar
+        if (!moonIsUp) {
+            for (shift in listOf(-24.0, 0.0, 24.0)) {
+                val r = moonEv.rise + shift
+                var sFinal = moonEv.set + shift
+                if (sFinal < r) sFinal += 24.0
+                if (min(endHour, sFinal) > max(startHour, r)) {
+                    var c = currentH
+                    while (c < r) c += 24.0
+                    if (c <= sFinal) { moonIsUp = true; break }
                 }
             }
         }
@@ -487,7 +571,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         if (moonAsterisk) anyAsterisk = true
         val moonLabel = if (moonAsterisk) "Moon*" else "Moon"
 
-        drawObjectLineAndTicks(moonY, moonLabel, moonEv, moonDec, moonLabelColor.toArgb())
+        drawObjectLineAndTicks(moonY, moonLabel, moonEv, moonDec, moonLabelColor.toArgb(), isCircumpolar = moonCircumpolar)
 
         // --- DRAW PLANETS (Rows 3+) ---
         planetList.forEachIndexed { i, p ->
@@ -516,22 +600,32 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val s = AstroEngine.getBodyState(p.name, jd)
                 j2000ToApparent(s.ra, s.dec, jd).second
             }
-            var pIsUp = false
-            var rNorm = ev.rise; var sNorm = ev.set
-            if (sNorm < rNorm) sNorm += 24.0
-            var cNorm2 = currentH
-            while (cNorm2 < rNorm) cNorm2 += 24.0
-            if (cNorm2 < sNorm) pIsUp = true
+            // Detect circumpolar planet: rise/set NaN but currently above horizon
+            val pCircumpolar = ev.rise.isNaN() && ev.set.isNaN() && run {
+                val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+                val pSt = AstroEngine.getBodyState(p.name, currentJD)
+                val (pRa, pDc) = j2000ToApparent(pSt.ra, pSt.dec, currentJD)
+                val pLst = calculateLSTHours(currentJD, lon)
+                calculateAltitude(pLst - pRa / 15.0, lat, pDc) > PLANET_HORIZON_ALT
+            }
+            var pIsUp = pCircumpolar
+            if (!pIsUp && !ev.rise.isNaN() && !ev.set.isNaN()) {
+                var rNorm = ev.rise; var sNorm = ev.set
+                if (sNorm < rNorm) sNorm += 24.0
+                var cNorm2 = currentH
+                while (cNorm2 < rNorm) cNorm2 += 24.0
+                if (cNorm2 < sNorm) pIsUp = true
+            }
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
             val planetAsterisk = isRiseTomorrow(ev, planetEpochBase)
             if (planetAsterisk) anyAsterisk = true
             val planetLabel = if (planetAsterisk) "${p.name}*" else p.name
 
-            drawObjectLineAndTicks(yPos, planetLabel, ev, transitDec, pLabelColor.toArgb())
+            drawObjectLineAndTicks(yPos, planetLabel, ev, transitDec, pLabelColor.toArgb(), isCircumpolar = pCircumpolar)
 
             // Planet Current Elevation — check all shifts like Moon code
-            var pLineAtXNow = false
-            if (!ev.rise.isNaN() && !ev.set.isNaN()) {
+            var pLineAtXNow = pCircumpolar
+            if (!pLineAtXNow && !ev.rise.isNaN() && !ev.set.isNaN()) {
                 for (shift in listOf(-24.0, 0.0, 24.0)) {
                     val r = ev.rise + shift
                     var sFinal = ev.set + shift
@@ -559,19 +653,21 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
         // --- MOON CURRENT ELEVATION (Precise) ---
         // Check if xNow intersects the Moon's drawn line segment
-        var moonLineAtXNow = false
-        for (shift in listOf(-24.0, 0.0, 24.0)) {
-            val r = moonEv.rise + shift
-            var sFinal = moonEv.set + shift
-            if (sFinal < r) sFinal += 24.0
-            val overlapStart = max(startHour, r)
-            val overlapEnd = min(endHour, sFinal)
-            if (overlapEnd > overlapStart) {
-                val x1 = timeToX(overlapStart)
-                val x2 = timeToX(overlapEnd)
-                if (xNow >= x1 && xNow <= x2) {
-                    moonLineAtXNow = true
-                    break
+        var moonLineAtXNow = moonCircumpolar
+        if (!moonLineAtXNow) {
+            for (shift in listOf(-24.0, 0.0, 24.0)) {
+                val r = moonEv.rise + shift
+                var sFinal = moonEv.set + shift
+                if (sFinal < r) sFinal += 24.0
+                val overlapStart = max(startHour, r)
+                val overlapEnd = min(endHour, sFinal)
+                if (overlapEnd > overlapStart) {
+                    val x1 = timeToX(overlapStart)
+                    val x2 = timeToX(overlapEnd)
+                    if (xNow >= x1 && xNow <= x2) {
+                        moonLineAtXNow = true
+                        break
+                    }
                 }
             }
         }
