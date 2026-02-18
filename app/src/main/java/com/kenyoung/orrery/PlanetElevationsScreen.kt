@@ -156,26 +156,43 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- DRAW TWILIGHT SHADING ---
-        if (!sunsetToday.isNaN() && !astroSetToday.isNaN()) {
+        val twilightNeverEnds = astroSetToday.isNaN() && astroRiseTomorrow.isNaN()
+        if (twilightNeverEnds && !sunsetToday.isNaN() && !sunriseTomorrow.isNaN()) {
+            // Sun never reaches -18°: gradient darkest at midnight, blue at sunset/sunrise
             val xStart = timeToX(sunsetToday)
-            val xEnd = timeToX(astroSetToday)
+            val xEnd = timeToX(sunriseTomorrow)
             if (xEnd > xStart) {
                 drawRect(
-                    brush = Brush.horizontalGradient(colors = listOf(neptuneBlue, Color.Black), startX = xStart, endX = xEnd),
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(neptuneBlue, Color.Black, neptuneBlue),
+                        startX = xStart, endX = xEnd
+                    ),
                     topLeft = Offset(xStart, chartTop),
                     size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
                 )
             }
-        }
-        if (!astroRiseTomorrow.isNaN() && !sunriseTomorrow.isNaN()) {
-            val xStart = timeToX(astroRiseTomorrow)
-            val xEnd = timeToX(sunriseTomorrow)
-            if (xEnd > xStart) {
-                drawRect(
-                    brush = Brush.horizontalGradient(colors = listOf(Color.Black, neptuneBlue), startX = xStart, endX = xEnd),
-                    topLeft = Offset(xStart, chartTop),
-                    size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
-                )
+        } else {
+            if (!sunsetToday.isNaN() && !astroSetToday.isNaN()) {
+                val xStart = timeToX(sunsetToday)
+                val xEnd = timeToX(astroSetToday)
+                if (xEnd > xStart) {
+                    drawRect(
+                        brush = Brush.horizontalGradient(colors = listOf(neptuneBlue, Color.Black), startX = xStart, endX = xEnd),
+                        topLeft = Offset(xStart, chartTop),
+                        size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
+                    )
+                }
+            }
+            if (!astroRiseTomorrow.isNaN() && !sunriseTomorrow.isNaN()) {
+                val xStart = timeToX(astroRiseTomorrow)
+                val xEnd = timeToX(sunriseTomorrow)
+                if (xEnd > xStart) {
+                    drawRect(
+                        brush = Brush.horizontalGradient(colors = listOf(Color.Black, neptuneBlue), startX = xStart, endX = xEnd),
+                        topLeft = Offset(xStart, chartTop),
+                        size = androidx.compose.ui.geometry.Size(xEnd - xStart, chartH)
+                    )
+                }
             }
         }
 
