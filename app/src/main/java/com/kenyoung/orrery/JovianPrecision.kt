@@ -26,7 +26,7 @@ object JovianPrecision {
         lambda0: Double,
         beta0: Double
     ): Map<String, Vector3> {
-        val tau = 0.0057755183 * deltaAU // Light travel time from Jupiter
+        val tau = 0.0057755183 * deltaAU // Light travel time from Jupiter (days)
         val t = jD - 2443000.5 - tau
 
         val l1 = 106.07719 + 203.488955790 * t
