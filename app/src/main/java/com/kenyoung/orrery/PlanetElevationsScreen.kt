@@ -566,7 +566,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 }
             }
         }
-        val moonLabelColor = if (isNightNow && moonIsUp) labelGreen else labelRed
+        val moonPhaseAngle = calculateMoonPhaseAngle(epochDay)
+        val moonIllumination = (1.0 - cos(Math.toRadians(moonPhaseAngle))) / 2.0 * 100.0
+        val moonLabelColor = if (moonIsUp && (isNightNow || moonIllumination > 25.0)) labelGreen else labelRed
         val moonAsterisk = isRiseTomorrow(moonEv, moonEpochBase)
         if (moonAsterisk) anyAsterisk = true
         val moonLabel = if (moonAsterisk) "Moon*" else "Moon"
