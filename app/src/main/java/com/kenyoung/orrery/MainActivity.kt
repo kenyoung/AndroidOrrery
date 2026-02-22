@@ -130,6 +130,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         prefs.edit().putBoolean("useStandardTime", useStandardTime).apply()
     }
 
+    var showFirstLaunchHint by remember { mutableStateOf(prefs.getBoolean("showFirstLaunchHint", true)) }
+
     // --- LOCATION STATE ---
     // locationMode: 0=Phone, 1=Custom, 2=From List
     var locationMode by remember { mutableStateOf(0) }
@@ -246,6 +248,26 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
     // var testMode by remember { mutableStateOf(false) }  // Test data export disabled
+
+    if (showFirstLaunchHint) {
+        Dialog(onDismissRequest = {
+            showFirstLaunchHint = false
+            prefs.edit().putBoolean("showFirstLaunchHint", false).apply()
+        }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Text(
+                    text = "Select \"About\" from the \u22EE menu in the upper right corner for help information",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(24.dp)
+                )
+            }
+        }
+    }
 
     if (showLocationDialog) {
         LocationDialog(
