@@ -498,6 +498,15 @@ private fun moonAboveHorizon(tJD: Double, latDeg: Double, lonDeg: Double): Boole
     return altDeg > 0.125
 }
 
+private fun moonAltitude(tJD: Double, latDeg: Double, lonDeg: Double): Double {
+    val moon = moonPosition(tJD)
+    val moonRaHours = Math.toDegrees(moon.ra) / 15.0
+    val moonDecDeg = Math.toDegrees(moon.dec)
+    val lstHours = calculateLSTHours(tJD, lonDeg)
+    val haHours = lstHours - moonRaHours
+    return calculateAltitude(haHours, latDeg, moonDecDeg)
+}
+
 // Fast version using linearly interpolated Moon position between two cached endpoints
 // This avoids expensive moonPosition calls - moon RA/Dec change slowly during an eclipse
 private fun moonAboveHorizonInterpolated(
@@ -1927,16 +1936,22 @@ private fun renderEclipse(
         textPaint.textSize = mediumTextSize
         textPaint.textAlign = Paint.Align.LEFT
         val maxEclipseLabel = "Maximum Eclipse at "
-        val maxEclipseTime = "%02d:%02d:%02d $timeSuffix".format(maxHH, maxMM, maxSS)
+        val maxAlt = moonAltitude(eclipseTJD, userLatitude, userLongitude)
+        val maxAltSuffix = if (maxAlt >= 0) ", ${round(maxAlt).toInt()}\u00B0" else ""
+        val maxEclipseTime = "%02d:%02d:%02d $timeSuffix".format(maxHH, maxMM, maxSS) + maxAltSuffix
+        val elevationSuffix = if (maxAlt >= 0) " elevation" else ""
         val labelWidth = textPaint.measureText(maxEclipseLabel)
         val timeWidth = textPaint.measureText(maxEclipseTime)
-        val totalWidth = labelWidth + timeWidth
+        val suffixWidth = textPaint.measureText(elevationSuffix)
+        val totalWidth = labelWidth + timeWidth + suffixWidth
         val maxLabelStartX = (width - totalWidth) / 2  // Center the combined text
 
         textPaint.color = colorLightBlue.toArgb()
         canvas.nativeCanvas.drawText(maxEclipseLabel, maxLabelStartX, maxEclipseY, textPaint)
         textPaint.color = colorWhite.toArgb()
         canvas.nativeCanvas.drawText(maxEclipseTime, maxLabelStartX + labelWidth, maxEclipseY, textPaint)
+        textPaint.color = colorLightBlue.toArgb()
+        canvas.nativeCanvas.drawText(elevationSuffix, maxLabelStartX + labelWidth + timeWidth, maxEclipseY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER  // Restore center alignment
 
         // Store bounding box for the green line (will be drawn later)
@@ -1948,20 +1963,28 @@ private fun renderEclipse(
         rightTextPaint.textSize = smallTextSize
         var currentY = phaseTimesStartY
 
+        // Helper to format altitude suffix
+        fun altSuffix(tJD: Double): String {
+            val alt = moonAltitude(tJD, userLatitude, userLongitude)
+            return if (alt >= 0) ",${round(alt).toInt()}\u00B0" else ""
+        }
+
         // Total phase times
         if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
             val (totEndH, totEndM, _) = tJDToHHMMSS(totEclipseEndTJD, timeOffset)
             val (totStartH, totStartM, _) = tJDToHHMMSS(totEclipseStartTJD, timeOffset)
+            val totEndUp = moonAltitude(totEclipseEndTJD, userLatitude, userLongitude) >= 0
+            val totStartUp = moonAltitude(totEclipseStartTJD, userLatitude, userLongitude) >= 0
 
-            leftTextPaint.color = colorLightBlue.toArgb()
+            leftTextPaint.color = (if (totEndUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Total Eclipse Ends", margin, currentY, leftTextPaint)
-            leftTextPaint.color = colorWhite.toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(totEndH, totEndM), margin + 135f * textScale, currentY, leftTextPaint)
+            leftTextPaint.color = (if (totEndUp) colorWhite else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("%02d:%02d".format(totEndH, totEndM) + altSuffix(totEclipseEndTJD), margin + 135f * textScale, currentY, leftTextPaint)
 
-            rightTextPaint.color = colorLightBlue.toArgb()
-            canvas.nativeCanvas.drawText("Total Eclipse Starts", width - margin - 45f * textScale, currentY, rightTextPaint)
-            rightTextPaint.color = colorWhite.toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(totStartH, totStartM), width - margin, currentY, rightTextPaint)
+            rightTextPaint.color = (if (totStartUp) colorLightBlue else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("Total Eclipse Starts", width - margin - 70f * textScale, currentY, rightTextPaint)
+            rightTextPaint.color = (if (totStartUp) colorWhite else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("%02d:%02d".format(totStartH, totStartM) + altSuffix(totEclipseStartTJD), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
         }
@@ -1970,16 +1993,18 @@ private fun renderEclipse(
         if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
             val (parEndH, parEndM, _) = tJDToHHMMSS(parEclipseEndTJD, timeOffset)
             val (parStartH, parStartM, _) = tJDToHHMMSS(parEclipseStartTJD, timeOffset)
+            val parEndUp = moonAltitude(parEclipseEndTJD, userLatitude, userLongitude) >= 0
+            val parStartUp = moonAltitude(parEclipseStartTJD, userLatitude, userLongitude) >= 0
 
-            leftTextPaint.color = colorLightBlue.toArgb()
+            leftTextPaint.color = (if (parEndUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Partial Ends", margin, currentY, leftTextPaint)
-            leftTextPaint.color = colorWhite.toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(parEndH, parEndM), margin + 90f * textScale, currentY, leftTextPaint)
+            leftTextPaint.color = (if (parEndUp) colorWhite else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("%02d:%02d".format(parEndH, parEndM) + altSuffix(parEclipseEndTJD), margin + 90f * textScale, currentY, leftTextPaint)
 
-            rightTextPaint.color = colorLightBlue.toArgb()
-            canvas.nativeCanvas.drawText("Partial Starts", width - margin - 45f * textScale, currentY, rightTextPaint)
-            rightTextPaint.color = colorWhite.toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(parStartH, parStartM), width - margin, currentY, rightTextPaint)
+            rightTextPaint.color = (if (parStartUp) colorLightBlue else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("Partial Starts", width - margin - 70f * textScale, currentY, rightTextPaint)
+            rightTextPaint.color = (if (parStartUp) colorWhite else colorGrey).toArgb()
+            canvas.nativeCanvas.drawText("%02d:%02d".format(parStartH, parStartM) + altSuffix(parEclipseStartTJD), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
         }
@@ -1987,16 +2012,18 @@ private fun renderEclipse(
         // Penumbral phase times
         val (penEndH, penEndM, _) = tJDToHHMMSS(penEclipseEndTJD, timeOffset)
         val (penStartH, penStartM, _) = tJDToHHMMSS(penEclipseStartTJD, timeOffset)
+        val penEndUp = moonAltitude(penEclipseEndTJD, userLatitude, userLongitude) >= 0
+        val penStartUp = moonAltitude(penEclipseStartTJD, userLatitude, userLongitude) >= 0
 
-        leftTextPaint.color = colorLightBlue.toArgb()
+        leftTextPaint.color = (if (penEndUp) colorLightBlue else colorGrey).toArgb()
         canvas.nativeCanvas.drawText("Penumbral Ends", margin, currentY, leftTextPaint)
-        leftTextPaint.color = colorWhite.toArgb()
-        canvas.nativeCanvas.drawText("%02d:%02d".format(penEndH, penEndM), margin + 105f * textScale, currentY, leftTextPaint)
+        leftTextPaint.color = (if (penEndUp) colorWhite else colorGrey).toArgb()
+        canvas.nativeCanvas.drawText("%02d:%02d".format(penEndH, penEndM) + altSuffix(penEclipseEndTJD), margin + 105f * textScale, currentY, leftTextPaint)
 
-        rightTextPaint.color = colorLightBlue.toArgb()
-        canvas.nativeCanvas.drawText("Penumbral Starts", width - margin - 60f * textScale, currentY, rightTextPaint)
-        rightTextPaint.color = colorWhite.toArgb()
-        canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM), width - margin, currentY, rightTextPaint)
+        rightTextPaint.color = (if (penStartUp) colorLightBlue else colorGrey).toArgb()
+        canvas.nativeCanvas.drawText("Penumbral Starts", width - margin - 69f * textScale, currentY, rightTextPaint)
+        rightTextPaint.color = (if (penStartUp) colorWhite else colorGrey).toArgb()
+        canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM) + altSuffix(penEclipseStartTJD), width - margin, currentY, rightTextPaint)
 
         // East label (doesn't conflict with lines)
         leftTextPaint.color = colorBlack.toArgb()

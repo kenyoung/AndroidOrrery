@@ -332,6 +332,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        val compactItem = Modifier.height(38.dp)
                         val screens = listOf(
                             "Planet Transits" to Screen.TRANSITS,
                             "Planet Elevations" to Screen.ELEVATIONS,
@@ -348,17 +349,17 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                             "Astronomical Times" to Screen.TIMES
                         )
                         screens.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; currentScreen = screen; showMenu = false })
+                            DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; currentScreen = screen; showMenu = false }, modifier = compactItem)
                         }
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true })
-                        DropdownMenuItem(text = { Text("Date and Time") }, onClick = { showMenu = false; showDateDialog = true })
+                        DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true }, modifier = compactItem)
+                        DropdownMenuItem(text = { Text("Date and Time") }, onClick = { showMenu = false; showDateDialog = true }, modifier = compactItem)
                         // DropdownMenuItem(text = { Text("Export Test Data") }, onClick = {  // Test data export disabled
                         //     showMenu = false
                         //     testMode = true
                         //     Toast.makeText(context, "Test mode on \u2014 enter date/time to export", Toast.LENGTH_SHORT).show()
                         // })
-                        DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://kenyoung.github.io/AndroidOrrery/")); context.startActivity(intent) })
+                        DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://kenyoung.github.io/AndroidOrrery/")); context.startActivity(intent) }, modifier = compactItem)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black, titleContentColor = Color.White)
