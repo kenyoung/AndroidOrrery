@@ -542,8 +542,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         val moonY = firstBodyY + bodySpacing
-        // Detect circumpolar Moon: rise/set NaN but currently above horizon
-        val moonCircumpolar = moonEv.rise.isNaN() && moonEv.set.isNaN() && run {
+        // Check Moon current altitude (like Sun)
+        val moonAboveHorizon = run {
             val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
             val mSt = AstroEngine.getBodyState("Moon", currentJD)
             val (mRa, mDec) = j2000ToApparent(mSt.ra, mSt.dec, currentJD)
@@ -552,21 +552,9 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val moonSdDeg = Math.toDegrees(Math.asin(1737400.0 / (mSt.distGeo * AU_METERS)))
             calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec) > PLANET_HORIZON_ALT - moonSdDeg
         }
-        // Determine if Moon is up at current time
-        var moonIsUp = moonCircumpolar
-        if (!moonIsUp) {
-            for (shift in listOf(-24.0, 0.0, 24.0)) {
-                val r = moonEv.rise + shift
-                var sFinal = moonEv.set + shift
-                if (sFinal < r) sFinal += 24.0
-                if (min(endHour, sFinal) > max(startHour, r)) {
-                    var c = currentH
-                    while (c < r) c += 24.0
-                    if (c <= sFinal) { moonIsUp = true; break }
-                }
-            }
-        }
-        val moonPhaseAngle = calculateMoonPhaseAngle(epochDay)
+        val moonCircumpolar = moonEv.rise.isNaN() && moonEv.set.isNaN() && moonAboveHorizon
+        val moonIsUp = moonAboveHorizon
+        val moonPhaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
         val moonIllumination = (1.0 - cos(Math.toRadians(moonPhaseAngle))) / 2.0 * 100.0
         val moonLabelColor = if (moonIsUp && (isNightNow || moonIllumination > 25.0)) labelGreen else labelRed
         val moonAsterisk = isRiseTomorrow(moonEv, moonEpochBase)
@@ -602,22 +590,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val s = AstroEngine.getBodyState(p.name, jd)
                 j2000ToApparent(s.ra, s.dec, jd).second
             }
-            // Detect circumpolar planet: rise/set NaN but currently above horizon
-            val pCircumpolar = ev.rise.isNaN() && ev.set.isNaN() && run {
+            // Check planet current altitude (like Sun/Moon)
+            val pAboveHorizon = run {
                 val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
                 val pSt = AstroEngine.getBodyState(p.name, currentJD)
                 val (pRa, pDc) = j2000ToApparent(pSt.ra, pSt.dec, currentJD)
                 val pLst = calculateLSTHours(currentJD, lon)
                 calculateAltitude(pLst - pRa / 15.0, lat, pDc) > PLANET_HORIZON_ALT
             }
-            var pIsUp = pCircumpolar
-            if (!pIsUp && !ev.rise.isNaN() && !ev.set.isNaN()) {
-                var rNorm = ev.rise; var sNorm = ev.set
-                if (sNorm < rNorm) sNorm += 24.0
-                var cNorm2 = currentH
-                while (cNorm2 < rNorm) cNorm2 += 24.0
-                if (cNorm2 < sNorm) pIsUp = true
-            }
+            val pCircumpolar = ev.rise.isNaN() && ev.set.isNaN() && pAboveHorizon
+            val pIsUp = pAboveHorizon
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
             val planetAsterisk = isRiseTomorrow(ev, planetEpochBase)
             if (planetAsterisk) anyAsterisk = true
