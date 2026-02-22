@@ -452,7 +452,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
-                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant)
+                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                 }
             }
         }

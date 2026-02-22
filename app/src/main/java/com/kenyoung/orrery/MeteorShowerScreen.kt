@@ -80,12 +80,16 @@ fun MeteorShowerScreen(
     currentEpochDay: Double,
     lat: Double,
     lon: Double,
-    currentInstant: Instant
+    currentInstant: Instant,
+    stdOffsetHours: Double,
+    stdTimeLabel: String,
+    useLocalTime: Boolean,
+    onTimeDisplayChange: (Boolean) -> Unit
 ) {
     var rowData by remember { mutableStateOf<List<ShowerRowData>?>(null) }
     var tonightDarkHours by remember { mutableStateOf(0.0) }
-    var tonightStartTime by remember { mutableStateOf("") }
-    var tonightEndTime by remember { mutableStateOf("") }
+    var tonightStartEpoch by remember { mutableStateOf(Double.NaN) }
+    var tonightEndEpoch by remember { mutableStateOf(Double.NaN) }
     var isCalculating by remember { mutableStateOf(true) }
 
     val activeYear = LocalDate.ofEpochDay(currentEpochDay.toLong()).year
@@ -170,8 +174,8 @@ fun MeteorShowerScreen(
 
             val dhResult = calculateDarkHoursDetails(searchBase, lat, lon)
             tonightDarkHours = dhResult.totalHours
-            tonightStartTime = dhResult.startTime
-            tonightEndTime = dhResult.endTime
+            tonightStartEpoch = dhResult.startEpochDay
+            tonightEndEpoch = dhResult.endEpochDay
         }
         isCalculating = false
     }
@@ -226,6 +230,10 @@ fun MeteorShowerScreen(
             }
             HorizontalDivider(color = Color.Gray)
             // Footer - two lines
+            val displayOffset = if (useLocalTime) stdOffsetHours / 24.0 else 0.0
+            val tonightStartTime = if (tonightStartEpoch.isNaN()) "" else toLocalTimeStr(tonightStartEpoch + displayOffset)
+            val tonightEndTime = if (tonightEndEpoch.isNaN()) "" else toLocalTimeStr(tonightEndEpoch + displayOffset)
+            val timeLabel = if (useLocalTime) stdTimeLabel else "UT"
             Column(
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -240,9 +248,10 @@ fun MeteorShowerScreen(
                     Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
                     Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
                     Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" UT) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    Text(" $timeLabel) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
             }
+            TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
         }
     }
 }
@@ -303,8 +312,8 @@ fun calculateDarkHoursForNight(epochDay: Double, lat: Double, lon: Double): Doub
 // Data class for dark hours result
 data class DarkHoursResult(
     val totalHours: Double,
-    val startTime: String,
-    val endTime: String
+    val startEpochDay: Double,
+    val endEpochDay: Double
 )
 
 // Returns DarkHoursResult with total hours and start/end time strings
@@ -329,9 +338,9 @@ fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkH
     }
 
     val totalHours = totalDays * 24.0
-    val startTime = if (firstDark != null) toLocalTimeStr(firstDark) else ""
-    val endTime = if (lastDark != null) toLocalTimeStr(lastDark + step) else ""
-    return DarkHoursResult(totalHours, startTime, endTime)
+    val startEpoch = firstDark ?: Double.NaN
+    val endEpoch = if (lastDark != null) lastDark + step else Double.NaN
+    return DarkHoursResult(totalHours, startEpoch, endEpoch)
 }
 
 // Moon illumination % -> max Moon elevation (deg) for sky to be "very dark"
