@@ -1,14 +1,11 @@
 package com.kenyoung.orrery
 
 import android.Manifest
-// import android.content.ContentValues  // Only used by test data export
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-// import android.provider.MediaStore  // Only used by test data export
-// import android.widget.Toast  // Only used by test data export
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -108,11 +105,6 @@ enum class Screen {
     METEOR_SHOWERS
 }
 
-// writeTestData() moved to TestDataExport.kt
-
-private const val TimeTest = false // Set true to advance manual time every 10 sec
-private const val TimeTestInc = 10 // Minutes to advance per 10-second tick
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
@@ -202,19 +194,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         }
     }
 
-    // TimeTest: advance manual time by 1 minute every 10 seconds
-    if (TimeTest) {
-        LaunchedEffect(usePhoneTime) {
-            if (!usePhoneTime) {
-                while (true) {
-                    delay(10_000L)
-                    manualEpochDay += TimeTestInc / 1440.0
-                    currentInstant = getInstantFromManual(manualEpochDay)
-                }
-            }
-        }
-    }
-
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && usePhoneTime && !isAnimating) {
@@ -269,8 +248,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var showMenu by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
-    // var testMode by remember { mutableStateOf(false) }  // Test data export disabled
-
     if (showFirstLaunchHint) {
         Dialog(onDismissRequest = {
             showFirstLaunchHint = false
@@ -346,10 +323,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                     currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
                     manualEpochDay = getManualFromInstant(currentInstant)
                     savedDateInput = inputStrings
-                    // if (testMode) {  // Test data export disabled
-                    //     writeTestData(context, utEpochDay, effectiveLat, effectiveLon)
-                    //     testMode = false
-                    // }
                 }
                 showDateDialog = false
             }
@@ -416,11 +389,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true }, modifier = compactItem)
                         DropdownMenuItem(text = { Text("Date and Time") }, onClick = { showMenu = false; showDateDialog = true }, modifier = compactItem)
-                        // DropdownMenuItem(text = { Text("Export Test Data") }, onClick = {  // Test data export disabled
-                        //     showMenu = false
-                        //     testMode = true
-                        //     Toast.makeText(context, "Test mode on \u2014 enter date/time to export", Toast.LENGTH_SHORT).show()
-                        // })
                         DropdownMenuItem(text = { Text("About") }, onClick = { showMenu = false; val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://kenyoung.github.io/AndroidOrrery/")); context.startActivity(intent) }, modifier = compactItem)
                     }
                 },
