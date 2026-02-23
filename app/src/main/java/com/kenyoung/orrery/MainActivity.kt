@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (isGranted) getLocationAndSetContent()
-            else setContent { OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0) }
+            else setContent { OrreryApp(initialGpsLat = 0.0, initialGpsLon = 0.0, locationDenied = true) }
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -107,7 +107,7 @@ enum class Screen {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
+fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Boolean = false) {
     val context = LocalContext.current
 
     // Load timezone data early so it's available for Transits screen
@@ -260,6 +260,24 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             ) {
                 Text(
                     text = "Select \"About\" from the \u22EE menu in the upper right corner for help information",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(24.dp)
+                )
+            }
+        }
+    }
+
+    var showLocationDeniedHint by remember { mutableStateOf(locationDenied) }
+    if (showLocationDeniedHint) {
+        Dialog(onDismissRequest = { showLocationDeniedHint = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Text(
+                    text = "Location permission was denied. You can enter your location with the \"Location\" option in the \u22EE menu, or the app will default to 0\u00B0N 0\u00B0E.",
                     color = Color.White,
                     fontSize = 18.sp,
                     modifier = Modifier.padding(24.dp)
