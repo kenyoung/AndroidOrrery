@@ -110,6 +110,9 @@ enum class Screen {
 
 // writeTestData() moved to TestDataExport.kt
 
+private const val TimeTest = true // Set true to advance manual time every 10 sec
+private const val TimeTestInc = 10 // Minutes to advance per 10-second tick
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
@@ -190,6 +193,19 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             manualEpochDay = animationTargetEpoch
             currentInstant = getInstantFromManual(manualEpochDay)
             isAnimating = false
+        }
+    }
+
+    // TimeTest: advance manual time by 1 minute every 10 seconds
+    if (TimeTest) {
+        LaunchedEffect(usePhoneTime) {
+            if (!usePhoneTime) {
+                while (true) {
+                    delay(10_000L)
+                    manualEpochDay += TimeTestInc / 1440.0
+                    currentInstant = getInstantFromManual(manualEpochDay)
+                }
+            }
         }
     }
 

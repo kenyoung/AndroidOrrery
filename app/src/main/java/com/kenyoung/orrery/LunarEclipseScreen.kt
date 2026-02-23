@@ -1062,8 +1062,20 @@ private fun EclipseDetailView(
         showCanvas = true
     }
 
-    // Convert current instant to TJD for eclipse comparison
-    val currentTJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+    // Convert current instant to TJD for eclipse comparison; refresh once per minute
+    val currentNow by rememberUpdatedState(now)
+    var currentTJD by remember { mutableStateOf(now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD) }
+    LaunchedEffect(now) {
+        currentTJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val nowMs = System.currentTimeMillis()
+            val msUntilNextMinute = 60_000L - (nowMs % 60_000L) + 1_000L
+            kotlinx.coroutines.delay(msUntilNextMinute)
+            currentTJD = currentNow.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+        }
+    }
 
     Box(
         modifier = Modifier
