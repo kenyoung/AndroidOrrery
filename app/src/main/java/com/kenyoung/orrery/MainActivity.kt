@@ -152,6 +152,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     var manualEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay().toDouble()) }
     // Stores the last text entered by the user (Day, Month, Year, Hour, Min, Sec)
     var savedDateInput by remember { mutableStateOf<List<String>?>(null) }
+    // Clear saved date text when UT/Standard Time mode changes, so the dialog
+    // defaults to phone time in the new time system instead of stale values.
+    LaunchedEffect(useStandardTime) { savedDateInput = null }
 
     var currentInstant by remember { mutableStateOf(Instant.now()) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -166,9 +169,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
     fun getInstantFromManual(epochDay: Double): Instant {
         val days = floor(epochDay).toLong()
         val frac = epochDay - days
-        val nanos = (frac * 86_400_000_000_000L).toLong()
-        val localDate = LocalDate.ofEpochDay(days)
-        val localTime = LocalTime.ofNanoOfDay(nanos)
+        // Round to nearest second — double can't represent fractional days to
+        // sub-second precision at epoch day magnitudes (~20000), so the sub-second
+        // part is pure floating-point noise.
+        val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
+        val localDate = LocalDate.ofEpochDay(days + totalSeconds / 86400)
+        val localTime = LocalTime.ofSecondOfDay(totalSeconds % 86400)
         val refInstant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant()
         val standardOffset = zoneId.rules.getStandardOffset(refInstant)
         return LocalDateTime.of(localDate, localTime).toInstant(standardOffset)
@@ -285,6 +291,21 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
         }
     }
 
+    val (stdOffsetHours, stdTimeLabel) = if (locationMode == 0) {
+        val offset = zoneId.rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
+        val label = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.SHORT)
+        offset to label
+    } else {
+        val tzName = lookupTimezone(effectiveLat, effectiveLon)
+        if (tzName != null) {
+            try {
+                val offset = ZoneId.of(tzName).rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
+                val label = java.util.TimeZone.getTimeZone(tzName).getDisplayName(false, java.util.TimeZone.SHORT)
+                offset to label
+            } catch (_: Exception) { effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0) }
+        } else effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0)
+    }
+
     if (showLocationDialog) {
         LocationDialog(
             currentMode = locationMode,
@@ -310,15 +331,18 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             currentUsePhone = usePhoneTime,
             phoneInstant = Instant.now(),
             savedInput = savedDateInput,
+            useStandardTime = useStandardTime,
+            stdOffsetHours = stdOffsetHours,
+            stdTimeLabel = stdTimeLabel,
             onDismiss = { showDateDialog = false },
             onConfirm = { usePhone, utEpochDay, inputStrings ->
                 usePhoneTime = usePhone
                 if (!usePhone && utEpochDay != null) {
                     val days = utEpochDay.toLong()
                     val frac = utEpochDay - days
-                    val nanos = (frac * 86_400_000_000_000L).toLong()
-                    val ld = LocalDate.ofEpochDay(days)
-                    val lt = LocalTime.ofNanoOfDay(nanos)
+                    val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
+                    val ld = LocalDate.ofEpochDay(days + totalSeconds / 86400)
+                    val lt = LocalTime.ofSecondOfDay(totalSeconds % 86400)
                     currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
                     manualEpochDay = getManualFromInstant(currentInstant)
                     savedDateInput = inputStrings
@@ -441,20 +465,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double) {
             }
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
-                val (stdOffsetHours, stdTimeLabel) = if (locationMode == 0) {
-                    val offset = zoneId.rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
-                    val label = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.SHORT)
-                    offset to label
-                } else {
-                    val tzName = lookupTimezone(effectiveLat, effectiveLon)
-                    if (tzName != null) {
-                        try {
-                            val offset = ZoneId.of(tzName).rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
-                            val label = java.util.TimeZone.getTimeZone(tzName).getDisplayName(false, java.util.TimeZone.SHORT)
-                            offset to label
-                        } catch (_: Exception) { effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0) }
-                    } else effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0)
-                }
                 when (currentScreen) {
                     Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
@@ -889,13 +899,21 @@ fun DateDialog(
     currentUsePhone: Boolean,
     phoneInstant: Instant,
     savedInput: List<String>?,
+    useStandardTime: Boolean,
+    stdOffsetHours: Double,
+    stdTimeLabel: String,
     onDismiss: () -> Unit,
     onConfirm: (Boolean, Double?, List<String>?) -> Unit
 ) {
     var usePhone by remember { mutableStateOf(currentUsePhone) }
 
-    // Default values from Phone (System Time)
-    val phoneZDT = phoneInstant.atZone(ZoneId.of("UTC"))
+    // Default values from Phone — shown in the dialog's time system
+    val stdOffsetSeconds = (stdOffsetHours * 3600).toInt()
+    val phoneZDT = if (useStandardTime) {
+        phoneInstant.atZone(ZoneOffset.ofTotalSeconds(stdOffsetSeconds))
+    } else {
+        phoneInstant.atZone(ZoneId.of("UTC"))
+    }
     val pDate = phoneZDT.toLocalDate()
     val pTime = phoneZDT.toLocalTime()
     val s = pTime.second + (pTime.nano / 1_000_000_000.0)
@@ -960,7 +978,9 @@ fun DateDialog(
             if (s < 0.0 || s >= 60.0) { errorMsg = "Second must be 0-59.9"; return }
 
             val timeFraction = (h * 3600.0 + min * 60.0 + s) / SECONDS_PER_DAY
-            val finalEpochDay = dateEpoch + timeFraction
+            val localEpochDay = dateEpoch + timeFraction
+            // Convert to UT if the user entered standard time
+            val finalEpochDay = if (useStandardTime) localEpochDay - stdOffsetHours / 24.0 else localEpochDay
 
             val inputStrings = listOf(dayString, monthString, yearString, hourString, minString, secString)
 
@@ -973,7 +993,8 @@ fun DateDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.DarkGray)) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Enter Date & Time (UT)", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                val timeSystemLabel = if (useStandardTime) stdTimeLabel else "UT"
+                Text("Enter Date & Time ($timeSystemLabel)", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = usePhone, onCheckedChange = { usePhone = it; errorMsg = null }, colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black))
@@ -992,7 +1013,8 @@ fun DateDialog(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("Universal Time (HH:MM:SS)", color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
+                val timeFieldLabel = if (useStandardTime) "$stdTimeLabel (HH:MM:SS)" else "Universal Time (HH:MM:SS)"
+                Text(timeFieldLabel, color = Color.LightGray.copy(alpha = contentAlpha), fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     DmsInput(hourString, { hourString = it }, "Hour", !usePhone, inputColor)
                     DmsInput(minString, { minString = it }, "Min", !usePhone, inputColor)

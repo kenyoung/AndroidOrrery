@@ -353,9 +353,9 @@ private fun mjdToJD(mjd: Double): Double = mjd + MJD_OFFSET
 private fun mjdToInstant(mjd: Double): Instant {
     val unixDay = (mjd - UNIX_EPOCH_MJD).toLong()
     val fracDay = mjd - floor(mjd)
-    val nanos = (fracDay * 86_400_000_000_000L).toLong()
-    val date = LocalDate.ofEpochDay(unixDay)
-    val time = java.time.LocalTime.ofNanoOfDay(nanos)
+    val totalSeconds = Math.round(fracDay * SECONDS_PER_DAY)
+    val date = LocalDate.ofEpochDay(unixDay + totalSeconds / 86400)
+    val time = java.time.LocalTime.ofSecondOfDay(totalSeconds % 86400)
     return java.time.LocalDateTime.of(date, time).toInstant(java.time.ZoneOffset.UTC)
 }
 
