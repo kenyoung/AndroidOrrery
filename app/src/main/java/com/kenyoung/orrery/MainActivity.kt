@@ -110,7 +110,7 @@ enum class Screen {
 
 // writeTestData() moved to TestDataExport.kt
 
-private const val TimeTest = true // Set true to advance manual time every 10 sec
+private const val TimeTest = false // Set true to advance manual time every 10 sec
 private const val TimeTestInc = 10 // Minutes to advance per 10-second tick
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -125,6 +125,258 @@ data class EclipseMoonCache(
     val totEnd: CachedMoonPosition?
 )
 
+// Precomputed data for eclipse rendering — cached in remember() so that
+// toggling UT / Standard Time only redraws (no astronomical recalculation).
+private class EclipseRenderData(
+    // Eclipse timing
+    val eclipseUTHours: Double,
+    val eclipseTJD: Double,
+    // Phase TJDs
+    val penStartTJD: Double,
+    val penEndTJD: Double,
+    val parStartTJD: Double,
+    val parEndTJD: Double,
+    val totStartTJD: Double,
+    val totEndTJD: Double,
+    // Sun/Moon at greatest eclipse
+    val sunAtMax: SunPositionResult,
+    val moonAtMax: MoonPositionResult,
+    // Shadow plane position (cm)
+    val shadowPlaneX: Double,
+    val shadowPlaneY: Double,
+    // Shadow radii (cm)
+    val rUmbraEq: Double,
+    val rUmbraPolar: Double,
+    val rPenumbraEq: Double,
+    val rPenumbraPolar: Double,
+    // Phase moon shadow-plane positions (cm) — [0]=penStart [1]=penEnd [2]=parStart [3]=parEnd [4]=totStart [5]=totEnd
+    val phaseShadowX: DoubleArray,
+    val phaseShadowY: DoubleArray,
+    // Moon-path endpoints in shadow plane (cm)
+    val pathStartX: Double,
+    val pathStartY: Double,
+    val pathEndX: Double,
+    val pathEndY: Double,
+    // Moonrise / moonset during eclipse
+    val moonsetTJD: Double?,
+    val moonriseTJD: Double?,
+    // Moonrise / moonset shadow-plane positions (cm)
+    val moonsetShadowX: Double?,
+    val moonsetShadowY: Double?,
+    val moonriseShadowX: Double?,
+    val moonriseShadowY: Double?,
+    // Visibility results
+    val neverWasUp: Boolean,
+    val alwaysWasUp: Boolean,
+    val willSeeTot: Boolean,
+    val willSeePar: Boolean,
+    val minutesTot: Int,
+    val minutesPar: Int,
+    val minutesPen: Int,
+    // Earth-map caches
+    val moonPosCache: EclipseMoonCache,
+    val gmstCache: EclipseGMSTCache,
+    // Moon altitude (degrees) at key times
+    val altAtMax: Double,
+    val altAtTotEnd: Double,
+    val altAtTotStart: Double,
+    val altAtParEnd: Double,
+    val altAtParStart: Double,
+    val altAtPenEnd: Double,
+    val altAtPenStart: Double
+)
+
+private fun computeEclipseRenderData(
+    eclipse: LunarEclipse,
+    userLatitude: Double,
+    userLongitude: Double
+): EclipseRenderData {
+    // Eclipse UT time
+    val eclipseUTHours = (eclipse.tDGE - eclipse.dTMinusUT) / 3600.0
+    var utHH = eclipseUTHours.toInt()
+    var utMM = ((eclipseUTHours - utHH) * 60.0).toInt()
+    var utSS = ((eclipseUTHours - utHH - utMM / 60.0) * 3600.0 + 0.5).toInt()
+    if (utSS >= 60) { utSS -= 60; utMM++ }
+    if (utMM >= 60) { utMM -= 60; utHH++ }
+    val eclipseTJD = buildTJD(eclipse.year, eclipse.month, eclipse.day, utHH, utMM, utSS)
+
+    // Sun / Moon at greatest eclipse
+    val sun = sunPosition(eclipseTJD)
+    val moon = moonPosition(eclipseTJD)
+    val moonDistanceCM = moon.distanceKM * 1.0e5
+    val sunDistanceCM = sun.distanceKM * 1.0e5
+
+    // Shadow plane
+    val shadowPlaneRA = sun.ra - Math.PI - moon.ra
+    val shadowPlaneDec = -sun.dec - moon.dec
+    val shadowPlaneX = sin(shadowPlaneRA) * moonDistanceCM
+    val shadowPlaneY = -sin(shadowPlaneDec) * moonDistanceCM
+
+    // Shadow radii
+    val lEEq = sunDistanceCM * (1.0 + EARTH_EQUATORIAL_RADIUS / (SOLAR_RADIUS - EARTH_EQUATORIAL_RADIUS))
+    val lEPolar = sunDistanceCM * (1.0 + EARTH_POLAR_RADIUS / (SOLAR_RADIUS - EARTH_POLAR_RADIUS))
+    val rUmbraEq = SOLAR_RADIUS * (lEEq - sunDistanceCM - moonDistanceCM) / lEEq * ATMOSPHERIC_UMBRA_EXPANSION
+    val rUmbraPolar = SOLAR_RADIUS * (lEPolar - sunDistanceCM - moonDistanceCM) / lEPolar * ATMOSPHERIC_UMBRA_EXPANSION
+    val lPEq = SOLAR_RADIUS * sunDistanceCM / (SOLAR_RADIUS + EARTH_EQUATORIAL_RADIUS)
+    val lPPolar = SOLAR_RADIUS * sunDistanceCM / (SOLAR_RADIUS + EARTH_POLAR_RADIUS)
+    val rPenumbraEq = SOLAR_RADIUS * (sunDistanceCM - lPEq + moonDistanceCM) / lPEq * ATMOSPHERIC_UMBRA_EXPANSION
+    val rPenumbraPolar = SOLAR_RADIUS * (sunDistanceCM - lPPolar + moonDistanceCM) / lPPolar * ATMOSPHERIC_UMBRA_EXPANSION
+
+    // Phase TJDs
+    val penStartTJD = eclipseTJD - eclipse.penDur / 2880.0
+    val penEndTJD = eclipseTJD + eclipse.penDur / 2880.0
+    val parStartTJD = eclipseTJD - eclipse.parDur / 2880.0
+    val parEndTJD = eclipseTJD + eclipse.parDur / 2880.0
+    val totStartTJD = eclipseTJD - eclipse.totDur / 2880.0
+    val totEndTJD = eclipseTJD + eclipse.totDur / 2880.0
+
+    // ---------- Moonrise / moonset search ----------
+    val searchStart = penStartTJD - 0.01
+    val searchEnd = penEndTJD + 0.01
+    val moonAtSearchStart = moonPosition(searchStart)
+    val moonAtSearchEnd = moonPosition(searchEnd)
+    val interpStartRaH = Math.toDegrees(moonAtSearchStart.ra) / 15.0
+    val interpStartDecDeg = Math.toDegrees(moonAtSearchStart.dec)
+    val interpEndRaH = Math.toDegrees(moonAtSearchEnd.ra) / 15.0
+    val interpEndDecDeg = Math.toDegrees(moonAtSearchEnd.dec)
+
+    val moonUpAtStart = moonAboveHorizonInterpolated(
+        penStartTJD, userLatitude, userLongitude,
+        searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg
+    )
+
+    var moonsetTJD: Double? = null
+    var moonriseTJD: Double? = null
+    val searchStep = 1.0 / 1440.0
+    var prevUp = moonAboveHorizonInterpolated(
+        searchStart, userLatitude, userLongitude,
+        searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg
+    )
+    var tJD = searchStart + searchStep
+    while (tJD <= searchEnd) {
+        val currUp = moonAboveHorizonInterpolated(
+            tJD, userLatitude, userLongitude,
+            searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg
+        )
+        if (prevUp && !currUp && moonsetTJD == null) {
+            var lo = tJD - searchStep; var hi = tJD
+            for (i in 0 until 10) {
+                val mid = (lo + hi) / 2.0
+                if (moonAboveHorizonInterpolated(mid, userLatitude, userLongitude, searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg)) lo = mid else hi = mid
+            }
+            val refinedTime = (lo + hi) / 2.0
+            if (refinedTime in penStartTJD..penEndTJD) moonsetTJD = refinedTime
+        }
+        if (!prevUp && currUp && moonriseTJD == null) {
+            var lo = tJD - searchStep; var hi = tJD
+            for (i in 0 until 10) {
+                val mid = (lo + hi) / 2.0
+                if (moonAboveHorizonInterpolated(mid, userLatitude, userLongitude, searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg)) hi = mid else lo = mid
+            }
+            val refinedTime = (lo + hi) / 2.0
+            if (refinedTime in penStartTJD..penEndTJD) moonriseTJD = refinedTime
+        }
+        prevUp = currUp
+        tJD += searchStep
+    }
+
+    // ---------- Visibility calculations ----------
+    val upIntervals = mutableListOf<Pair<Double, Double>>()
+    if (moonUpAtStart) {
+        val intervalEnd = moonsetTJD ?: penEndTJD
+        if (intervalEnd > penStartTJD) upIntervals.add(Pair(penStartTJD, minOf(intervalEnd, penEndTJD)))
+        if (moonsetTJD != null && moonriseTJD != null && moonriseTJD > moonsetTJD)
+            upIntervals.add(Pair(moonriseTJD, penEndTJD))
+    } else {
+        if (moonriseTJD != null) {
+            val intervalEnd = if (moonsetTJD != null && moonsetTJD > moonriseTJD) moonsetTJD else penEndTJD
+            upIntervals.add(Pair(moonriseTJD, minOf(intervalEnd, penEndTJD)))
+        }
+    }
+    fun calcVisibleDuration(windowStart: Double, windowEnd: Double): Double {
+        if (windowEnd <= windowStart) return 0.0
+        var total = 0.0
+        for ((s, e) in upIntervals) { val os = maxOf(s, windowStart); val oe = minOf(e, windowEnd); if (oe > os) total += oe - os }
+        return total
+    }
+    val totVisDays = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) calcVisibleDuration(totStartTJD, totEndTJD) else 0.0
+    val parVisDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
+        if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) calcVisibleDuration(parStartTJD, totStartTJD) + calcVisibleDuration(totEndTJD, parEndTJD)
+        else calcVisibleDuration(parStartTJD, parEndTJD)
+    } else 0.0
+    val penVisDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE)
+        calcVisibleDuration(penStartTJD, parStartTJD) + calcVisibleDuration(parEndTJD, penEndTJD)
+    else calcVisibleDuration(penStartTJD, penEndTJD)
+    val totalVisDays = totVisDays + parVisDays + penVisDays
+
+    // ---------- Phase moon shadow-plane positions (cm) ----------
+    val phaseTimes = doubleArrayOf(penStartTJD, penEndTJD, parStartTJD, parEndTJD, totStartTJD, totEndTJD)
+    val phaseShadowX = DoubleArray(6)
+    val phaseShadowY = DoubleArray(6)
+    for (p in 0 until 6) {
+        val tSun = sunPosition(phaseTimes[p])
+        val tMoon = moonPosition(phaseTimes[p])
+        val tDistCM = tMoon.distanceKM * 1.0e5
+        phaseShadowX[p] = sin(tSun.ra - Math.PI - tMoon.ra) * tDistCM
+        phaseShadowY[p] = -sin(-tSun.dec - tMoon.dec) * tDistCM
+    }
+
+    // ---------- Moon-path endpoints (cm) ----------
+    val pathStartTJDVal = eclipseTJD - 0.17
+    val pathEndTJDVal = eclipseTJD + 0.25
+    fun shadowXY(tjd: Double): Pair<Double, Double> {
+        val s = sunPosition(tjd); val m = moonPosition(tjd); val d = m.distanceKM * 1.0e5
+        return Pair(sin(s.ra - Math.PI - m.ra) * d, -sin(-s.dec - m.dec) * d)
+    }
+    val (pathStartX, pathStartY) = shadowXY(pathStartTJDVal)
+    val (pathEndX, pathEndY) = shadowXY(pathEndTJDVal)
+
+    // ---------- Moonrise / moonset shadow-plane positions (cm) ----------
+    val (moonsetSX, moonsetSY) = if (moonsetTJD != null) shadowXY(moonsetTJD) else Pair(null, null)
+    val (moonriseSX, moonriseSY) = if (moonriseTJD != null) shadowXY(moonriseTJD) else Pair(null, null)
+
+    // ---------- Earth-map caches ----------
+    val mapMoonCache = buildMoonCache(penStartTJD, penEndTJD, parStartTJD, parEndTJD, totStartTJD, totEndTJD, eclipse.eclipseType)
+    val mapGmstCache = buildGMSTCache(penStartTJD, penEndTJD, parStartTJD, parEndTJD, totStartTJD, totEndTJD)
+
+    // ---------- Moon altitudes at key times ----------
+    val altAtMax = moonAltitude(eclipseTJD, userLatitude, userLongitude)
+    val altAtTotEnd = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) moonAltitude(totEndTJD, userLatitude, userLongitude) else Double.NaN
+    val altAtTotStart = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) moonAltitude(totStartTJD, userLatitude, userLongitude) else Double.NaN
+    val altAtParEnd = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) moonAltitude(parEndTJD, userLatitude, userLongitude) else Double.NaN
+    val altAtParStart = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) moonAltitude(parStartTJD, userLatitude, userLongitude) else Double.NaN
+    val altAtPenEnd = moonAltitude(penEndTJD, userLatitude, userLongitude)
+    val altAtPenStart = moonAltitude(penStartTJD, userLatitude, userLongitude)
+
+    return EclipseRenderData(
+        eclipseUTHours = eclipseUTHours, eclipseTJD = eclipseTJD,
+        penStartTJD = penStartTJD, penEndTJD = penEndTJD,
+        parStartTJD = parStartTJD, parEndTJD = parEndTJD,
+        totStartTJD = totStartTJD, totEndTJD = totEndTJD,
+        sunAtMax = sun, moonAtMax = moon,
+        shadowPlaneX = shadowPlaneX, shadowPlaneY = shadowPlaneY,
+        rUmbraEq = rUmbraEq, rUmbraPolar = rUmbraPolar,
+        rPenumbraEq = rPenumbraEq, rPenumbraPolar = rPenumbraPolar,
+        phaseShadowX = phaseShadowX, phaseShadowY = phaseShadowY,
+        pathStartX = pathStartX, pathStartY = pathStartY,
+        pathEndX = pathEndX, pathEndY = pathEndY,
+        moonsetTJD = moonsetTJD, moonriseTJD = moonriseTJD,
+        moonsetShadowX = moonsetSX, moonsetShadowY = moonsetSY,
+        moonriseShadowX = moonriseSX, moonriseShadowY = moonriseSY,
+        neverWasUp = totalVisDays == 0.0,
+        alwaysWasUp = moonsetTJD == null && moonriseTJD == null && moonUpAtStart,
+        willSeeTot = totVisDays > 0, willSeePar = parVisDays > 0,
+        minutesTot = (totVisDays * 1440.0 + 0.5).toInt(),
+        minutesPar = (parVisDays * 1440.0 + 0.5).toInt(),
+        minutesPen = (penVisDays * 1440.0 + 0.5).toInt(),
+        moonPosCache = mapMoonCache, gmstCache = mapGmstCache,
+        altAtMax = altAtMax,
+        altAtTotEnd = altAtTotEnd, altAtTotStart = altAtTotStart,
+        altAtParEnd = altAtParEnd, altAtParStart = altAtParStart,
+        altAtPenEnd = altAtPenEnd, altAtPenStart = altAtPenStart
+    )
+}
+
 // ============================================================================
 // GLOBAL DATA STORAGE
 // ============================================================================
@@ -1056,6 +1308,11 @@ private fun EclipseDetailView(
     val standardTimeOffsetHours = stdOffsetHours
     val timeZoneAbbreviation = stdTimeLabel
 
+    // Pre-compute all astronomical data once; cached across UT/Standard Time toggles
+    val renderData = remember(eclipse, latitude, longitude) {
+        computeEclipseRenderData(eclipse, latitude, longitude)
+    }
+
     // Delay showing canvas to allow loading indicator to render first
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100)
@@ -1086,7 +1343,7 @@ private fun EclipseDetailView(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Eclipse visualization canvas (uses remaining space above buttons)
                 Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    renderEclipse(this, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation, currentTJD, moonBitmap)
+                    renderEclipse(this, renderData, eclipse, shoreline, latitude, longitude, useStandardTime, standardTimeOffsetHours, timeZoneAbbreviation, currentTJD, moonBitmap)
                 }
 
                 // Bottom row with Back button and time zone radio buttons
@@ -1159,6 +1416,7 @@ private fun EclipseDetailView(
 
 private fun renderEclipse(
     drawScope: DrawScope,
+    data: EclipseRenderData,
     eclipse: LunarEclipse,
     shoreline: List<ShoreSegment>,
     userLatitude: Double,
@@ -1232,17 +1490,11 @@ private fun renderEclipse(
     val umbraMapScale = umbraMapHeight / (14.0 * MOON_RADIUS)
     val eta = 23.44 * DEGREES_TO_RADIANS
 
-    // Calculate eclipse times in UT (for astronomical calculations)
-    val eclipseUTHours = (eclipse.tDGE - eclipse.dTMinusUT) / 3600.0
-    var utHH = eclipseUTHours.toInt()
-    var utMM = ((eclipseUTHours - utHH) * 60.0).toInt()
-    var utSS = ((eclipseUTHours - utHH - utMM / 60.0) * 3600.0 + 0.5).toInt()
-    if (utSS >= 60) { utSS -= 60; utMM++ }
-    if (utMM >= 60) { utMM -= 60; utHH++ }
+    // Read cached eclipse timing
+    val eclipseUTHours = data.eclipseUTHours
+    val eclipseTJD = data.eclipseTJD
 
-    val eclipseTJD = buildTJD(eclipse.year, eclipse.month, eclipse.day, utHH, utMM, utSS)
-
-    // Calculate display time (applying time offset)
+    // Display time (depends on timeOffset — cheap)
     var displayHours = eclipseUTHours + timeOffset
     while (displayHours < 0) displayHours += 24.0
     while (displayHours >= 24) displayHours -= 24.0
@@ -1253,39 +1505,28 @@ private fun renderEclipse(
     if (maxMM >= 60) { maxMM -= 60; maxHH++ }
     if (maxHH >= 24) { maxHH -= 24 }
 
-    // Get Sun and Moon positions
-    val sun = sunPosition(eclipseTJD)
-    val moon = moonPosition(eclipseTJD)
+    // Cached Sun / Moon positions
+    val sun = data.sunAtMax
+    val moon = data.moonAtMax
 
     val moonDistanceCM = moon.distanceKM * 1.0e5
-    val sunDistanceCM = sun.distanceKM * 1.0e5
 
     val moonRadiusPixels = (1 + atan(MOON_RADIUS / moonDistanceCM) * moonDistanceCM * umbraMapScale).toInt()
 
-    // Shadow plane position
-    val shadowPlaneRA = sun.ra - Math.PI - moon.ra
-    val shadowPlaneDec = -sun.dec - moon.dec
-    val shadowPlaneX = sin(shadowPlaneRA) * moonDistanceCM
-    val shadowPlaneY = -sin(shadowPlaneDec) * moonDistanceCM
+    // Cached shadow plane, shadow radii, and phase times
+    val shadowPlaneX = data.shadowPlaneX
+    val shadowPlaneY = data.shadowPlaneY
+    val rUmbraEquatorial = data.rUmbraEq
+    val rUmbraPolar = data.rUmbraPolar
+    val rPenumbraEquatorial = data.rPenumbraEq
+    val rPenumbraPolar = data.rPenumbraPolar
 
-    // Calculate umbra and penumbra radii
-    val lEEquatorial = sunDistanceCM * (1.0 + EARTH_EQUATORIAL_RADIUS / (SOLAR_RADIUS - EARTH_EQUATORIAL_RADIUS))
-    val lEPolar = sunDistanceCM * (1.0 + EARTH_POLAR_RADIUS / (SOLAR_RADIUS - EARTH_POLAR_RADIUS))
-    val rUmbraEquatorial = SOLAR_RADIUS * (lEEquatorial - sunDistanceCM - moonDistanceCM) / lEEquatorial * ATMOSPHERIC_UMBRA_EXPANSION
-    val rUmbraPolar = SOLAR_RADIUS * (lEPolar - sunDistanceCM - moonDistanceCM) / lEPolar * ATMOSPHERIC_UMBRA_EXPANSION
-
-    val lPEquatorial = SOLAR_RADIUS * sunDistanceCM / (SOLAR_RADIUS + EARTH_EQUATORIAL_RADIUS)
-    val lPPolar = SOLAR_RADIUS * sunDistanceCM / (SOLAR_RADIUS + EARTH_POLAR_RADIUS)
-    val rPenumbraEquatorial = SOLAR_RADIUS * (sunDistanceCM - lPEquatorial + moonDistanceCM) / lPEquatorial * ATMOSPHERIC_UMBRA_EXPANSION
-    val rPenumbraPolar = SOLAR_RADIUS * (sunDistanceCM - lPPolar + moonDistanceCM) / lPPolar * ATMOSPHERIC_UMBRA_EXPANSION
-
-    // Eclipse phase times
-    val penEclipseStartTJD = eclipseTJD - eclipse.penDur / 2880.0
-    val penEclipseEndTJD = eclipseTJD + eclipse.penDur / 2880.0
-    val parEclipseStartTJD = eclipseTJD - eclipse.parDur / 2880.0
-    val parEclipseEndTJD = eclipseTJD + eclipse.parDur / 2880.0
-    val totEclipseStartTJD = eclipseTJD - eclipse.totDur / 2880.0
-    val totEclipseEndTJD = eclipseTJD + eclipse.totDur / 2880.0
+    val penEclipseStartTJD = data.penStartTJD
+    val penEclipseEndTJD = data.penEndTJD
+    val parEclipseStartTJD = data.parStartTJD
+    val parEclipseEndTJD = data.parEndTJD
+    val totEclipseStartTJD = data.totStartTJD
+    val totEclipseEndTJD = data.totEndTJD
 
     // Helper functions
     fun cmToPixels(x: Double, y: Double): Pair<Float, Float> {
@@ -1300,182 +1541,22 @@ private fun renderEclipse(
         return Pair(px, py)
     }
 
-    // Calculate visibility using interpolated moon positions (major optimization)
-    // Moon RA/Dec change slowly during an eclipse, so we compute positions at the
-    // search boundaries and interpolate for all intermediate times
-    val searchStart = penEclipseStartTJD - 0.01
-    val searchEnd = penEclipseEndTJD + 0.01
+    // Read cached visibility, moonrise/set, and phase data
+    val moonsetTJD = data.moonsetTJD
+    val moonriseTJD = data.moonriseTJD
+    val neverWasUp = data.neverWasUp
+    val alwaysWasUp = data.alwaysWasUp
+    val willSeeTot = data.willSeeTot
+    val willSeePar = data.willSeePar
+    val minutesTot = data.minutesTot
+    val minutesPar = data.minutesPar
+    val minutesPen = data.minutesPen
 
-    // Compute moon positions at search boundaries (only 2 expensive moonPosition calls)
-    val moonAtStart = moonPosition(searchStart)
-    val moonAtEnd = moonPosition(searchEnd)
-    val interpStartRaHours = Math.toDegrees(moonAtStart.ra) / 15.0
-    val interpStartDecDeg = Math.toDegrees(moonAtStart.dec)
-    val interpEndRaHours = Math.toDegrees(moonAtEnd.ra) / 15.0
-    val interpEndDecDeg = Math.toDegrees(moonAtEnd.dec)
-
-    // Determine initial moon state at eclipse start
-    val moonUpAtStart = moonAboveHorizonInterpolated(
-        penEclipseStartTJD, userLatitude, userLongitude,
-        searchStart, searchEnd,
-        interpStartRaHours, interpStartDecDeg,
-        interpEndRaHours, interpEndDecDeg
-    )
-
-    // Find moonrise/moonset during eclipse using interpolated positions
-    var moonsetTJD: Double? = null
-    var moonriseTJD: Double? = null
-    val searchStep = 1.0 / 1440.0
-    var prevUp = moonAboveHorizonInterpolated(
-        searchStart, userLatitude, userLongitude,
-        searchStart, searchEnd,
-        interpStartRaHours, interpStartDecDeg,
-        interpEndRaHours, interpEndDecDeg
-    )
-
-    var tJD = searchStart + searchStep
-    while (tJD <= searchEnd) {
-        val currUp = moonAboveHorizonInterpolated(
-            tJD, userLatitude, userLongitude,
-            searchStart, searchEnd,
-            interpStartRaHours, interpStartDecDeg,
-            interpEndRaHours, interpEndDecDeg
-        )
-
-        if (prevUp && !currUp && moonsetTJD == null) {
-            // Moon setting - refine
-            var lo = tJD - searchStep
-            var hi = tJD
-            for (i in 0 until 10) {
-                val mid = (lo + hi) / 2.0
-                if (moonAboveHorizonInterpolated(
-                        mid, userLatitude, userLongitude,
-                        searchStart, searchEnd,
-                        interpStartRaHours, interpStartDecDeg,
-                        interpEndRaHours, interpEndDecDeg
-                    )) lo = mid else hi = mid
-            }
-            val refinedTime = (lo + hi) / 2.0
-            if (refinedTime >= penEclipseStartTJD && refinedTime <= penEclipseEndTJD) {
-                moonsetTJD = refinedTime
-            }
-        }
-
-        if (!prevUp && currUp && moonriseTJD == null) {
-            // Moon rising - refine
-            var lo = tJD - searchStep
-            var hi = tJD
-            for (i in 0 until 10) {
-                val mid = (lo + hi) / 2.0
-                if (moonAboveHorizonInterpolated(
-                        mid, userLatitude, userLongitude,
-                        searchStart, searchEnd,
-                        interpStartRaHours, interpStartDecDeg,
-                        interpEndRaHours, interpEndDecDeg
-                    )) hi = mid else lo = mid
-            }
-            val refinedTime = (lo + hi) / 2.0
-            if (refinedTime >= penEclipseStartTJD && refinedTime <= penEclipseEndTJD) {
-                moonriseTJD = refinedTime
-            }
-        }
-
-        prevUp = currUp
-        tJD += searchStep
-    }
-
-    // Analytical calculation of visible eclipse durations
-    // Build list of moon-up intervals during the eclipse
-    val upIntervals = mutableListOf<Pair<Double, Double>>()
-    if (moonUpAtStart) {
-        val intervalEnd = moonsetTJD ?: penEclipseEndTJD
-        if (intervalEnd > penEclipseStartTJD) {
-            upIntervals.add(Pair(penEclipseStartTJD, minOf(intervalEnd, penEclipseEndTJD)))
-        }
-        // Check for moonrise after moonset (moon sets then rises again)
-        if (moonsetTJD != null && moonriseTJD != null && moonriseTJD!! > moonsetTJD!!) {
-            upIntervals.add(Pair(moonriseTJD!!, penEclipseEndTJD))
-        }
-    } else {
-        if (moonriseTJD != null) {
-            val intervalEnd = if (moonsetTJD != null && moonsetTJD!! > moonriseTJD!!) moonsetTJD!! else penEclipseEndTJD
-            upIntervals.add(Pair(moonriseTJD!!, minOf(intervalEnd, penEclipseEndTJD)))
-        }
-    }
-
-    // Helper to calculate visible duration within a time window
-    fun calcVisibleDuration(windowStart: Double, windowEnd: Double): Double {
-        if (windowEnd <= windowStart) return 0.0
-        var totalVisible = 0.0
-        for ((intStart, intEnd) in upIntervals) {
-            val overlapStart = maxOf(intStart, windowStart)
-            val overlapEnd = minOf(intEnd, windowEnd)
-            if (overlapEnd > overlapStart) {
-                totalVisible += overlapEnd - overlapStart
-            }
-        }
-        return totalVisible
-    }
-
-    // Calculate visible durations for each phase (mutually exclusive)
-    // Total phase
-    val totVisibleDays = if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
-        calcVisibleDuration(totEclipseStartTJD, totEclipseEndTJD)
-    } else 0.0
-
-    // Partial phase (exclusive of total)
-    val parVisibleDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
-        if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
-            // Two segments: before total and after total
-            calcVisibleDuration(parEclipseStartTJD, totEclipseStartTJD) +
-            calcVisibleDuration(totEclipseEndTJD, parEclipseEndTJD)
-        } else {
-            // Partial-only eclipse: entire partial phase
-            calcVisibleDuration(parEclipseStartTJD, parEclipseEndTJD)
-        }
-    } else 0.0
-
-    // Penumbral phase (exclusive of partial)
-    val penVisibleDays = if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
-        // Two segments: before partial and after partial
-        calcVisibleDuration(penEclipseStartTJD, parEclipseStartTJD) +
-        calcVisibleDuration(parEclipseEndTJD, penEclipseEndTJD)
-    } else {
-        // Penumbral-only eclipse: entire penumbral phase
-        calcVisibleDuration(penEclipseStartTJD, penEclipseEndTJD)
-    }
-
-    // Derive the flags and counts used by the rest of the code
-    val willSeeTot = totVisibleDays > 0
-    val willSeePar = parVisibleDays > 0
-    val totalVisibleDays = totVisibleDays + parVisibleDays + penVisibleDays
-    val neverWasUp = totalVisibleDays == 0.0
-    val alwaysWasUp = moonsetTJD == null && moonriseTJD == null && moonUpAtStart
-
-    // Convert to minutes (these replace the old nPenSeen/nParSeen/nTotSeen * trackStep * 1440)
-    val minutesTot = (totVisibleDays * 1440.0 + 0.5).toInt()
-    val minutesPar = (parVisibleDays * 1440.0 + 0.5).toInt()
-    val minutesPen = (penVisibleDays * 1440.0 + 0.5).toInt()
-
-    // Calculate Moon positions at phase times
-    val phaseTimes = doubleArrayOf(
-        penEclipseStartTJD, penEclipseEndTJD,
-        parEclipseStartTJD, parEclipseEndTJD,
-        totEclipseStartTJD, totEclipseEndTJD
-    )
+    // Convert cached shadow-plane cm positions to pixels
     val moonPosX = FloatArray(6)
     val moonPosY = FloatArray(6)
-
     for (p in 0 until 6) {
-        val tSun = sunPosition(phaseTimes[p])
-        val tMoon = moonPosition(phaseTimes[p])
-        val tDistCM = tMoon.distanceKM * 1.0e5
-
-        val spRA = tSun.ra - Math.PI - tMoon.ra
-        val spDec = -tSun.dec - tMoon.dec
-        val spX = sin(spRA) * tDistCM
-        val spY = -sin(spDec) * tDistCM
-        val (px, py) = cmToPixels(spX, spY)
+        val (px, py) = cmToPixels(data.phaseShadowX[p], data.phaseShadowY[p])
         moonPosX[p] = px
         moonPosY[p] = py
     }
@@ -1518,23 +1599,9 @@ private fun renderEclipse(
         Offset(-eclipticX + cx, eclipticY + cy),
         Offset(eclipticX + cx, -eclipticY + cy), 2f)
 
-    // Moon path line
-    val pathStartTJD = eclipseTJD - 0.17
-    val pathEndTJD = eclipseTJD + 0.25
-
-    val startSun = sunPosition(pathStartTJD)
-    val startMoon = moonPosition(pathStartTJD)
-    val startDistCM = startMoon.distanceKM * 1.0e5
-    val startSpX = sin(startSun.ra - Math.PI - startMoon.ra) * startDistCM
-    val startSpY = -sin(-startSun.dec - startMoon.dec) * startDistCM
-    val (pathPx1, pathPy1) = cmToPixels(startSpX, startSpY)
-
-    val endSun = sunPosition(pathEndTJD)
-    val endMoon = moonPosition(pathEndTJD)
-    val endDistCM = endMoon.distanceKM * 1.0e5
-    val endSpX = sin(endSun.ra - Math.PI - endMoon.ra) * endDistCM
-    val endSpY = -sin(-endSun.dec - endMoon.dec) * endDistCM
-    val (pathPx2, pathPy2) = cmToPixels(endSpX, endSpY)
+    // Moon path line (cached shadow-plane coords → pixels)
+    val (pathPx1, pathPy1) = cmToPixels(data.pathStartX, data.pathStartY)
+    val (pathPx2, pathPy2) = cmToPixels(data.pathEndX, data.pathEndY)
 
     drawScope.drawLine(colorDarkBlueGreen, Offset(pathPx1, pathPy1), Offset(pathPx2, pathPy2), 2f)
 
@@ -1590,18 +1657,12 @@ private fun renderEclipse(
         }
     }
 
-    // Moonset indicator
+    // Moonset indicator (cached shadow-plane coords → pixels)
     var moonsetPx = 0f
-    if (moonsetTJD != null) {
-        val msSun = sunPosition(moonsetTJD)
-        val msMoon = moonPosition(moonsetTJD)
-        val msDistCM = msMoon.distanceKM * 1.0e5
-        val msSpX = sin(msSun.ra - Math.PI - msMoon.ra) * msDistCM
-        val msSpY = -sin(-msSun.dec - msMoon.dec) * msDistCM
-        val (px, py) = cmToPixels(msSpX, msSpY)
+    if (moonsetTJD != null && data.moonsetShadowX != null && data.moonsetShadowY != null) {
+        val (px, py) = cmToPixels(data.moonsetShadowX, data.moonsetShadowY)
         moonsetPx = px
         drawScope.drawCircle(colorRed, moonRadiusPixels.toFloat(), Offset(px, py), style = Stroke(2f))
-        // Arrow pointing up from Moon
         val labelY = umbraMapTop + umbraMapHeight - 15f * scaleFactor
         val arrowTopY = py + moonRadiusPixels + 2
         drawScope.drawLine(colorRed, Offset(px, arrowTopY), Offset(px, labelY - 5), 2f)
@@ -1611,18 +1672,12 @@ private fun renderEclipse(
             Offset(px + 6f * scaleFactor, arrowTopY + 10f * scaleFactor), 2f)
     }
 
-    // Moonrise indicator
+    // Moonrise indicator (cached shadow-plane coords → pixels)
     var moonrisePx = 0f
-    if (moonriseTJD != null) {
-        val mrSun = sunPosition(moonriseTJD)
-        val mrMoon = moonPosition(moonriseTJD)
-        val mrDistCM = mrMoon.distanceKM * 1.0e5
-        val mrSpX = sin(mrSun.ra - Math.PI - mrMoon.ra) * mrDistCM
-        val mrSpY = -sin(-mrSun.dec - mrMoon.dec) * mrDistCM
-        val (px, py) = cmToPixels(mrSpX, mrSpY)
+    if (moonriseTJD != null && data.moonriseShadowX != null && data.moonriseShadowY != null) {
+        val (px, py) = cmToPixels(data.moonriseShadowX, data.moonriseShadowY)
         moonrisePx = px
         drawScope.drawCircle(colorRed, moonRadiusPixels.toFloat(), Offset(px, py), style = Stroke(2f))
-        // Arrow pointing down from Moon
         val labelY = umbraMapTop + 15f * scaleFactor
         val arrowBottomY = py - moonRadiusPixels - 2
         drawScope.drawLine(colorRed, Offset(px, arrowBottomY), Offset(px, labelY + 15f * scaleFactor), 2f)
@@ -1638,19 +1693,9 @@ private fun renderEclipse(
     drawScope.drawRect(colorWhite, Offset(earthMapLeft, earthMapTop),
         androidx.compose.ui.geometry.Size(earthMapWidth, earthMapHeight))
 
-    // Analytical visibility shading - compute longitude ranges per row
-    // Pre-compute Moon positions and GMST for all key times
-    val moonCache = buildMoonCache(
-        penEclipseStartTJD, penEclipseEndTJD,
-        parEclipseStartTJD, parEclipseEndTJD,
-        totEclipseStartTJD, totEclipseEndTJD,
-        eclipse.eclipseType
-    )
-    val gmstCache = buildGMSTCache(
-        penEclipseStartTJD, penEclipseEndTJD,
-        parEclipseStartTJD, parEclipseEndTJD,
-        totEclipseStartTJD, totEclipseEndTJD
-    )
+    // Cached earth-map moon-position and GMST data
+    val moonCache = data.moonPosCache
+    val gmstCache = data.gmstCache
 
     // Process each row analytically
     val pixelHeight = earthMapHeight.toInt()
@@ -1948,7 +1993,7 @@ private fun renderEclipse(
         textPaint.textSize = mediumTextSize
         textPaint.textAlign = Paint.Align.LEFT
         val maxEclipseLabel = "Maximum Eclipse at "
-        val maxAlt = moonAltitude(eclipseTJD, userLatitude, userLongitude)
+        val maxAlt = data.altAtMax
         val maxAltSuffix = if (maxAlt >= 0) ", ${round(maxAlt).toInt()}\u00B0" else ""
         val maxEclipseTime = "%02d:%02d:%02d $timeSuffix".format(maxHH, maxMM, maxSS) + maxAltSuffix
         val elevationSuffix = if (maxAlt >= 0) " elevation" else ""
@@ -1975,28 +2020,25 @@ private fun renderEclipse(
         rightTextPaint.textSize = smallTextSize
         var currentY = phaseTimesStartY
 
-        // Helper to format altitude suffix
-        fun altSuffix(tJD: Double): String {
-            val alt = moonAltitude(tJD, userLatitude, userLongitude)
-            return if (alt >= 0) ",${round(alt).toInt()}\u00B0" else ""
-        }
+        // Helper to format altitude suffix from cached altitude
+        fun altSuffix(alt: Double): String = if (alt >= 0) ",${round(alt).toInt()}\u00B0" else ""
 
         // Total phase times
         if (eclipse.eclipseType == TOTAL_LUNAR_ECLIPSE) {
             val (totEndH, totEndM, _) = tJDToHHMMSS(totEclipseEndTJD, timeOffset)
             val (totStartH, totStartM, _) = tJDToHHMMSS(totEclipseStartTJD, timeOffset)
-            val totEndUp = moonAltitude(totEclipseEndTJD, userLatitude, userLongitude) >= 0
-            val totStartUp = moonAltitude(totEclipseStartTJD, userLatitude, userLongitude) >= 0
+            val totEndUp = data.altAtTotEnd >= 0
+            val totStartUp = data.altAtTotStart >= 0
 
             leftTextPaint.color = (if (totEndUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Total Eclipse Ends", margin, currentY, leftTextPaint)
             leftTextPaint.color = (if (totEndUp) colorWhite else colorGrey).toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(totEndH, totEndM) + altSuffix(totEclipseEndTJD), margin + 135f * textScale, currentY, leftTextPaint)
+            canvas.nativeCanvas.drawText("%02d:%02d".format(totEndH, totEndM) + altSuffix(data.altAtTotEnd), margin + 135f * textScale, currentY, leftTextPaint)
 
             rightTextPaint.color = (if (totStartUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Total Eclipse Starts", width - margin - 70f * textScale, currentY, rightTextPaint)
             rightTextPaint.color = (if (totStartUp) colorWhite else colorGrey).toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(totStartH, totStartM) + altSuffix(totEclipseStartTJD), width - margin, currentY, rightTextPaint)
+            canvas.nativeCanvas.drawText("%02d:%02d".format(totStartH, totStartM) + altSuffix(data.altAtTotStart), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
         }
@@ -2005,18 +2047,18 @@ private fun renderEclipse(
         if (eclipse.eclipseType >= PARTIAL_LUNAR_ECLIPSE) {
             val (parEndH, parEndM, _) = tJDToHHMMSS(parEclipseEndTJD, timeOffset)
             val (parStartH, parStartM, _) = tJDToHHMMSS(parEclipseStartTJD, timeOffset)
-            val parEndUp = moonAltitude(parEclipseEndTJD, userLatitude, userLongitude) >= 0
-            val parStartUp = moonAltitude(parEclipseStartTJD, userLatitude, userLongitude) >= 0
+            val parEndUp = data.altAtParEnd >= 0
+            val parStartUp = data.altAtParStart >= 0
 
             leftTextPaint.color = (if (parEndUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Partial Ends", margin, currentY, leftTextPaint)
             leftTextPaint.color = (if (parEndUp) colorWhite else colorGrey).toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(parEndH, parEndM) + altSuffix(parEclipseEndTJD), margin + 90f * textScale, currentY, leftTextPaint)
+            canvas.nativeCanvas.drawText("%02d:%02d".format(parEndH, parEndM) + altSuffix(data.altAtParEnd), margin + 90f * textScale, currentY, leftTextPaint)
 
             rightTextPaint.color = (if (parStartUp) colorLightBlue else colorGrey).toArgb()
             canvas.nativeCanvas.drawText("Partial Starts", width - margin - 70f * textScale, currentY, rightTextPaint)
             rightTextPaint.color = (if (parStartUp) colorWhite else colorGrey).toArgb()
-            canvas.nativeCanvas.drawText("%02d:%02d".format(parStartH, parStartM) + altSuffix(parEclipseStartTJD), width - margin, currentY, rightTextPaint)
+            canvas.nativeCanvas.drawText("%02d:%02d".format(parStartH, parStartM) + altSuffix(data.altAtParStart), width - margin, currentY, rightTextPaint)
 
             currentY += phaseLineHeight
         }
@@ -2024,18 +2066,18 @@ private fun renderEclipse(
         // Penumbral phase times
         val (penEndH, penEndM, _) = tJDToHHMMSS(penEclipseEndTJD, timeOffset)
         val (penStartH, penStartM, _) = tJDToHHMMSS(penEclipseStartTJD, timeOffset)
-        val penEndUp = moonAltitude(penEclipseEndTJD, userLatitude, userLongitude) >= 0
-        val penStartUp = moonAltitude(penEclipseStartTJD, userLatitude, userLongitude) >= 0
+        val penEndUp = data.altAtPenEnd >= 0
+        val penStartUp = data.altAtPenStart >= 0
 
         leftTextPaint.color = (if (penEndUp) colorLightBlue else colorGrey).toArgb()
         canvas.nativeCanvas.drawText("Penumbral Ends", margin, currentY, leftTextPaint)
         leftTextPaint.color = (if (penEndUp) colorWhite else colorGrey).toArgb()
-        canvas.nativeCanvas.drawText("%02d:%02d".format(penEndH, penEndM) + altSuffix(penEclipseEndTJD), margin + 105f * textScale, currentY, leftTextPaint)
+        canvas.nativeCanvas.drawText("%02d:%02d".format(penEndH, penEndM) + altSuffix(data.altAtPenEnd), margin + 105f * textScale, currentY, leftTextPaint)
 
         rightTextPaint.color = (if (penStartUp) colorLightBlue else colorGrey).toArgb()
         canvas.nativeCanvas.drawText("Penumbral Starts", width - margin - 69f * textScale, currentY, rightTextPaint)
         rightTextPaint.color = (if (penStartUp) colorWhite else colorGrey).toArgb()
-        canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM) + altSuffix(penEclipseStartTJD), width - margin, currentY, rightTextPaint)
+        canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM) + altSuffix(data.altAtPenStart), width - margin, currentY, rightTextPaint)
 
         // East label (doesn't conflict with lines)
         leftTextPaint.color = colorBlack.toArgb()
