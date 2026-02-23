@@ -184,7 +184,7 @@
             gray line running through all displayed days.
         </p>
         <p>
-            The times of rising, transit, and setting are plotted between the sunset and sunrise curves. The colors used are:
+            The times of rising, transit, and setting for each planet are plotted between the sunset and sunrise curves. The colors used are:
             Mercury: gray, Venus: white, Mars: red, Jupiter: orange, Saturn: yellow, Uranus: blue-green, and Neptune: blue.
             The transit lines are bright, and the rising and setting lines are dimmer. Planet symbols are shown near the lines,
             with r, t, and s subscripts for rise, transit, and set.
@@ -196,9 +196,9 @@
         <hr>
         <h2 id="planet-elevations">Planet Elevations</h2>
         <p>
-	  This display shows the elevation above the horizon for the Sun, Moon and planets. The UT or standard time is listed across the top, and the LST is listed across the bottom. The vertical lines show the time of sunset (left) and sunrise (right), along with blue shading for twilight. A horizontal line for each object shows the period of time during which the object is above the horizon. Tick marks on those lines show the elevation at 20 degree intervals, and a tick mark at the line's center shows the object's elevation at transit. A vertical line (gray before sunset, green after sunset) shows the current time, the current elevation of each object is shown at the intersection of the current time line and the object's horizontal line. The names of the objects that are currently visible are shown in green (the Moon is assumed to be visible during the day if its illumination is 25% or greater).
+	  This display shows the elevation above the horizon for the Sun, Moon and planets for a single day. The UT or standard time is listed across the top, and the LST is listed across the bottom. The vertical lines show the time of sunset (left) and sunrise (right), along with blue shading for twilight. A horizontal line for each object shows the period of time during which the object is above the horizon. Tick marks on those lines show the elevation at 20 degree intervals, and a tick mark at the line's center shows the object's elevation at transit. A vertical line (gray before sunset, green after sunset) shows the current time, the current elevation of each object is shown at the intersection of the current time line and the object's horizontal line. The names of the objects that are currently visible are shown in green (the Moon is assumed to be visible during the day if its illumination is 25% or greater).
 	<p>
-	  For this display only, the display switches to the next day after the Sun rises, but the individual object tracks are updated immediately after the object sets.
+	  For this display only, the display switches to the next day after the Sun rises. The individual object tracks are updated immediately after the object sets, so once the object sets the track for the next day is plotted (which is really only noticably different for the Moon).
 	</p>
         </p>
         <hr>
@@ -207,7 +207,7 @@
 	  This display shows the current azimuth and elevation of the Sun, Moon and planets.  The full circle on the upper right shows the azimuth of each object. Objects above the horizon are shown in white, and objects below the horizon are red. The lengths of the lines connecting the circle to the object's symbol are meaningless - different lengths are used merely to prevent the symbols from overlapping. The semicircle on the upper left shows the current elevation for each object.
 	</p>
 	<p>
-	 Below the graphic figures is a table of the hour angle and rising, transit and setting times for all the plotted objects.  Objects above the horizon are named with green text, and red otherwise. The time of the next event for each object is shown in white, and the other events are shown in gray.
+	 Below the graphic figures is a table of the hour angle and rising, transit and setting times for all the plotted objects.  Objects above the horizon are named with green text, and red otherwise. The time of the next event for each object is shown in white, and the other events are shown in gray. Event times which fall in the next day are marked with an asterisk.
         </p>
         <hr>
         <h2 id="planet-phenomena">Planet Phenomena</h2>
@@ -215,7 +215,7 @@
 	  The planet phenomena page shows a table with the date and hour of certain events related to a planet's position in the sky. The table has two columns, The left column shows the time of the most recent occurance of the phenomenon, and the right column show when the phenomenon will next occur.
 	</p>
 	<p>
-	For the inferior planets (Mercury and Venus) the dates and hour of inferior confunction (when the object is directly in between the Sun and the Earth), maximum western elongation (from the Sun, with the anglular separation), superior conjunction (when the object is directly behind the Sun as seen from Earth) and maximum eastern elongation (with the angular separation) are shown. The maximum elongation times shown can be in error by up to three hours. These planets (especially Mercury) are most easily seen near greatest elongation.
+	For the inferior planets (Mercury and Venus) the dates and hour of inferior confunction (when the object is directly in between the Sun and the Earth), maximum western elongation (from the Sun, with the anglular separation), superior conjunction (when the object is directly behind the Sun as seen from Earth) and maximum eastern elongation (with the angular separation) are shown. The maximum elongation times shown can be in error by up to three hours. These two planets (especially Mercury) are most easily seen near greatest elongation.
 	</p>
 	<p>
 	  For the superior planets (Mars, Jupiter, Saturn, Uranus and Neptune) the times of conjunction (when the Sun is between and planet and the Earth) and opposition (when the Earth is between the Sun and the planet) are listed.  The planet is usually impossible to see near conjunction, and best seen near opposition.
@@ -244,7 +244,7 @@
 	<a href="MoonPathDiagram.png" target="_blank" rel="noopener">
 	  <img src="MoonPathDiagram.png" alt="Screenshot" style="width: 95.0%; height: auto;"></a>
 	<p>
-	  The upper one shows the path of the Moon through the Earth's shadow. The umbra is dark gray, and the penumbra is light gray. Circles are drawn at different locations in the shadow, representing significant times within the eclipse. These times are labelled (with gray connecting arrows) above the diagram. A few hours before the eclipse begins, a small image of the Moon will appear that will approach and move through the shadow as the eclipse takes place.
+	  The upper one shows the path of the Moon through the Earth's shadow. The umbra is dark gray, and the penumbra is light gray. Circles are drawn at different locations in the shadow, representing significant times within the eclipse. These times are labelled (with gray connecting arrows) above the diagram, along with the elevation if the Moon will be above the horizon at that time. Events that occur when the Moon is below the horizon are shown in gray. A few hours before the eclipse begins, a small image of the Moon will appear that will approach and move through the shadow as the eclipse takes place.
 	</p>
 	<a href="EclipseMap.png" target="_blank" rel="noopener">
 	  <img src="EclipseMap.png" alt="Screenshot" style="width: 95.0%; height: auto;">
@@ -286,7 +286,7 @@ marked “Now”.
 	  The Meteor Showers page shows information for all showers, the large majority of which are really minor events. Even when a meteor shower is not occurring, you can expect to see 4 to 10 meteors per hour. Many of the showers listed do not even double that background rate, and are of interest only to serious meteor enthusiasts. If you just want to go out and see some meteors for fun, it's best to select a shower with a rate of at least 50 meteors per hour, and to watch it on or very near the date of the shower's maximum. 
 	</p>
 	<p>
-	  The display shows a table, with one row per shower. The first column lists the name of the shower. The second column lists the peak rate of meteors per hour. The third column shows the date range over which the shower occurs, in DD/MM format. The fourth column shows the date of the shower's peak intensity. The fifth column shows the average velocity of the meteors; higher velocities mean brighter, bluer meteors. The sixth column shows what fraction of the Moon is illuminated by sunlight on the shower's peak night; a trailing + means the Moon is waxing, a - means the Moon is waining. The last column shows the number of dark hours (Sun and Moon both well below the horizon) on the shower's peak night.  The number of dark hours is calculated from the time at which the Sun is at least 18 degrees below the horizon (end/begining of astronomical twilight) and a model of the scattered moonlight brightness from <a href="https://articles.adsabs.harvard.edu/pdf/1991PASP..103.1033K" target="_blank" rel="noopener"> Krisciunas and Shaefer (1991)</a>.
+	  The display shows a table, with one row per shower. The first column lists the name of the shower. The second column lists the peak rate of meteors per hour. The third column shows the date range over which the shower occurs, in DD/MM format. The fourth column shows the date of the shower's peak intensity. The fifth column shows the average speed (in km/sec) of the meteors; higher speeds mean brighter, bluer meteors. The sixth column shows what fraction of the Moon is illuminated by sunlight on the shower's peak night; a trailing + means the Moon is waxing, a - means the Moon is waining. The last column shows the number of dark hours (Sun and Moon both well below the horizon) on the shower's peak night.  The number of dark hours is calculated from the time at which the Sun is at least 18 degrees below the horizon (end/begining of astronomical twilight) and a model of the scattered moonlight brightness from <a href="https://articles.adsabs.harvard.edu/pdf/1991PASP..103.1033K" target="_blank" rel="noopener"> Krisciunas and Shaefer (1991)</a>.
 	</p>
 	<p>
 	  Rows are printed in green if the listed shower is currently occuring. Bright green is used if the Moon is not interfering with shower viewing, dark green is used otherwise. Showers that are not currently occuring are listed in white if there will be more than 2 hours of darkness on the shower's peak night, and gray otherwise.  The number of dark hours for the next or current night is shown at the bottom of the display.
@@ -304,7 +304,7 @@ marked “Now”.
         </p>
         <p>
             The longer periods are animated more rapidly, so that all three animations run for about the same elapsed time.
-            While animations are running, they can be stopped by pressing the STOP button. Pressing the Reset button returns
+            While animations are running, they can be stopped by pressing the STOP button. Pressing the Reset Time button returns
             the display to the initial time.
         </p>
         <hr>
