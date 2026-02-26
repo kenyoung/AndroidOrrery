@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -287,17 +286,7 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
                     Text(displayTimeStr, color = Color.White, fontSize = 12.sp)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = isNorthUp, onClick = { isNorthUp = true }); Text("North Up", color = Color.White, fontSize = 10.sp) }
-                    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = !isNorthUp, onClick = { isNorthUp = false }); Text("South Up", color = Color.White, fontSize = 10.sp) }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = !isEastRight, onClick = { isEastRight = false }); Text("East Left", color = Color.White, fontSize = 10.sp) }
-                    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = isEastRight, onClick = { isEastRight = true }); Text("East Right", color = Color.White, fontSize = 10.sp) }
-                }
-            }
+            OrientationControls(isNorthUp, isEastRight, { isNorthUp = it }, { isEastRight = it })
         }
     }
 }

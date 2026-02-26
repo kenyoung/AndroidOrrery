@@ -34,6 +34,38 @@ fun TimeDisplayToggle(useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> U
     }
 }
 
+@Composable
+fun OrientationControls(
+    isNorthUp: Boolean,
+    isEastRight: Boolean,
+    onNorthUpChange: (Boolean) -> Unit,
+    onEastRightChange: (Boolean) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = isNorthUp, onClick = { onNorthUpChange(true) })
+                Text("North Up", color = Color.White, fontSize = 10.sp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = !isNorthUp, onClick = { onNorthUpChange(false) })
+                Text("South Up", color = Color.White, fontSize = 10.sp)
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = !isEastRight, onClick = { onEastRightChange(false) })
+                Text("East Left", color = Color.White, fontSize = 10.sp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = isEastRight, onClick = { onEastRightChange(true) })
+                Text("East Right", color = Color.White, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
 // --- DATA CLASSES ---
 
 data class PlanetElements(

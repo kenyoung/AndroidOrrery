@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 // Navigation Enum
 enum class Screen {
     TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
-    JOVIAN_MOONS, JOVIAN_EVENTS, SCHEMATIC, SCALE, TIMES, ANALEMMA,
+    JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE, TIMES, ANALEMMA,
     METEOR_SHOWERS
 }
 
@@ -395,6 +395,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
+                            "Saturn" to Screen.SATURN,
                             "Analemma" to Screen.ANALEMMA,
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Schematic Orrery" to Screen.SCHEMATIC,
@@ -462,6 +463,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
