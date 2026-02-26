@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -163,7 +165,7 @@ fun SaturnScreen(
         }
 
         if (!hasZoomed) {
-            Text("Pinch to zoom", color = Color.Gray, fontSize = 12.sp,
+            Text("Pinch to zoom", color = LabelColor, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 2.dp),
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
@@ -469,6 +471,39 @@ private fun DrawScope.drawSaturnSystem(
         val color = saturnMoonColors[moon.name] ?: Color.White
         val screen = toScreen((moon.x * pxPerRadius).toFloat(), (moon.y * pxPerRadius).toFloat())
         drawCircle(color, radius = 4f, center = screen)
+    }
+
+    // --- Arcsecond scale bar (fixed at bottom of canvas) ---
+    val arcsecPerRadius = Math.toDegrees(data.angularRadiusRad) * 3600.0
+    val pxPerArcsec = pxPerRadius / arcsecPerRadius.toFloat()
+
+    // Choose a nice round arcsecond value that spans roughly 15-35% of canvas width
+    val niceValues = doubleArrayOf(1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0)
+    val targetPx = w * 0.25f
+    val targetArcsec = targetPx / pxPerArcsec
+    val scaleArcsec = niceValues.minByOrNull { abs(it - targetArcsec) } ?: 10.0
+    val barPx = (scaleArcsec * pxPerArcsec).toFloat()
+
+    val barY = h - 20f
+    val barX0 = (w - barPx) / 2f
+    val barX1 = barX0 + barPx
+    val tickH = 6f
+
+    // Bar line and end ticks
+    drawLine(Color.White, Offset(barX0, barY), Offset(barX1, barY), strokeWidth = 1.5f)
+    drawLine(Color.White, Offset(barX0, barY - tickH), Offset(barX0, barY + tickH), strokeWidth = 1.5f)
+    drawLine(Color.White, Offset(barX1, barY - tickH), Offset(barX1, barY + tickH), strokeWidth = 1.5f)
+
+    // Label
+    val labelText = if (scaleArcsec >= 1.0) "${scaleArcsec.toInt()}\"" else "$scaleArcsec\""
+    drawIntoCanvas { canvas ->
+        val paint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 28f
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+        }
+        canvas.nativeCanvas.drawText(labelText, (barX0 + barX1) / 2f, barY - tickH - 4f, paint)
     }
 
 }
