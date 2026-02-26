@@ -40,6 +40,7 @@ private val saturnMoonColors = mapOf(
 private val colorSaturn = Color(0xFFC5AB74)
 private val colorRingA = Color.LightGray
 private val colorRingB = Color.White
+private val colorRingC = Color.Gray.copy(alpha = 0.50f)  // Crepe Ring: translucent gray
 
 @Composable
 fun SaturnScreen(
@@ -162,6 +163,12 @@ fun SaturnScreen(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawSaturnSystem(saturnData, scale, isNorthUp, isEastRight)
             }
+            Text(
+                "Ring inclination %.1f°".format(saturnData.ringTiltB),
+                color = Color.White, fontSize = 14.sp,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 2.dp)
+            )
         }
 
         if (!hasZoomed) {
@@ -390,10 +397,13 @@ private fun DrawScope.drawSaturnSystem(
         val ed = Vec3(data.earthDir.x, data.earthDir.y, data.earthDir.z)
 
         // --- 1. Back ring halves (behind Saturn) ---
+        val backRingC = buildRingHalfPath(pxPerRadius, SaturnMoonEngine.C_RING_OUTER.toFloat(),
+            SaturnMoonEngine.C_RING_INNER.toFloat(), sinB, backIsNorthHalf, ::toScreen)
         val backRingA = buildRingHalfPath(pxPerRadius, SaturnMoonEngine.A_RING_OUTER.toFloat(),
             SaturnMoonEngine.A_RING_INNER.toFloat(), sinB, backIsNorthHalf, ::toScreen)
         val backRingB = buildRingHalfPath(pxPerRadius, SaturnMoonEngine.B_RING_OUTER.toFloat(),
             SaturnMoonEngine.B_RING_INNER.toFloat(), sinB, backIsNorthHalf, ::toScreen)
+        drawPath(backRingC, colorRingC)
         drawPath(backRingA, colorRingA)
         drawPath(backRingB, colorRingB)
 
@@ -410,6 +420,7 @@ private fun DrawScope.drawSaturnSystem(
             val backRingClip = Path().apply {
                 addPath(backRingA)
                 addPath(backRingB)
+                addPath(backRingC)
             }
             clipPath(backRingClip) {
                 drawPath(globeShadowPath, Color.Black)
@@ -460,6 +471,8 @@ private fun DrawScope.drawSaturnSystem(
         }
 
         // --- 5. Front ring halves (in front of Saturn) ---
+        drawPath(buildRingHalfPath(pxPerRadius, SaturnMoonEngine.C_RING_OUTER.toFloat(),
+            SaturnMoonEngine.C_RING_INNER.toFloat(), sinB, !backIsNorthHalf, ::toScreen), colorRingC)
         drawPath(buildRingHalfPath(pxPerRadius, SaturnMoonEngine.A_RING_OUTER.toFloat(),
             SaturnMoonEngine.A_RING_INNER.toFloat(), sinB, !backIsNorthHalf, ::toScreen), colorRingA)
         drawPath(buildRingHalfPath(pxPerRadius, SaturnMoonEngine.B_RING_OUTER.toFloat(),
@@ -504,6 +517,7 @@ private fun DrawScope.drawSaturnSystem(
             isAntiAlias = true
         }
         canvas.nativeCanvas.drawText(labelText, (barX0 + barX1) / 2f, barY - tickH - 4f, paint)
+
     }
 
 }

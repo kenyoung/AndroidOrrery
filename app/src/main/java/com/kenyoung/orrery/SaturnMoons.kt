@@ -37,6 +37,8 @@ object SaturnMoonEngine {
     const val A_RING_OUTER = 2.27
     const val B_RING_INNER = 1.525
     const val B_RING_OUTER = 1.95
+    const val C_RING_INNER = 1.335
+    const val C_RING_OUTER = 1.525  // coincides with B_RING_INNER
 
     private const val SATURN_RADIUS_KM = 60268.0
     private const val AU_KM = 149597870.7
