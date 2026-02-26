@@ -538,6 +538,8 @@ fun CompassCanvas(
             drawInternalTriangle(nc, Offset(centerLeftX - radius, centerY), centerLeftOff)
 
             // 3. Plot Objects
+            val offset = lon / 15.0
+            val currentUtEpochDay = now.epochSecond.toDouble() / SECONDS_PER_DAY
             val defaultLineLen = radius / 10f
             val occupiedAz = mutableListOf<Rect>()
             val occupiedEl = mutableListOf<Rect>()
@@ -576,8 +578,16 @@ fun CompassCanvas(
                 val raHours = obj.ra / 15.0
                 val (az, alt) = calculateAzAlt(lst, lat, raHours, obj.dec)
                 val apparentAlt = applyRefraction(alt)
-                // Color uses geometric alt vs same target as rise/set calculation
-                val pColor = if (alt > obj.targetAlt) paints.whiteInt else paints.redInt
+                // Use time-based isUp check (matching table logic) so graphics
+                // and table agree immediately when the set-watcher updates plotData.
+                val isUp = if (obj.events.rise.isNaN() || obj.events.set.isNaN()) {
+                    alt > obj.targetAlt
+                } else {
+                    val currentLocalSolar = (currentUtEpochDay - floor(obj.anchorEpochDay)) * 24.0 + offset
+                    val setH = obj.events.set + if (obj.setTomorrow) 24.0 else 0.0
+                    currentLocalSolar >= obj.events.rise && currentLocalSolar <= setH
+                }
+                val pColor = if (isUp) paints.whiteInt else paints.redInt
 
                 // Plot Az (Rotate -90)
                 drawMarker(centerRightOff, Math.toRadians(az - 90.0), obj.symbol, pColor, occupiedAz)
@@ -607,11 +617,9 @@ fun CompassCanvas(
             nc.drawText("Az", cols[7]+45f, row2Y, paints.tableHeaderRight)
 
             var currY = row2Y + rowHeight + 5f
-            val offset = lon / 15.0
             var anyAsterisk = false
             // Current display-timezone date for asterisk evaluation
             val currentDisplayDate = floor(now.epochSecond.toDouble() / SECONDS_PER_DAY + displayOffsetHours / 24.0).toLong()
-            val currentUtEpochDay = now.epochSecond.toDouble() / SECONDS_PER_DAY
 
             for (obj in plotData) {
                 val raHours = obj.ra / 15.0
