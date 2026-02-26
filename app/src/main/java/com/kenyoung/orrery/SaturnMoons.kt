@@ -20,6 +20,8 @@ data class SaturnSystemData(
     val ringTiltBSun: Double,      // degrees, ring tilt as seen from Sun (B')
     val positionAngleP: Double,    // degrees
     val angularRadiusRad: Double,  // angular radius of Saturn disk in radians
+    val distGeo: Double,           // AU from Earth
+    val distSun: Double,           // AU from Sun
     val sunDir: Vector3,           // unit vector from Saturn toward Sun, in Saturn equatorial frame
     val earthDir: Vector3          // unit vector from Saturn toward Earth, in Saturn equatorial frame
 )
@@ -612,6 +614,8 @@ object SaturnMoonEngine {
             ringTiltBSun = ringTiltBSun,
             positionAngleP = posAngleP,
             angularRadiusRad = angularRadius,
+            distGeo = satBody.distGeo,
+            distSun = satBody.distSun,
             sunDir = sunDirNorm,
             earthDir = earthDirNorm
         )

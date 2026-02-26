@@ -156,6 +156,10 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var animationTargetEpoch by remember { mutableStateOf(0.0) }
     var animationStep by remember { mutableStateOf(0.0) }
 
+    // Screen-local animation stopped state (Jovian Moons, Saturn)
+    var screenAnimStopped by remember { mutableStateOf(false) }
+    var screenAnimResetTrigger by remember { mutableStateOf(0) }
+
     val zoneId = ZoneId.systemDefault()
 
     fun getInstantFromManual(epochDay: Double): Instant {
@@ -379,6 +383,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                                 TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                             }
                         }
+                        if (screenAnimStopped && usePhoneTime) {
+                            TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
+                        }
                         Text(text = "Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold), modifier = Modifier.align(Alignment.Center))
                     }
                 },
@@ -403,7 +410,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Astronomical Times" to Screen.TIMES
                         )
                         screens.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; currentScreen = screen; showMenu = false }, modifier = compactItem)
+                            DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false }, modifier = compactItem)
                         }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true }, modifier = compactItem)
@@ -461,9 +468,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
                     Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
-                    Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant)
+                    Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
-                    Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }

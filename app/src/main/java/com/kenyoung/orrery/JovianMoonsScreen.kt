@@ -26,7 +26,12 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
+fun JovianMoonsScreen(
+    epochDay: Double,
+    currentInstant: Instant,
+    resetAnimTrigger: Int = 0,
+    onAnimStoppedChange: (Boolean) -> Unit = {}
+) {
     val zoneId = ZoneId.of("UTC")
     val currentDate = currentInstant.atZone(zoneId).toLocalDate()
     val monthYearStr = currentDate.format(DateTimeFormatter.ofPattern("MMMM, yyyy"))
@@ -46,6 +51,14 @@ fun JovianMoonsScreen(epochDay: Double, currentInstant: Instant) {
     // --- ANIMATION STATE ---
     var isAnimating by remember { mutableStateOf(false) }
     var animDayOffset by remember { mutableStateOf(0.0) }
+
+    // Report stopped state to parent; reset on trigger from parent
+    LaunchedEffect(isAnimating, animDayOffset) {
+        onAnimStoppedChange(!isAnimating && animDayOffset > 0.0)
+    }
+    LaunchedEffect(resetAnimTrigger) {
+        if (resetAnimTrigger > 0) { animDayOffset = 0.0; isAnimating = false }
+    }
 
     // Constants for Data
     val daysInMonth = remember(currentDate) { currentDate.lengthOfMonth() }

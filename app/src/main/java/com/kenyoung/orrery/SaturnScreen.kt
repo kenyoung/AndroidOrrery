@@ -49,6 +49,8 @@ fun SaturnScreen(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useLocalTime: Boolean,
+    resetAnimTrigger: Int = 0,
+    onAnimStoppedChange: (Boolean) -> Unit = {},
     onTimeDisplayChange: (Boolean) -> Unit
 ) {
     // --- TIME ZONE ---
@@ -67,6 +69,14 @@ fun SaturnScreen(
     // --- ANIMATION STATE ---
     var isAnimating by remember { mutableStateOf(false) }
     var animDayOffset by remember { mutableStateOf(0.0) }
+
+    // Report stopped state to parent; reset on trigger from parent
+    LaunchedEffect(isAnimating, animDayOffset) {
+        onAnimStoppedChange(!isAnimating && animDayOffset > 0.0)
+    }
+    LaunchedEffect(resetAnimTrigger) {
+        if (resetAnimTrigger > 0) { animDayOffset = 0.0; isAnimating = false }
+    }
 
     val daysInMonth = remember(currentDate) { currentDate.lengthOfMonth() }
     val startOfMonth = remember(currentDate) { currentDate.withDayOfMonth(1) }
@@ -163,12 +173,29 @@ fun SaturnScreen(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawSaturnSystem(saturnData, scale, isNorthUp, isEastRight)
             }
-            Text(
-                "Ring inclination %.1f°".format(saturnData.ringTiltB),
-                color = Color.White, fontSize = 14.sp,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            // Info box in upper left
+            Column(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 2.dp)
-            )
+            ) {
+                val infoSize = 7.sp
+                val mono = androidx.compose.ui.text.font.FontFamily.Monospace
+                val angDiamArcsec = Math.toDegrees(saturnData.angularRadiusRad) * 2.0 * 3600.0
+                // Saturn magnitude: Meeus formula V = -8.95 + 5·log10(r·Δ) + 0.044·|α|
+                // with ring correction. Use simplified: add ring brightness term from B
+                val phaseAngle = 0.0 // negligible for Saturn (< 6°)
+                val mag = -8.95 + 5.0 * kotlin.math.log10(saturnData.distSun * saturnData.distGeo) +
+                        0.044 * phaseAngle -
+                        2.6 * abs(sin(Math.toRadians(saturnData.ringTiltB))) +
+                        1.2 * sin(Math.toRadians(saturnData.ringTiltB)).let { it * it }
+                Text("Ring tilt %.1f°".format(saturnData.ringTiltB),
+                    color = Color.White, fontSize = infoSize, fontFamily = mono)
+                Text("Dist %.2f AU".format(saturnData.distGeo),
+                    color = Color.White, fontSize = infoSize, fontFamily = mono)
+                Text("Eq diam %.1f\"".format(angDiamArcsec),
+                    color = Color.White, fontSize = infoSize, fontFamily = mono)
+                Text("Mag %.1f".format(mag),
+                    color = Color.White, fontSize = infoSize, fontFamily = mono)
+            }
         }
 
         if (!hasZoomed) {
