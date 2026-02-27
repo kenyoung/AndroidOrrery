@@ -47,13 +47,13 @@ private val colorRingC = Color.Gray.copy(alpha = 0.50f)  // Crepe Ring: transluc
 private data class AtmoBand(val latSouth: Float, val latNorth: Float, val color: Color)
 
 private val saturnAtmoBands = listOf(
-    AtmoBand(-90f, -68f, Color(0x1A203050)),   // South polar region (blue-gray)
-    AtmoBand(-56f, -38f, Color(0x30301808)),   // South temperate belt
-    AtmoBand(-28f,  -5f, Color(0x40381C08)),   // South equatorial belt (strongest)
+    AtmoBand(-90f, -68f, Color(0x20304058)),   // South polar region (blue-gray)
+    AtmoBand(-56f, -38f, Color(0x38301808)),   // South temperate belt (moderate)
+    AtmoBand(-28f,  -5f, Color(0x4C381C08)),   // South equatorial belt (strongest)
     AtmoBand( -5f,  12f, Color(0x1EFFE880)),   // Equatorial zone (warm/bright)
-    AtmoBand( 12f,  28f, Color(0x38301808)),   // North equatorial belt
-    AtmoBand( 40f,  54f, Color(0x28301808)),   // North temperate belt
-    AtmoBand( 68f,  90f, Color(0x1A203050)),   // North polar region (blue-gray)
+    AtmoBand( 12f,  28f, Color(0x42341A08)),   // North equatorial belt (strong)
+    AtmoBand( 40f,  54f, Color(0x2C281408)),   // North temperate belt (subtle)
+    AtmoBand( 68f,  90f, Color(0x20304058)),   // North polar region (blue-gray)
 )
 
 @Composable
@@ -577,8 +577,8 @@ private fun DrawScope.drawAtmosphericBands(
     globeClip: Path,
     toScreen: (Float, Float) -> Offset
 ) {
-    val featherDeg = 2.5f
-    val featherSteps = 3
+    val featherDeg = 5f
+    val featherSteps = 6
     clipPath(globeClip) {
         for (band in saturnAtmoBands) {
             val feather = min(featherDeg, (band.latNorth - band.latSouth) / 4f)
