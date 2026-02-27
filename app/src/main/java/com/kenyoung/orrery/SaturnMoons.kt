@@ -11,7 +11,8 @@ import kotlin.math.*
 data class SaturnMoonPosition(
     val name: String,
     val x: Double,    // apparent X in Saturn radii (+ = west)
-    val y: Double     // apparent Y in Saturn radii (+ = north)
+    val y: Double,    // apparent Y in Saturn radii (+ = north)
+    val z: Double     // depth in Saturn radii (+ = behind, away from Earth; - = in front)
 )
 
 data class SaturnSystemData(
@@ -392,7 +393,7 @@ object SaturnMoonEngine {
 
     // --- Main satellite position calculation (Meeus Ch. 46) ---
     // Returns list of 8 (x, y) tuples in Saturn radii. X+ = west, Y+ = north.
-    private fun saturnMoonPositions(jde: Double): List<Pair<Double, Double>> {
+    private fun saturnMoonPositions(jde: Double): List<Triple<Double, Double, Double>> {
         val (s, beta, bigR) = solarTrueVsop87(jde)
         val ss = sin(s); val cs = cos(s)
         val sb = sin(beta)
@@ -471,7 +472,7 @@ object SaturnMoonEngine {
         val dAng = atan2(bigA[0], bigCv[0])
         val sD = sin(dAng); val cD = cos(dAng)
 
-        val pos = mutableListOf<Pair<Double, Double>>()
+        val pos = mutableListOf<Triple<Double, Double, Double>>()
         for (j in 1..8) {
             val rJ = s4[j]!![1]
             var xj = bigA[j] * cD - bigCv[j] * sD
@@ -480,7 +481,7 @@ object SaturnMoonEngine {
             val dd = (xj / rJ).coerceIn(-1.0, 1.0)
             xj += abs(zj) / kConst[j] * sqrt(1 - dd * dd)
             val bigW = delta / (delta + zj / 2475.0)
-            pos.add(Pair(xj * bigW, yj * bigW))
+            pos.add(Triple(xj * bigW, yj * bigW, zj))
         }
 
         return pos
@@ -604,8 +605,8 @@ object SaturnMoonEngine {
             5 to "Titan"
         )
         val moons = wantedMoons.map { (idx, name) ->
-            val (mx, my) = allMoons[idx]
-            SaturnMoonPosition(name, mx, my)
+            val (mx, my, mz) = allMoons[idx]
+            SaturnMoonPosition(name, mx, my, mz)
         }
 
         return SaturnSystemData(

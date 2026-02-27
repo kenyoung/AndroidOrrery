@@ -525,8 +525,23 @@ private fun DrawScope.drawSaturnSystem(
             SaturnMoonEngine.B_RING_INNER.toFloat(), sinB, !backIsNorthHalf, ::toScreen), colorRingB)
     }
 
-    // Moon dots
+    // Moon dots (skip moons occulted behind Saturn's disk or A/B rings)
+    // Z convention: z > 0 = behind Saturn (away from Earth),
+    //               z < 0 = in front (toward Earth)
+    val satPolarRatioOcc = 0.902
+    val sinBOcc = abs(sin(Math.toRadians(data.ringTiltB)))
     data.moons.forEach { moon ->
+        if (moon.z > 0.0) {
+            // Behind the planet's disk?
+            if (moon.x * moon.x + (moon.y / satPolarRatioOcc) * (moon.y / satPolarRatioOcc) <= 1.0) return@forEach
+            // Behind A or B ring? Ring at radius r projects as ellipse (r, r*sinB);
+            // ring-plane distance = sqrt(x² + (y/sinB)²)
+            if (sinBOcc > 0.01) {
+                val ringDist = sqrt(moon.x * moon.x + (moon.y / sinBOcc) * (moon.y / sinBOcc))
+                if ((ringDist >= SaturnMoonEngine.B_RING_INNER && ringDist <= SaturnMoonEngine.B_RING_OUTER) ||
+                    (ringDist >= SaturnMoonEngine.A_RING_INNER && ringDist <= SaturnMoonEngine.A_RING_OUTER)) return@forEach
+            }
+        }
         val color = saturnMoonColors[moon.name] ?: Color.White
         val screen = toScreen((moon.x * pxPerRadius).toFloat(), (moon.y * pxPerRadius).toFloat())
         drawCircle(color, radius = 4f, center = screen)
