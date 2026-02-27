@@ -42,6 +42,20 @@ private val colorRingA = Color.LightGray
 private val colorRingB = Color.White
 private val colorRingC = Color.Gray.copy(alpha = 0.50f)  // Crepe Ring: translucent gray
 
+// Atmospheric band definitions: Saturnographic latitude boundaries and overlay tint.
+// Dark bands use semi-transparent dark brown; equatorial zone uses warm yellow.
+private data class AtmoBand(val latSouth: Float, val latNorth: Float, val color: Color)
+
+private val saturnAtmoBands = listOf(
+    AtmoBand(-90f, -68f, Color(0x1A203050)),   // South polar region (blue-gray)
+    AtmoBand(-56f, -38f, Color(0x30301808)),   // South temperate belt
+    AtmoBand(-28f,  -5f, Color(0x40381C08)),   // South equatorial belt (strongest)
+    AtmoBand( -5f,  12f, Color(0x1EFFE880)),   // Equatorial zone (warm/bright)
+    AtmoBand( 12f,  28f, Color(0x38301808)),   // North equatorial belt
+    AtmoBand( 40f,  54f, Color(0x28301808)),   // North temperate belt
+    AtmoBand( 68f,  90f, Color(0x1A203050)),   // North polar region (blue-gray)
+)
+
 @Composable
 fun SaturnScreen(
     epochDay: Double,
@@ -414,6 +428,8 @@ private fun DrawScope.drawSaturnSystem(
     if (sinB * pxPerRadius < 0.5f) {
         // Rings edge-on — just draw Saturn disk and moons
         drawLimbDarkenedDisk()
+        val globeClipEdge = buildEllipsePath(pxPerRadius, pxPerRadius * satPolarRatio, 100, ::toScreen)
+        drawAtmosphericBands(pxPerRadius, satPolarRatio, tiltB, globeClipEdge, ::toScreen)
     } else {
         // Front/back classification: when B > 0, back = north half (Y+), front = south half (Y-)
         val backIsNorthHalf = tiltB > 0
@@ -457,8 +473,11 @@ private fun DrawScope.drawSaturnSystem(
         // --- 3. Saturn disk (limb darkened) ---
         drawLimbDarkenedDisk()
 
-        // --- 4. Ring shadow on globe (matched-pair bands for proper curvature) ---
+        // --- 3.5. Atmospheric bands on globe ---
         val globeClip = buildEllipsePath(pxPerRadius, pxPerRadius * satPolarRatio, 100, ::toScreen)
+        drawAtmosphericBands(pxPerRadius, satPolarRatio, tiltB, globeClip, ::toScreen)
+
+        // --- 4. Ring shadow on globe (matched-pair bands for proper curvature) ---
         val ringShadowSteps = 200
         val ringShadowAlpha = 0.4f
         // Draw A and B ring shadow bands separately (preserves Cassini Division gap)
@@ -547,6 +566,101 @@ private fun DrawScope.drawSaturnSystem(
 
     }
 
+}
+
+// Draw feathered atmospheric bands on Saturn's disk, clipped to the globe ellipse.
+// Bands shift with sub-Earth latitude (ring tilt B) so the equator moves off-center.
+private fun DrawScope.drawAtmosphericBands(
+    pxPerRadius: Float,
+    satPolarRatio: Float,
+    tiltBDeg: Double,
+    globeClip: Path,
+    toScreen: (Float, Float) -> Offset
+) {
+    val featherDeg = 2.5f
+    val featherSteps = 3
+    clipPath(globeClip) {
+        for (band in saturnAtmoBands) {
+            val feather = min(featherDeg, (band.latNorth - band.latSouth) / 4f)
+            // Southern feather ramp (alpha increases from 0 to full)
+            for (i in 0 until featherSteps) {
+                val t = (i + 0.5f) / featherSteps
+                val subLatS = band.latSouth + feather * i / featherSteps
+                val subLatN = band.latSouth + feather * (i + 1) / featherSteps
+                drawBandStrip(subLatS, subLatN, band.color.copy(alpha = band.color.alpha * t),
+                    tiltBDeg, satPolarRatio, pxPerRadius, toScreen)
+            }
+            // Core region (full alpha)
+            val coreSouth = band.latSouth + feather
+            val coreNorth = band.latNorth - feather
+            if (coreNorth > coreSouth) {
+                drawBandStrip(coreSouth, coreNorth, band.color,
+                    tiltBDeg, satPolarRatio, pxPerRadius, toScreen)
+            }
+            // Northern feather ramp (alpha decreases from full to 0)
+            for (i in 0 until featherSteps) {
+                val t = 1f - (i + 0.5f) / featherSteps
+                val subLatS = band.latNorth - feather + feather * i / featherSteps
+                val subLatN = band.latNorth - feather + feather * (i + 1) / featherSteps
+                drawBandStrip(subLatS, subLatN, band.color.copy(alpha = band.color.alpha * t),
+                    tiltBDeg, satPolarRatio, pxPerRadius, toScreen)
+            }
+        }
+    }
+}
+
+// Draw a single curved latitude strip on the projected sphere, clipped by caller to the globe.
+// Latitude lines on a sphere viewed at sub-Earth latitude B project as curved arcs that
+// bow toward the equator. The formula ensures the curve meets the globe outline at the
+// limb and has correct 3D curvature at the center.
+private fun DrawScope.drawBandStrip(
+    latSouthDeg: Float, latNorthDeg: Float,
+    color: Color,
+    tiltBDeg: Double,
+    satPolarRatio: Float,
+    pxPerRadius: Float,
+    toScreen: (Float, Float) -> Offset
+) {
+    val bRad = Math.toRadians(tiltBDeg)
+    val sinB = sin(bRad).toFloat()
+    val cosB = cos(bRad).toFloat()
+    val p = satPolarRatio
+    val steps = 40
+
+    // Compute one point on a latitude curve at parameter alpha (0 to PI).
+    // At the limb (alpha=0,PI): y = p*sin(phi), matching the globe outline.
+    // At the center (alpha=PI/2): y bows by deltaY = p*sin(phi)*(1-cosB) + cos(phi)*sinB.
+    fun latPoint(latDeg: Float, alpha: Double): Pair<Float, Float> {
+        val phi = Math.toRadians(latDeg.toDouble())
+        val cosPhi = cos(phi).toFloat()
+        val sinPhi = sin(phi).toFloat()
+        val yLimb = p * sinPhi
+        val deltaY = p * sinPhi * (1f - cosB) + cosPhi * sinB
+        val x = cosPhi * cos(alpha).toFloat() * pxPerRadius
+        val y = (yLimb - deltaY * sin(alpha).toFloat()) * pxPerRadius
+        return Pair(x, y)
+    }
+
+    val path = Path()
+
+    // North boundary: alpha from 0 to PI (right limb → left limb, bowing in the middle)
+    for (k in 0..steps) {
+        val alpha = PI * k / steps
+        val (x, y) = latPoint(latNorthDeg, alpha)
+        val screen = toScreen(x, y)
+        if (k == 0) path.moveTo(screen.x, screen.y) else path.lineTo(screen.x, screen.y)
+    }
+
+    // South boundary: alpha from PI to 0 (left limb → right limb)
+    for (k in 0..steps) {
+        val alpha = PI * (steps - k).toDouble() / steps
+        val (x, y) = latPoint(latSouthDeg, alpha)
+        val screen = toScreen(x, y)
+        path.lineTo(screen.x, screen.y)
+    }
+
+    path.close()
+    drawPath(path, color)
 }
 
 // Build a closed ellipse path through the toScreen transform
