@@ -29,7 +29,7 @@ import kotlin.math.*
 
 // Moon display colors
 private val saturnMoonColors = mapOf(
-    "Enceladus" to Color(0xFFDDBBFF),
+    "Enceladus" to Color(0xFFCB99FF),
     "Tethys" to Color.Yellow,
     "Dione" to Color(0xFF00FF00),
     "Rhea" to Color(0xFFFFA500),
