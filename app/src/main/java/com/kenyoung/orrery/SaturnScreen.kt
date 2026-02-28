@@ -93,33 +93,27 @@ fun SaturnScreen(
         if (resetAnimTrigger > 0) { animDayOffset = 0.0; isAnimating = false }
     }
 
-    val daysInMonth = remember(currentDate) { currentDate.lengthOfMonth() }
-    val startOfMonth = remember(currentDate) { currentDate.withDayOfMonth(1) }
-    val startEpoch = remember(currentDate) { startOfMonth.toEpochDay().toDouble() }
+    var animBaseJD by remember { mutableStateOf(0.0) }
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
-            if (animDayOffset >= daysInMonth || animDayOffset == 0.0) animDayOffset = 0.0
+            if (animDayOffset == 0.0) {
+                animBaseJD = currentInstant.toEpochMilli() / MILLIS_PER_DAY + UNIX_EPOCH_JD
+            }
             val startTime = System.nanoTime()
             val startOffset = animDayOffset
             while (isAnimating) {
                 withInfiniteAnimationFrameMillis { _ ->
                     val now = System.nanoTime()
                     val elapsedSeconds = (now - startTime) / 1_000_000_000.0
-                    val newOffset = startOffset + elapsedSeconds
-                    if (newOffset >= daysInMonth) {
-                        isAnimating = false
-                        animDayOffset = 0.0
-                    } else {
-                        animDayOffset = newOffset
-                    }
+                    animDayOffset = startOffset + elapsedSeconds
                 }
             }
         }
     }
 
     val effectiveJD = if (isAnimating || animDayOffset > 0.0) {
-        startEpoch + animDayOffset + UNIX_EPOCH_JD
+        animBaseJD + animDayOffset
     } else {
         currentInstant.toEpochMilli() / MILLIS_PER_DAY + UNIX_EPOCH_JD
     }
@@ -269,10 +263,7 @@ fun SaturnScreen(
                 modifier = Modifier.padding(bottom = 4.dp)
             ) {
                 Button(
-                    onClick = {
-                        if (!isAnimating && animDayOffset >= daysInMonth) animDayOffset = 0.0
-                        isAnimating = !isAnimating
-                    },
+                    onClick = { isAnimating = !isAnimating },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isAnimating) Color.Red else Color.DarkGray,
                         contentColor = Color.White
