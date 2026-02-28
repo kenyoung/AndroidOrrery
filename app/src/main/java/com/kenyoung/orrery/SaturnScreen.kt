@@ -29,7 +29,7 @@ import kotlin.math.*
 
 // Moon display colors
 private val saturnMoonColors = mapOf(
-    "Enceladus" to Color(0xFF8040FF),
+    "Enceladus" to Color(0xFFDDBBFF),
     "Tethys" to Color.Yellow,
     "Dione" to Color(0xFF00FF00),
     "Rhea" to Color(0xFFFFA500),
@@ -230,6 +230,25 @@ fun SaturnScreen(
                     color = Color.White, fontSize = infoSize, fontFamily = mono)
                 Text("Mag %.1f".format(mag),
                     color = Color.White, fontSize = infoSize, fontFamily = mono)
+                // List moons currently occulted behind disk or A/B rings
+                val sinBOcc = abs(sin(Math.toRadians(saturnData.ringTiltB)))
+                val satPolarRatioOcc = 0.902
+                saturnData.moons.forEach { moon ->
+                    if (moon.z > 0.0) {
+                        val behindDisk = moon.x * moon.x +
+                                (moon.y / satPolarRatioOcc) * (moon.y / satPolarRatioOcc) <= 1.0
+                        val behindRing = if (sinBOcc > 0.01) {
+                            val ringDist = sqrt(moon.x * moon.x + (moon.y / sinBOcc) * (moon.y / sinBOcc))
+                            (ringDist in SaturnMoonEngine.B_RING_INNER..SaturnMoonEngine.B_RING_OUTER) ||
+                                    (ringDist in SaturnMoonEngine.A_RING_INNER..SaturnMoonEngine.A_RING_OUTER)
+                        } else false
+                        if (behindDisk || behindRing) {
+                            val moonColor = saturnMoonColors[moon.name] ?: Color.White
+                            Text("${moon.name} Occulted",
+                                color = moonColor, fontSize = infoSize, fontFamily = mono)
+                        }
+                    }
+                }
             }
         }
 
