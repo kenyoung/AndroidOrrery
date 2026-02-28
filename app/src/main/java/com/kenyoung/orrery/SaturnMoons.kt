@@ -596,13 +596,14 @@ object SaturnMoonEngine {
         // Moon positions from Meeus Ch. 46 (all 8 moons, 0-indexed)
         val allMoons = saturnMoonPositions(jd)
 
-        // Extract the 5 wanted moons (indices 1..5 = Enceladus, Tethys, Dione, Rhea, Titan)
+        // Extract wanted moons (list index = Meeus j - 1: 0=Mimas .. 7=Iapetus)
         val wantedMoons = listOf(
             1 to "Enceladus",
             2 to "Tethys",
             3 to "Dione",
             4 to "Rhea",
-            5 to "Titan"
+            5 to "Titan",
+            7 to "Iapetus"
         )
         val moons = wantedMoons.map { (idx, name) ->
             val (mx, my, mz) = allMoons[idx]

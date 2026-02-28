@@ -30,10 +30,11 @@ import kotlin.math.*
 // Moon display colors
 private val saturnMoonColors = mapOf(
     "Enceladus" to Color.Cyan,
-    "Tethys" to Color(0xFFFF69B4),
+    "Tethys" to Color.Yellow,
     "Dione" to Color(0xFF00FF00),
     "Rhea" to Color(0xFFFFA500),
-    "Titan" to Color.Yellow
+    "Titan" to Color.White,
+    "Iapetus" to Color.Red
 )
 
 // Saturn and ring colors (matching Python original)
@@ -128,16 +129,36 @@ fun SaturnScreen(
         .withZone(zoneId)
         .format(displayInstant) + timeLabel
 
-    // --- PINCH-TO-ZOOM STATE ---
-    var scale by remember { mutableStateOf(1f) }
-    var hasZoomed by remember { mutableStateOf(false) }
-    val minScale = 0.5f
-    val maxScale = 8f
-
     // --- Compute Saturn system data ---
     val saturnData = remember(effectiveJD) {
         SaturnMoonEngine.getSaturnSystemData(effectiveJD)
     }
+
+    // --- PINCH-TO-ZOOM STATE ---
+    // zFactor: zoom in/out so the most displaced moon (after PA rotation) sits near the edge.
+    // FOV half-extent = 22 / zFactor Saturn radii.
+    val zFactor = run {
+        val paRad = Math.toRadians(-saturnData.positionAngleP)
+        val cosP = cos(paRad)
+        val sinP = sin(paRad)
+        var maxExtent = 0.0
+        saturnData.moons.forEach { moon ->
+            val rx = abs(moon.x * cosP - moon.y * sinP)
+            val ry = abs(moon.x * sinP + moon.y * cosP)
+            if (rx > maxExtent) maxExtent = rx
+            if (ry > maxExtent) maxExtent = ry
+        }
+        if (maxExtent > 0.001) (22.0 / (maxExtent * 1.05)).toFloat() else 1f
+    }
+    var scale by remember { mutableStateOf(zFactor) }
+    var hasZoomed by remember { mutableStateOf(false) }
+    // Recalculate zoom when date/time changes via the Date and Time dialog,
+    // but not during animation and not after the user has pinch-zoomed.
+    LaunchedEffect(zFactor) {
+        if (!hasZoomed && !isAnimating && animDayOffset == 0.0) scale = zFactor
+    }
+    val minScale = 0.3f
+    val maxScale = 8f
 
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // Header
@@ -382,7 +403,7 @@ private fun DrawScope.drawSaturnSystem(
     val flipX = if (isEastRight) -1f else 1f
     val flipY = if (isNorthUp) -1f else 1f
 
-    // Titan orbits at ~20.2 Saturn radii; field of view = ±22 radii at scale 1
+    // Field of view = ±22 Saturn radii at scale 1; initial scale fits all moons
     val pxPerRadius = (min(w, h) / 44f) * scale
 
     val paRad = Math.toRadians(-data.positionAngleP)
