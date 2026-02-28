@@ -1127,7 +1127,8 @@ private fun EclipseSelectionView(
                     color = LabelColor,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.offset(y = (-7).dp)
                 )
                 Text(
                     text = formatYear(decadeEnd),
@@ -1212,7 +1213,7 @@ private fun EclipseSelectionView(
         // Eclipse count
         Text(
             text = "${filteredEclipses.size} eclipses found - tap date to select one",
-            color = Color.Gray,
+            color = LabelColor,
             fontSize = 12.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
