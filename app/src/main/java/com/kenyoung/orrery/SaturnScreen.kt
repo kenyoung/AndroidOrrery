@@ -29,7 +29,7 @@ import kotlin.math.*
 
 // Moon display colors
 private val saturnMoonColors = mapOf(
-    "Enceladus" to Color.Cyan,
+    "Enceladus" to Color(0xFF8040FF),
     "Tethys" to Color.Yellow,
     "Dione" to Color(0xFF00FF00),
     "Rhea" to Color(0xFFFFA500),
@@ -263,8 +263,21 @@ fun SaturnScreen(
                 ) {
                     Text(if (isAnimating) "Stop" else "Animate", fontSize = 14.sp)
                 }
-                if (isAnimating || animDayOffset > 0.0) {
-                    Text(displayTimeStr, color = Color.White, fontSize = 12.sp)
+                if (hasZoomed) {
+                    Button(
+                        onClick = {
+                            scale = zFactor
+                            hasZoomed = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.DarkGray,
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Text("Rescale", fontSize = 14.sp)
+                    }
                 }
             }
             OrientationControls(isNorthUp, isEastRight, { isNorthUp = it }, { isEastRight = it })
