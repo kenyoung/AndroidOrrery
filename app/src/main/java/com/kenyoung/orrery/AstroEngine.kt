@@ -1,18 +1,16 @@
 package com.kenyoung.orrery
 
-import kotlin.math.*
-
 object AstroEngine {
 
     fun getBodyState(name: String, jd: Double): BodyState {
         // 1. Special Case: Earth
-        // The CSV doesn't have "Earth". We derive it from "Sun".
+        // The ephemeris data doesn't have "Earth". We derive it from "Sun".
         // Earth Helio Pos = -1 * Sun Geo Pos (approx)
         if (name == "Earth") {
             return getEarthState(jd)
         }
 
-        // 2. Try CSV
+        // 2. Try ephemeris data
         val csvData = EphemerisManager.getInterpolatedData(name, jd)
 
         if (csvData != null) {

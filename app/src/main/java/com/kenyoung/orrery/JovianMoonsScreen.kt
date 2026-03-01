@@ -205,9 +205,9 @@ fun JovianMoonsScreen(
                         val xPx = (state.x * graphScalePxPerRad * flipX).toFloat()
                         val screenX = baseX + xPx
 
-                        // Z logic for graph hiding (Low precision state uses z>0 for behind usually)
-                        val isBehind = state.z > 0 && abs(state.x) < 1.0
-                        if (isBehind) penDown = false
+                        // z>0 means moon is in front, transiting Jupiter's disk — hide on graph
+                        val isTransiting = state.z > 0 && abs(state.x) < 1.0
+                        if (isTransiting) penDown = false
                         else {
                             if (!penDown) { path.moveTo(screenX, yPos); penDown = true }
                             else path.lineTo(screenX, yPos)

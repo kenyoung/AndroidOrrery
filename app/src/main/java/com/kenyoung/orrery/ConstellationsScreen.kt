@@ -57,7 +57,7 @@ private data class ObjectRow(
 )
 
 @Composable
-fun ConstellationsScreen(instant: Instant, lat: Double, lon: Double) {
+fun ConstellationsScreen(instant: Instant) {
     val context = LocalContext.current
     ConstellationBoundary.ensureLoaded(context)
 

@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, isLive: Boolean, stdOffsetHours: Double) {
+fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, stdOffsetHours: Double) {
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
@@ -58,8 +58,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, is
                 (solsticeRise + (24.0 - solsticeSet))
             }
 
-            // Moon figures are placed at sunrise_x + 15f with radius 10f, so need 26f margin.
-            // Reduce drawing width for scale calculation to leave room on the right for moons.
+            // Reduce drawing width to leave room on the right for moon phase figures.
             val moonMargin = 50f
             val pixelsPerHour = (drawingWidth - moonMargin) / nMaxDuration
 
@@ -138,8 +137,8 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, is
 
                     val xSunset = centerX + (normalizeGraphTime(setTimePrev) * pixelsPerHour)
                     val xSunrise = centerX + (normalizeGraphTime(riseTimeCurr) * pixelsPerHour)
-                    var validSunset = !xSunset.isNaN()
-                    var validSunrise = !xSunrise.isNaN()
+                    val validSunset = !xSunset.isNaN()
+                    val validSunrise = !xSunrise.isNaN()
 
                     var drawPlanets = false
                     var effectiveXSunset = xSunset

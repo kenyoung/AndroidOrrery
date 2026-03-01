@@ -316,7 +316,7 @@ data class DarkHoursResult(
     val endEpochDay: Double
 )
 
-// Returns DarkHoursResult with total hours and start/end time strings
+// Returns DarkHoursResult with total hours and start/end epoch days
 fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkHoursResult {
     // We scan at 1 min resolution from Noon (epochDay+0.5) to Noon (epochDay+1.5)
     val startSearch = epochDay + 0.5

@@ -266,7 +266,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         val xNightEnd = if (polarNight) w else min(w, xSR)
         val hasNight = xNightEnd > xNightStart
 
-        // HA Calculator (Only suitable for Planets with constant Dec)
+        // Computes hour angle for a given altitude, assuming constant declination
         fun getHA(targetAlt: Double, decDeg: Double): Double {
             val altRad = Math.toRadians(targetAlt)
             val latRad = Math.toRadians(lat)
@@ -276,10 +276,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val cosH = num / den
             if (cosH < -1.0 || cosH > 1.0) return Double.NaN
             return Math.toDegrees(acos(cosH)) / 15.0
-        }
-
-        fun getAlt(haHours: Double, decDeg: Double): Double {
-            return calculateAltitude(haHours, lat, decDeg)
         }
 
         val tickIncrements = listOf(0, 20, 40, 60, 80)

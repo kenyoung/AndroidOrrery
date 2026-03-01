@@ -9,15 +9,11 @@ const val EARTH_RADIUS_EQ_METERS = 6378137.0
 const val EARTH_FLATTENING = 1.0 / 298.257223563
 
 // Time and angle conversion constants
-const val HOURS_TO_DEGREES = 15.0
 const val DEGREES_TO_HOURS = 1.0 / 15.0
-const val HOURS_PER_DAY = 24.0
-const val DEGREES_PER_CIRCLE = 360.0
 
 // Horizon and twilight altitude thresholds (degrees)
 const val HORIZON_REFRACTED = -0.833      // Sun/Moon apparent rise/set
 const val PLANET_HORIZON_ALT = -0.5667    // Refraction-corrected horizon for point sources
-const val CIVIL_TWILIGHT = -6.0
 const val NAUTICAL_TWILIGHT = -12.0
 const val ASTRONOMICAL_TWILIGHT = -18.0
 

@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Engine (Load CSVs in background)
+        // Initialize Engine (Load ephemeris data in background)
         GlobalScope.launch(Dispatchers.IO) {
             EphemerisManager.loadEphemeris(applicationContext)
         }
@@ -461,7 +461,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             Box(modifier = Modifier.fillMaxSize().weight(1f)) {
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
                 when (currentScreen) {
-                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, locationMode == 0 && usePhoneTime, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
+                    Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours, useStandardTime) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
@@ -472,7 +472,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
-                    Screen.CONSTELLATIONS -> ConstellationsScreen(currentInstant, effectiveLat, effectiveLon)
+                    Screen.CONSTELLATIONS -> ConstellationsScreen(currentInstant)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }

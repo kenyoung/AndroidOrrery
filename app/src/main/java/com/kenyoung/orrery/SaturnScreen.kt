@@ -304,8 +304,6 @@ fun SaturnScreen(
 
 private data class Vec3(val x: Double, val y: Double, val z: Double)
 
-private fun dot(a: Vec3, b: Vec3) = a.x * b.x + a.y * b.y + a.z * b.z
-
 // Compute Meeus projection basis from earthDir (Saturn equatorial frame)
 private fun computeMeeusFrameBasis(earthDir: Vector3): Triple<Vec3, Vec3, Vec3> {
     val ed = Vec3(earthDir.x, earthDir.y, earthDir.z)
