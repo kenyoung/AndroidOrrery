@@ -19,6 +19,21 @@ import androidx.compose.ui.unit.sp
 import java.time.Instant
 import kotlin.math.*
 
+private val zodiacDescriptors = mapOf(
+    "Aries" to "Ram",
+    "Taurus" to "Bull",
+    "Gemini" to "Twins",
+    "Cancer" to "Crab",
+    "Leo" to "Lion",
+    "Virgo" to "Maiden",
+    "Libra" to "Scales",
+    "Scorpius" to "Scorpion",
+    "Sagittarius" to "Archer",
+    "Capricornus" to "Goat",
+    "Aquarius" to "Water Carrier",
+    "Pisces" to "Fishes",
+)
+
 private val zodiacSymbols = mapOf(
     "Aries" to "\u2648\uFE0E",
     "Taurus" to "\u2649\uFE0E",
@@ -58,7 +73,12 @@ fun ConstellationsScreen(instant: Instant, lat: Double, lon: Double) {
             val b1875RaHours = normalizeDegrees(b1875Ra) * DEGREES_TO_HOURS
             val constellationName = ConstellationBoundary.findConstellation(b1875RaHours, b1875Dec)
             val symbol = zodiacSymbols[constellationName]
-            val constellation = if (symbol != null) "$constellationName   $symbol" else constellationName
+            val descriptor = zodiacDescriptors[constellationName]
+            val constellation = buildString {
+                append(constellationName)
+                if (descriptor != null) append(" ($descriptor)")
+                if (symbol != null) append("   $symbol")
+            }
             val raStr = formatRa(normalizeDegrees(appRa) * DEGREES_TO_HOURS)
             val decStr = formatDec(appDec)
             ObjectRow(name, constellation, raStr, decStr)
