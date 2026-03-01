@@ -19,6 +19,21 @@ import androidx.compose.ui.unit.sp
 import java.time.Instant
 import kotlin.math.*
 
+private val zodiacSymbols = mapOf(
+    "Aries" to "\u2648\uFE0E",
+    "Taurus" to "\u2649\uFE0E",
+    "Gemini" to "\u264A\uFE0E",
+    "Cancer" to "\u264B\uFE0E",
+    "Leo" to "\u264C\uFE0E",
+    "Virgo" to "\u264D\uFE0E",
+    "Libra" to "\u264E\uFE0E",
+    "Scorpius" to "\u264F\uFE0E",
+    "Sagittarius" to "\u2650\uFE0E",
+    "Capricornus" to "\u2651\uFE0E",
+    "Aquarius" to "\u2652\uFE0E",
+    "Pisces" to "\u2653\uFE0E",
+)
+
 private data class ObjectRow(
     val name: String,
     val constellation: String,
@@ -41,7 +56,9 @@ fun ConstellationsScreen(instant: Instant, lat: Double, lon: Double) {
             val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
             val (b1875Ra, b1875Dec) = precessJ2000ToDate(state.ra, state.dec, B1875_JD)
             val b1875RaHours = normalizeDegrees(b1875Ra) * DEGREES_TO_HOURS
-            val constellation = ConstellationBoundary.findConstellation(b1875RaHours, b1875Dec)
+            val constellationName = ConstellationBoundary.findConstellation(b1875RaHours, b1875Dec)
+            val symbol = zodiacSymbols[constellationName]
+            val constellation = if (symbol != null) "$constellationName   $symbol" else constellationName
             val raStr = formatRa(normalizeDegrees(appRa) * DEGREES_TO_HOURS)
             val decStr = formatDec(appDec)
             ObjectRow(name, constellation, raStr, decStr)
