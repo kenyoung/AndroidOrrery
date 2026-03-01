@@ -164,12 +164,10 @@ object EphemerisManager {
 
             if (k == IDX_RA || k == IDX_HELIO_LON) {
                 val up0 = unwrap(p0, p1)
-                val up1 = p1
                 val up2 = unwrap(p2, p1)
-                val up3 = unwrap(p3, p1)
-                val up3_better = unwrap(p3, up2)
+                val up3 = unwrap(p3, up2)
 
-                result[k] = normalizeDegrees(cubicInterp(up0, up1, up2, up3_better, t, tSq, tCub))
+                result[k] = normalizeDegrees(cubicInterp(up0, p1, up2, up3, t, tSq, tCub))
             } else {
                 result[k] = cubicInterp(p0, p1, p2, p3, t, tSq, tCub)
             }

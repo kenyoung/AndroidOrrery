@@ -358,11 +358,7 @@ private fun mjdToInstant(mjd: Double): Instant {
 }
 
 private fun getSystemStateMJD(mjd: Double): Map<String, MoonInstantState> {
-    return getSystemState(mjdToJD(mjd))
-}
-
-private fun getSystemState(jd: Double): Map<String, MoonInstantState> {
-    val completeState = getCompleteSystemState(jd)
+    val completeState = getCompleteSystemState(mjdToJD(mjd))
     return completeState.mapValues { (_, state) ->
         MoonInstantState(state.isTransit, state.isOccultation, state.isShadowTransit, state.isEclipse)
     }

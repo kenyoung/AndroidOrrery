@@ -216,11 +216,7 @@ fun JovianMoonsScreen(
                     drawPath(path, moonColors[mName]!!, style = Stroke(width = 2f))
                 }
 
-                // Current Time Dots on Graph (High Precision for consistency?)
-                // No, keep consistency with lines -> use Low Precision or High?
-                // Visual consistency implies using the same model as the diagram.
-                // But the lines are low precision. If we plot high prec dots on low prec lines, they might drift.
-                // Let's use the High Precision pos to match the top diagram.
+                // Current time dots use high-precision positions to match the top diagram
                 val currentFracTotal = effectiveJD - UNIX_EPOCH_JD - startEpoch
                 val currentDayInt = floor(currentFracTotal).toInt() + 1
                 val currentFrac = currentFracTotal - floor(currentFracTotal)

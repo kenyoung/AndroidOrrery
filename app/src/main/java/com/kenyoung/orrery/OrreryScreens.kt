@@ -194,7 +194,7 @@ fun ScaleOrrery(epochDay: Double) {
         }
     }
 
-    // Halley's Comet Element (Only used for drawing the orbit path now)
+    // Halley's Comet Element (orbit path, position circle, and symbol)
     val halley = remember { getHalleyElement() }
 
     Box(
