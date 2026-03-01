@@ -101,8 +101,8 @@ class MainActivity : ComponentActivity() {
 // Navigation Enum
 enum class Screen {
     TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
-    JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE, TIMES, ANALEMMA,
-    METEOR_SHOWERS
+    JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE, CONSTELLATIONS,
+    TIMES, ANALEMMA, METEOR_SHOWERS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -407,6 +407,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Schematic Orrery" to Screen.SCHEMATIC,
                             "To-scale Orrery" to Screen.SCALE,
+                            "Constellations" to Screen.CONSTELLATIONS,
                             "Astronomical Times" to Screen.TIMES
                         )
                         screens.forEach { (title, screen) ->
@@ -471,6 +472,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
+                    Screen.CONSTELLATIONS -> ConstellationsScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }

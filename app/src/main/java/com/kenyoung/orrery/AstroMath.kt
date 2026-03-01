@@ -31,6 +31,7 @@ const val SIDEREAL_SOLAR_RATIO = 0.99727   // Sidereal day / solar day
 const val DELTA_T_SECONDS = 69.184         // TT - UTC ≈ 32.184 + 37 leap seconds (valid 2017–next leap second)
 const val MJD_OFFSET = 2400000.5           // JD - MJD
 const val UNIX_EPOCH_MJD = 40587.0         // MJD of Unix epoch (1970 Jan 1.0)
+const val B1875_JD = 2405889.2585          // B1875.0 epoch (for IAU constellation boundaries)
 
 // --- RAW MATH FUNCTIONS ---
 
@@ -231,7 +232,7 @@ fun calculateNutation(T: Double): NutationResult {
 
 // --- PRECESSION (Meeus 21.3) ---
 // Converts J2000 (ICRF) equatorial coordinates to mean-of-date equatorial coordinates
-private fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+internal fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
     val T = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T
