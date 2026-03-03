@@ -2079,24 +2079,6 @@ private fun renderEclipse(
         canvas.nativeCanvas.drawText("Penumbral Starts", width - margin - 69f * textScale, currentY, rightTextPaint)
         rightTextPaint.color = (if (penStartUp) colorWhite else colorGrey).toArgb()
         canvas.nativeCanvas.drawText("%02d:%02d".format(penStartH, penStartM) + altSuffix(data.altAtPenStart), width - margin, currentY, rightTextPaint)
-
-        // East label (doesn't conflict with lines)
-        leftTextPaint.color = colorBlack.toArgb()
-        canvas.nativeCanvas.drawText("East", earthMapLeft + 5f, cy + 4f, leftTextPaint)
-
-        // Moonset label
-        if (moonsetTJD != null) {
-            textPaint.color = colorRed.toArgb()
-            textPaint.textSize = smallTextSize
-            canvas.nativeCanvas.drawText("Moon sets here", moonsetPx, umbraMapTop + umbraMapHeight - 3f * scaleFactor, textPaint)
-        }
-
-        // Moonrise label
-        if (moonriseTJD != null) {
-            textPaint.color = colorRed.toArgb()
-            textPaint.textSize = smallTextSize
-            canvas.nativeCanvas.drawText("Moon rises here", moonrisePx, umbraMapTop + 12f * scaleFactor + smallTextSize / 2f, textPaint)
-        }
     }
 
     // Draw connecting lines from phase labels to Moon positions (drawn after text)
@@ -2169,7 +2151,9 @@ private fun renderEclipse(
         drawDownArrow(shadowPx, maxArrowY)
     }
 
-    // Draw "North" and "Ecliptic" labels after lines, avoiding collisions
+    // Draw umbra map labels with bounding-box collision avoidance
+    // Priority order: Moon sets/rises (fixed), Ecliptic (searchable), East (fixed), North (horizontal shift only)
+    // No label bounding box may overlap the ecliptic line
     drawScope.drawIntoCanvas { canvas ->
         val smallTextSize = 12f * textScale
         val labelPaint = Paint().apply {
@@ -2179,95 +2163,36 @@ private fun renderEclipse(
             textSize = smallTextSize
         }
 
-        // Helper to check if a label bounding box overlaps any vertical line
+        data class LabelRect(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
+        fun rectsOverlap(a: LabelRect, b: LabelRect): Boolean {
+            return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+        }
+
+        fun overlapsAny(rect: LabelRect, placed: List<LabelRect>): Boolean {
+            return placed.any { rectsOverlap(rect, it) }
+        }
+
         fun labelOverlapsLine(labelX: Float, labelWidth: Float, lineXPositions: List<Float>, buffer: Float = 5f): Boolean {
             val labelLeft = labelX - buffer
             val labelRight = labelX + labelWidth + buffer
             return lineXPositions.any { lineX -> lineX >= labelLeft && lineX <= labelRight }
         }
 
-        // "North" label - find position near top of umbra map that doesn't overlap lines
-        labelPaint.color = colorBlack.toArgb()
-        val northText = "North"
-        val northWidth = labelPaint.measureText(northText)
-        val northY = umbraMapTop + 20f * scaleFactor
-
-        // Try positions from center-right, moving right, then left
-        var northX = cx + 20f * scaleFactor
-        var found = false
-
-        // Search rightward from center
-        for (i in 0..10) {
-            val testX = cx + (20f + i * 15f) * scaleFactor
-            if (testX + northWidth < earthMapLeft + earthMapWidth &&
-                !labelOverlapsLine(testX, northWidth, verticalLineXPositions)) {
-                northX = testX
-                found = true
-                break
-            }
-        }
-
-        // If not found, search leftward from center
-        if (!found) {
-            for (i in 1..10) {
-                val testX = cx - (i * 15f + northWidth) * scaleFactor
-                if (testX > earthMapLeft &&
-                    !labelOverlapsLine(testX, northWidth, verticalLineXPositions)) {
-                    northX = testX
-                    found = true
-                    break
-                }
-            }
-        }
-
-        canvas.nativeCanvas.drawText(northText, northX, northY, labelPaint)
-
-        // Save North label bounding box for collision detection
-        val northLabelLeft = northX
-        val northLabelTop = northY - smallTextSize
-        val northLabelRight = northX + northWidth
-        val northLabelBottom = northY + 2f
-
-        // Helper to check if two rectangles overlap
-        fun rectsOverlap(
-            r1Left: Float, r1Top: Float, r1Right: Float, r1Bottom: Float,
-            r2Left: Float, r2Top: Float, r2Right: Float, r2Bottom: Float
-        ): Boolean {
-            return r1Left < r2Right && r1Right > r2Left && r1Top < r2Bottom && r1Bottom > r2Top
-        }
-
-        // "Ecliptic" label - find position that doesn't overlap the ecliptic line, green lines, or North label
-        labelPaint.color = colorRed.toArgb()
-        val eclipticText = "Ecliptic"
-        val eclipticWidth = labelPaint.measureText(eclipticText)
-        val labelHeight = smallTextSize  // Approximate height
-
-        // Ecliptic line endpoints
+        // Ecliptic line endpoints (needed by all labels for intersection checks)
         val ecLineX1 = -eclipticX + cx
         val ecLineY1 = eclipticY + cy
         val ecLineX2 = eclipticX + cx
         val ecLineY2 = -eclipticY + cy
 
-        // Helper to check if a rectangle intersects the ecliptic line segment
         fun rectIntersectsEclipticLine(rectLeft: Float, rectTop: Float, rectRight: Float, rectBottom: Float): Boolean {
-            // Check if line segment intersects rectangle using line-clipping algorithm
-            // First check if both endpoints are on the same side of the rectangle
             val minX = minOf(ecLineX1, ecLineX2)
             val maxX = maxOf(ecLineX1, ecLineX2)
             val minY = minOf(ecLineY1, ecLineY2)
             val maxY = maxOf(ecLineY1, ecLineY2)
-
-            // Quick rejection: line bounding box doesn't overlap rectangle
-            if (maxX < rectLeft || minX > rectRight || maxY < rectTop || minY > rectBottom) {
-                return false
-            }
-
-            // Check if line passes through rectangle by testing if the line crosses any edge
-            // or if an endpoint is inside the rectangle
+            if (maxX < rectLeft || minX > rectRight || maxY < rectTop || minY > rectBottom) return false
             fun pointInRect(px: Float, py: Float) = px >= rectLeft && px <= rectRight && py >= rectTop && py <= rectBottom
             if (pointInRect(ecLineX1, ecLineY1) || pointInRect(ecLineX2, ecLineY2)) return true
-
-            // Check intersection with each edge of rectangle
             fun linesCross(ax1: Float, ay1: Float, ax2: Float, ay2: Float,
                            bx1: Float, by1: Float, bx2: Float, by2: Float): Boolean {
                 val d1 = (bx2 - bx1) * (ay1 - by1) - (by2 - by1) * (ax1 - bx1)
@@ -2276,43 +2201,92 @@ private fun renderEclipse(
                 val d4 = (ax2 - ax1) * (by2 - ay1) - (ay2 - ay1) * (bx2 - ax1)
                 return ((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0))
             }
-
-            // Test against all four edges
             return linesCross(ecLineX1, ecLineY1, ecLineX2, ecLineY2, rectLeft, rectTop, rectRight, rectTop) ||
                    linesCross(ecLineX1, ecLineY1, ecLineX2, ecLineY2, rectRight, rectTop, rectRight, rectBottom) ||
                    linesCross(ecLineX1, ecLineY1, ecLineX2, ecLineY2, rectLeft, rectBottom, rectRight, rectBottom) ||
                    linesCross(ecLineX1, ecLineY1, ecLineX2, ecLineY2, rectLeft, rectTop, rectLeft, rectBottom)
         }
 
-        // Determine whether to place label below or above the ecliptic line
-        // Default to below, but if that would extend past the diagram bottom, use above
         val umbraMapBottom = umbraMapTop + umbraMapHeight
-        val minYBelowLine = -eclipticY + cy + labelHeight + 5f * scaleFactor  // Minimum Y if placing below
-        val placeAbove = minYBelowLine > umbraMapBottom - 5f  // If below would clip, place above
+
+        // Nudge a label's Y position to avoid the ecliptic line, staying within the umbra map
+        fun adjustYForEcliptic(baseY: Float, labelLeft: Float, labelRight: Float): Float {
+            for (dy in 0..10) {
+                for (sign in intArrayOf(0, -1, 1)) {
+                    if (dy == 0 && sign != 0) continue
+                    val testY = baseY + sign * dy * 3f * scaleFactor
+                    val top = testY - smallTextSize
+                    val bottom = testY + 2f
+                    if (top >= umbraMapTop && bottom <= umbraMapBottom &&
+                        !rectIntersectsEclipticLine(labelLeft, top, labelRight, bottom)) {
+                        return testY
+                    }
+                }
+            }
+            return baseY
+        }
+
+        val placedBoxes = mutableListOf<LabelRect>()
+
+        // 1. Moon sets label (highest priority, fixed X, Y nudged to avoid ecliptic)
+        if (moonsetTJD != null) {
+            val (moonsetH, moonsetM, _) = tJDToHHMMSS(moonsetTJD, timeOffset)
+            val moonsetText = "Moon sets %02d:%02d".format(moonsetH, moonsetM)
+            val moonsetWidth = labelPaint.measureText(moonsetText)
+            val moonsetDrawX = moonsetPx - moonsetWidth / 2
+            val moonsetBaseY = umbraMapTop + umbraMapHeight - 3f * scaleFactor
+            val moonsetDrawY = adjustYForEcliptic(moonsetBaseY, moonsetDrawX, moonsetDrawX + moonsetWidth)
+
+            labelPaint.color = colorRed.toArgb()
+            canvas.nativeCanvas.drawText(moonsetText, moonsetDrawX, moonsetDrawY, labelPaint)
+            placedBoxes.add(LabelRect(moonsetDrawX, moonsetDrawY - smallTextSize, moonsetDrawX + moonsetWidth, moonsetDrawY + 2f))
+        }
+
+        // 2. Moon rises label (highest priority, fixed X, Y nudged to avoid ecliptic)
+        if (moonriseTJD != null) {
+            val (moonriseH, moonriseM, _) = tJDToHHMMSS(moonriseTJD, timeOffset)
+            val moonriseText = "Moon rises %02d:%02d".format(moonriseH, moonriseM)
+            val moonriseWidth = labelPaint.measureText(moonriseText)
+            val moonriseDrawX = moonrisePx - moonriseWidth / 2
+            val moonriseBaseY = umbraMapTop + 12f * scaleFactor + smallTextSize / 2f
+            val moonriseDrawY = adjustYForEcliptic(moonriseBaseY, moonriseDrawX, moonriseDrawX + moonriseWidth)
+
+            labelPaint.color = colorRed.toArgb()
+            canvas.nativeCanvas.drawText(moonriseText, moonriseDrawX, moonriseDrawY, labelPaint)
+            placedBoxes.add(LabelRect(moonriseDrawX, moonriseDrawY - smallTextSize, moonriseDrawX + moonriseWidth, moonriseDrawY + 2f))
+        }
+
+        // 3. Ecliptic label - search for position avoiding ecliptic line, vertical lines, and placed labels
+        labelPaint.color = colorRed.toArgb()
+        val eclipticText = "Ecliptic"
+        val eclipticWidth = labelPaint.measureText(eclipticText)
+        val labelHeight = smallTextSize
+
+        val minYBelowLine = -eclipticY + cy + labelHeight + 5f * scaleFactor
+        val placeAbove = minYBelowLine > umbraMapBottom - 5f
 
         var eclipticLabelX = cx - eclipticWidth / 2
         var eclipticLabelY = cy
-        found = false
+        var found = false
+
+        fun eclipticCandidate(testX: Float, testY: Float): Boolean {
+            val ecLabelTop = testY - labelHeight
+            val ecLabelBottom = testY + 2f
+            val candidateRect = LabelRect(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom)
+            return testX > earthMapLeft && testX + eclipticWidth < earthMapLeft + earthMapWidth &&
+                   testY > umbraMapTop + labelHeight && testY < umbraMapBottom &&
+                   !labelOverlapsLine(testX, eclipticWidth, verticalLineXPositions) &&
+                   !rectIntersectsEclipticLine(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom) &&
+                   !overlapsAny(candidateRect, placedBoxes)
+        }
 
         if (!placeAbove) {
-            // Try positions below the ecliptic line
             for (yOffset in 1..20) {
                 val testY = -eclipticY + cy + (yOffset * 5f) * scaleFactor
-                // Check if this Y would extend below the diagram
-                if (testY > umbraMapBottom - 5f) break  // Stop searching below
-
-                // Try X positions from right to left
+                if (testY > umbraMapBottom - 5f) break
                 for (xOffset in 0..15) {
                     val testX = eclipticX + cx - (xOffset * 20f) * scaleFactor - eclipticWidth / 2
-                    val ecLabelTop = testY - labelHeight
-                    val ecLabelBottom = testY + 2f
-
-                    if (testX > earthMapLeft && testX + eclipticWidth < earthMapLeft + earthMapWidth &&
-                        testY > umbraMapTop + labelHeight &&
-                        !labelOverlapsLine(testX, eclipticWidth, verticalLineXPositions) &&
-                        !rectIntersectsEclipticLine(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom) &&
-                        !rectsOverlap(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom,
-                                      northLabelLeft, northLabelTop, northLabelRight, northLabelBottom)) {
+                    if (eclipticCandidate(testX, testY)) {
                         eclipticLabelX = testX
                         eclipticLabelY = testY
                         found = true
@@ -2323,24 +2297,13 @@ private fun renderEclipse(
             }
         }
 
-        // If placing below didn't work or we decided to place above, try above the line
         if (!found) {
             for (yOffset in 1..20) {
                 val testY = -eclipticY + cy - (yOffset * 5f) * scaleFactor
-                // Check if this Y would extend above the diagram
-                if (testY - labelHeight < umbraMapTop + 5f) break  // Stop searching above
-
+                if (testY - labelHeight < umbraMapTop + 5f) break
                 for (xOffset in 0..15) {
                     val testX = eclipticX + cx - (xOffset * 20f) * scaleFactor - eclipticWidth / 2
-                    val ecLabelTop = testY - labelHeight
-                    val ecLabelBottom = testY + 2f
-
-                    if (testX > earthMapLeft && testX + eclipticWidth < earthMapLeft + earthMapWidth &&
-                        testY < umbraMapBottom &&
-                        !labelOverlapsLine(testX, eclipticWidth, verticalLineXPositions) &&
-                        !rectIntersectsEclipticLine(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom) &&
-                        !rectsOverlap(testX, ecLabelTop, testX + eclipticWidth, ecLabelBottom,
-                                      northLabelLeft, northLabelTop, northLabelRight, northLabelBottom)) {
+                    if (eclipticCandidate(testX, testY)) {
                         eclipticLabelX = testX
                         eclipticLabelY = testY
                         found = true
@@ -2352,5 +2315,58 @@ private fun renderEclipse(
         }
 
         canvas.nativeCanvas.drawText(eclipticText, eclipticLabelX, eclipticLabelY, labelPaint)
+        placedBoxes.add(LabelRect(eclipticLabelX, eclipticLabelY - labelHeight, eclipticLabelX + eclipticWidth, eclipticLabelY + 2f))
+
+        // 4. East label (fixed X, Y nudged to avoid ecliptic)
+        val eastText = "East"
+        val eastWidth = labelPaint.measureText(eastText)
+        val eastX = earthMapLeft + 5f
+        val eastBaseY = cy + 4f
+        val eastY = adjustYForEcliptic(eastBaseY, eastX, eastX + eastWidth)
+
+        labelPaint.color = colorBlack.toArgb()
+        canvas.nativeCanvas.drawText(eastText, eastX, eastY, labelPaint)
+        placedBoxes.add(LabelRect(eastX, eastY - smallTextSize, eastX + eastWidth, eastY + 2f))
+
+        // 5. North label - fixed Y, shift left/right only to avoid all placed labels, vertical lines, and ecliptic
+        labelPaint.color = colorBlack.toArgb()
+        val northText = "North"
+        val northWidth = labelPaint.measureText(northText)
+        val northY = umbraMapTop + 20f * scaleFactor
+
+        var northX = cx + 20f * scaleFactor
+        found = false
+
+        // Search rightward from center
+        for (i in 0..20) {
+            val testX = cx + (20f + i * 15f) * scaleFactor
+            if (testX + northWidth >= earthMapLeft + earthMapWidth) continue
+            val candidateRect = LabelRect(testX, northY - smallTextSize, testX + northWidth, northY + 2f)
+            if (!labelOverlapsLine(testX, northWidth, verticalLineXPositions) &&
+                !overlapsAny(candidateRect, placedBoxes) &&
+                !rectIntersectsEclipticLine(testX, northY - smallTextSize, testX + northWidth, northY + 2f)) {
+                northX = testX
+                found = true
+                break
+            }
+        }
+
+        // Search leftward from center
+        if (!found) {
+            for (i in 0..20) {
+                val testX = cx - (20f + i * 15f) * scaleFactor - northWidth
+                if (testX < earthMapLeft) continue
+                val candidateRect = LabelRect(testX, northY - smallTextSize, testX + northWidth, northY + 2f)
+                if (!labelOverlapsLine(testX, northWidth, verticalLineXPositions) &&
+                    !overlapsAny(candidateRect, placedBoxes) &&
+                    !rectIntersectsEclipticLine(testX, northY - smallTextSize, testX + northWidth, northY + 2f)) {
+                    northX = testX
+                    found = true
+                    break
+                }
+            }
+        }
+
+        canvas.nativeCanvas.drawText(northText, northX, northY, labelPaint)
     }
 }
