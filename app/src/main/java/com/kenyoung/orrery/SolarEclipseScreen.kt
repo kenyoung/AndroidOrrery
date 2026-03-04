@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
@@ -101,6 +103,14 @@ data class SolarEclipse(
     }
 
     fun formatDate(): String = "%02d-%02d-%04d".format(day, month, year)
+
+    fun formatDateLong(): String {
+        val monthName = arrayOf(
+            "", "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        )[month.coerceIn(1, 12)]
+        return "$monthName $day, $year"
+    }
 
     fun formatListEntry(): String = "${formatDate()} $typeString"
 
@@ -371,42 +381,51 @@ private fun findContact(
     usePenumbral: Boolean,
     searchBefore: Boolean
 ): Double {
-    // Scan range
-    val scanStart = if (searchBefore) tMax - 4.0 else tMax
-    val scanEnd = if (searchBefore) tMax else tMax + 4.0
-    val step = 1.0 / 60.0  // 1 minute
+    // Scan range: ±4 hours for penumbral, ±0.5 hours for umbral (totality is brief)
+    val range = if (usePenumbral) 4.0 else 0.5
+    val scanStart = if (searchBefore) tMax - range else tMax
+    val scanEnd = if (searchBefore) tMax else tMax + range
+    // Use 1-minute steps for penumbral (slow contact), 5-second steps for umbral (fast contact)
+    val step = if (usePenumbral) 1.0 / 60.0 else 5.0 / 3600.0
+
+    // For umbral contacts, add a small tolerance to the shadow radius.
+    // Observers within ~3 km of the path edge are effectively at totality —
+    // the Besselian element model and tMax precision don't resolve this boundary.
+    val tolerance = if (usePenumbral) 0.0 else 0.0005  // ~3.2 km in Earth radii
 
     var prevT = scanStart
     var prevResult = shadowDistance(eclipse, prevT, obs, lonDeg, latDeg)
-    var prevDiff = prevResult[0] - if (usePenumbral) prevResult[1] else abs(prevResult[2])
+    var prevDiff = prevResult[0] - (if (usePenumbral) prevResult[1] else abs(prevResult[2]) + tolerance)
 
     var t = scanStart + step
-    while (t <= scanEnd) {
-        val result = shadowDistance(eclipse, t, obs, lonDeg, latDeg)
-        val radius = if (usePenumbral) result[1] else abs(result[2])
+    while (t <= scanEnd + step * 0.5) {  // small tolerance to avoid missing last step
+        val tClamped = t.coerceAtMost(scanEnd)
+        val result = shadowDistance(eclipse, tClamped, obs, lonDeg, latDeg)
+        val radius = (if (usePenumbral) result[1] else abs(result[2])) + tolerance
         val diff = result[0] - radius
 
         if (prevDiff * diff < 0) {
             // Sign change: bisect to find exact crossing
             var lo = prevT
-            var hi = t
+            var hi = tClamped
+            var loDiff = prevDiff
             for (iter in 0 until 30) {
                 val mid = (lo + hi) / 2.0
                 val midResult = shadowDistance(eclipse, mid, obs, lonDeg, latDeg)
-                val midRadius = if (usePenumbral) midResult[1] else abs(midResult[2])
+                val midRadius = (if (usePenumbral) midResult[1] else abs(midResult[2])) + tolerance
                 val midDiff = midResult[0] - midRadius
 
-                if (prevDiff * midDiff < 0) {
+                if (loDiff * midDiff < 0) {
                     hi = mid
                 } else {
                     lo = mid
-                    prevDiff = midDiff
+                    loDiff = midDiff
                 }
             }
             return (lo + hi) / 2.0
         }
 
-        prevT = t
+        prevT = tClamped
         prevDiff = diff
         t += step
     }
@@ -497,13 +516,11 @@ private fun computeLocalCircumstances(
     var tC3 = Double.NaN
     var duration = 0.0
 
-    // Umbral contacts only if observer is within umbral shadow
-    if (maxDelta <= abs(maxL2)) {
-        tC2 = findContact(eclipse, obs, lonDeg, latDeg, tMax, usePenumbral = false, searchBefore = true)
-        tC3 = findContact(eclipse, obs, lonDeg, latDeg, tMax, usePenumbral = false, searchBefore = false)
-        if (!tC2.isNaN() && !tC3.isNaN()) {
-            duration = (tC3 - tC2) * 3600.0  // seconds
-        }
+    // Always attempt umbral contacts — findContact returns NaN if no crossing found
+    tC2 = findContact(eclipse, obs, lonDeg, latDeg, tMax, usePenumbral = false, searchBefore = true)
+    tC3 = findContact(eclipse, obs, lonDeg, latDeg, tMax, usePenumbral = false, searchBefore = false)
+    if (!tC2.isNaN() && !tC3.isNaN()) {
+        duration = (tC3 - tC2) * 3600.0  // seconds
     }
 
     // Sun altitude at contacts
@@ -1034,6 +1051,18 @@ private fun SolarEclipseDetailView(
         showCanvas = true
     }
 
+    // Map zoom/pan state
+    var mapScale by remember { mutableStateOf(1f) }
+    var mapOffsetX by remember { mutableStateOf(0f) }
+    var mapOffsetY by remember { mutableStateOf(0f) }
+
+    // Reset zoom when eclipse changes
+    LaunchedEffect(eclipse) {
+        mapScale = 1f
+        mapOffsetX = 0f
+        mapOffsetY = 0f
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1041,14 +1070,50 @@ private fun SolarEclipseDetailView(
     ) {
         if (showCanvas) {
             Column(modifier = Modifier.fillMaxSize()) {
+                // Upper area: info text + eclipse geometry
                 Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    renderSolarEclipse(
-                        this, renderData, eclipse, shoreline,
-                        latitude, longitude,
+                    renderSolarEclipseUpperArea(
+                        this, renderData, eclipse,
                         useStandardTime, stdOffsetHours, stdTimeLabel,
                         totalEclipseBitmap
                     )
                 }
+
+                // Lower area: world map with pinch-to-zoom
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newScale = (mapScale * zoom).coerceIn(1f, 8f)
+                                // Adjust offset to keep zoom centered
+                                mapOffsetX = mapOffsetX * (newScale / mapScale) + pan.x
+                                mapOffsetY = mapOffsetY * (newScale / mapScale) + pan.y
+                                mapScale = newScale
+                                // Clamp pan so map doesn't drift off-screen
+                                val maxPanX = size.width.toFloat() * (mapScale - 1f) / 2f
+                                val maxPanY = size.height.toFloat() * (mapScale - 1f) / 2f
+                                mapOffsetX = mapOffsetX.coerceIn(-maxPanX, maxPanX)
+                                mapOffsetY = mapOffsetY.coerceIn(-maxPanY, maxPanY)
+                            }
+                        }
+                ) {
+                    drawWorldMap(
+                        this, eclipse, renderData, shoreline,
+                        latitude, longitude,
+                        0f, size.height, size.width,
+                        mapScale, mapOffsetX, mapOffsetY
+                    )
+                }
+
+                // "Pinch to zoom" hint below the map
+                Text(
+                    text = "Pinch to zoom (map only)",
+                    color = Color(0xFF87CEEB),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+                )
 
                 // Bottom row: Back button + time zone radio buttons
                 Row(
@@ -1113,13 +1178,10 @@ private fun SolarEclipseDetailView(
 // ECLIPSE RENDERING
 // ============================================================================
 
-private fun renderSolarEclipse(
+private fun renderSolarEclipseUpperArea(
     drawScope: DrawScope,
     data: SolarEclipseRenderData,
     eclipse: SolarEclipse,
-    shoreline: List<ShoreSegmentSE>,
-    userLat: Double,
-    userLon: Double,
     useStandardTime: Boolean,
     stdOffsetHours: Double,
     stdTimeLabel: String,
@@ -1131,145 +1193,181 @@ private fun renderSolarEclipse(
     val h = drawScope.size.height
     val circ = data.circumstances
 
-    // Paint setup
-    val textPaint = Paint().apply {
-        color = Color.White.toArgb()
-        textSize = (w / 30f).coerceIn(12f, 18f)
-        typeface = Typeface.MONOSPACE
-        isAntiAlias = true
-    }
-    val smallTextPaint = Paint().apply {
-        color = Color.White.toArgb()
-        textSize = (w / 38f).coerceIn(10f, 14f)
-        typeface = Typeface.MONOSPACE
-        isAntiAlias = true
-    }
+    // Paint setup — doubled font size for readability
+    val textSize = (w / 15f).coerceIn(24f, 36f)
     val labelPaint = Paint().apply {
         color = LabelColor.toArgb()
-        textSize = (w / 30f).coerceIn(12f, 18f)
+        this.textSize = textSize
+        typeface = Typeface.MONOSPACE
+        isAntiAlias = true
+    }
+    val valuePaint = Paint().apply {
+        color = Color.White.toArgb()
+        this.textSize = textSize
         typeface = Typeface.MONOSPACE
         isAntiAlias = true
     }
 
-    val lineH = textPaint.descent() - textPaint.ascent()
-    val smallLineH = smallTextPaint.descent() - smallTextPaint.ascent()
+    val lineH = labelPaint.descent() - labelPaint.ascent()
+    val labelColorArgb = LabelColor.toArgb()
+    val whiteArgb = Color.White.toArgb()
 
-    // Layout: top section = eclipse info, middle = geometry diagram, bottom = world map
-    val infoHeight = lineH * 12f
-    val geomTop = infoHeight
-    val geomHeight = (h - infoHeight) * 0.35f
-    val mapTop = geomTop + geomHeight + lineH
-    val mapHeight = h - mapTop
+    // Helper: draw "label value" with label in light blue, value in white
+    fun android.graphics.Canvas.drawLabelValue(
+        label: String, value: String, x: Float, y: Float
+    ) {
+        labelPaint.color = labelColorArgb
+        drawText(label, x, y, labelPaint)
+        val labelWidth = labelPaint.measureText(label)
+        valuePaint.color = whiteArgb
+        drawText(value, x + labelWidth, y, valuePaint)
+    }
+
+    // Helper: draw centered text in light blue
+    fun android.graphics.Canvas.drawCentered(text: String, y: Float) {
+        labelPaint.color = labelColorArgb
+        labelPaint.textAlign = Paint.Align.CENTER
+        drawText(text, w / 2f, y, labelPaint)
+        labelPaint.textAlign = Paint.Align.LEFT
+    }
+
+    // Count info lines to compute layout
+    var infoLines = 7 // date, global header, max eclipse, saros/width, local header, local type, obscuration
+    if (circ.maxMagnitude <= 0.0) infoLines = 7 // last line becomes "not visible"
+    if (!circ.c1.isNaN()) infoLines++
+    if (!circ.c2.isNaN()) infoLines++
+    if (!circ.c3.isNaN()) infoLines++
+    if (!circ.c4.isNaN()) infoLines++
+    if (circ.duration > 0.0) infoLines++
+    val infoHeight = lineH * infoLines + lineH * 0.5f
+
+    // Layout: info text at top, geometry diagram fills remaining space below
+    val geomHeight = (h - infoHeight) * 0.7f
+    val geomTop = h - geomHeight
 
     drawScope.drawIntoCanvas { canvas ->
         val nativeCanvas = canvas.nativeCanvas
-        var yPos = -textPaint.ascent()
+        var yPos = -labelPaint.ascent()
+        val x = 10f
 
-        // === ECLIPSE INFO TEXT ===
-        val typeColor = eclipse.typeColor.toArgb()
-
-        // Title line
-        labelPaint.color = typeColor
-        nativeCanvas.drawText(
-            "${eclipse.typeString} Solar Eclipse", 10f, yPos, labelPaint
-        )
-        labelPaint.color = LabelColor.toArgb()
+        // Line 1: Date and eclipse type (centered)
+        labelPaint.textAlign = Paint.Align.LEFT
+        val dateLbl = "Date: "
+        val dateVal = "${eclipse.formatDateLong()}  "
+        val typeLbl = "Type: "
+        val typeVal = eclipse.typeString
+        val totalWidth = labelPaint.measureText(dateLbl) + valuePaint.measureText(dateVal) +
+                labelPaint.measureText(typeLbl) + valuePaint.measureText(typeVal)
+        val startX = (w - totalWidth) / 2f
+        var cx = startX
+        labelPaint.color = labelColorArgb
+        nativeCanvas.drawText(dateLbl, cx, yPos, labelPaint)
+        cx += labelPaint.measureText(dateLbl)
+        nativeCanvas.drawText(dateVal, cx, yPos, valuePaint)
+        cx += valuePaint.measureText(dateVal)
+        nativeCanvas.drawText(typeLbl, cx, yPos, labelPaint)
+        cx += labelPaint.measureText(typeLbl)
+        nativeCanvas.drawText(typeVal, cx, yPos, valuePaint)
         yPos += lineH
 
-        // Date and time
+        // Line 2: --- Global Characteristics --- (centered, light blue)
+        nativeCanvas.drawCentered("--- Global Characteristics ---", yPos)
+        yPos += lineH
+
+        // Line 3: Max Eclipse time and magnitude
+        nativeCanvas.drawLabelValue(
+            "Max Eclipse: ",
+            "${formatHHMMSS(data.eclipseUTHours + timeOffset)} $timeSuffix   ",
+            x, yPos
+        )
+        // Append magnitude on same line
+        val geOffset = labelPaint.measureText("Max Eclipse: ") +
+                valuePaint.measureText("${formatHHMMSS(data.eclipseUTHours + timeOffset)} $timeSuffix   ")
+        labelPaint.color = labelColorArgb
+        nativeCanvas.drawText("Mag: ", x + geOffset, yPos, labelPaint)
+        valuePaint.color = whiteArgb
         nativeCanvas.drawText(
-            "Date: ${eclipse.formatDate()}", 10f, yPos, textPaint
+            "%.4f".format(eclipse.magnitude.toDouble()),
+            x + geOffset + labelPaint.measureText("Mag: "), yPos, valuePaint
         )
         yPos += lineH
 
-        nativeCanvas.drawText(
-            "Greatest Eclipse: ${formatHHMMSS(data.eclipseUTHours + timeOffset)} $timeSuffix",
-            10f, yPos, textPaint
-        )
-        yPos += lineH
-
-        // Gamma and Saros
-        nativeCanvas.drawText(
-            "Gamma: ${"%.4f".format(eclipse.gamma.toDouble())}   Saros: ${eclipse.sarosNum}",
-            10f, yPos, textPaint
-        )
-        yPos += lineH
-
-        // Global magnitude and path width
+        // Line 4: Saros and path width
         val widthStr = if (eclipse.pathWidthKm > 0) "${eclipse.pathWidthKm} km" else "N/A"
+        nativeCanvas.drawLabelValue("Saros: ", "${eclipse.sarosNum}   ", x, yPos)
+        val sarosOffset = labelPaint.measureText("Saros: ") +
+                valuePaint.measureText("${eclipse.sarosNum}   ")
+        labelPaint.color = labelColorArgb
+        nativeCanvas.drawText("Path Width: ", x + sarosOffset, yPos, labelPaint)
+        valuePaint.color = whiteArgb
         nativeCanvas.drawText(
-            "Magnitude: ${"%.4f".format(eclipse.magnitude.toDouble())}   Path Width: $widthStr",
-            10f, yPos, textPaint
+            widthStr,
+            x + sarosOffset + labelPaint.measureText("Path Width: "), yPos, valuePaint
         )
         yPos += lineH
 
-        // Central duration
-        if (eclipse.centralDuration > 0) {
-            val durMin = (eclipse.centralDuration / 60).toInt()
-            val durSec = (eclipse.centralDuration % 60).toInt()
-            nativeCanvas.drawText(
-                "Central Duration: ${durMin}m ${durSec}s", 10f, yPos, textPaint
-            )
-        }
+        // Line 5: --- At Your Location --- (centered, light blue)
+        nativeCanvas.drawCentered("--- At Your Location ---", yPos)
         yPos += lineH
 
-        // --- Local circumstances ---
-        labelPaint.color = LabelColor.toArgb()
-        nativeCanvas.drawText("--- Local Circumstances ---", 10f, yPos, labelPaint)
-        yPos += lineH
-
+        // Line 6: Local eclipse type
         if (circ.maxMagnitude <= 0.0) {
-            textPaint.color = Color.Red.toArgb()
-            nativeCanvas.drawText("Eclipse not visible from this location", 10f, yPos, textPaint)
-            textPaint.color = Color.White.toArgb()
+            valuePaint.color = Color.Red.toArgb()
+            nativeCanvas.drawText("Eclipse not visible from this location", x, yPos, valuePaint)
+            valuePaint.color = whiteArgb
             yPos += lineH
         } else {
-            // Magnitude and obscuration
-            nativeCanvas.drawText(
-                "Max Magnitude: ${"%.3f".format(circ.maxMagnitude)}   " +
-                        "Obscuration: ${"%.1f".format(circ.maxObscuration * 100)}%%",
-                10f, yPos, textPaint
+            val localType = when {
+                circ.maxObscuration >= 0.999 && (eclipse.eclipseType == TOTAL_SOLAR_ECLIPSE || eclipse.eclipseType == HYBRID_SOLAR_ECLIPSE) -> "The eclipse is total"
+                circ.maxObscuration >= 0.999 && eclipse.eclipseType == ANNULAR_SOLAR_ECLIPSE -> "The eclipse is annular"
+                !circ.c2.isNaN() && eclipse.eclipseType == ANNULAR_SOLAR_ECLIPSE -> "The eclipse is annular"
+                else -> "The eclipse is partial"
+            }
+            nativeCanvas.drawCentered(localType, yPos)
+            yPos += lineH
+
+            // Obscuration
+            nativeCanvas.drawLabelValue(
+                "Max Obscuration: ", "${"%.1f".format(circ.maxObscuration * 100)}%", x, yPos
             )
             yPos += lineH
 
-            // Contact times
+            // C1
             if (!circ.c1.isNaN()) {
                 val c1Str = formatJDTime(circ.c1, timeOffset)
-                val altStr = if (!circ.sunAltC1.isNaN()) " (alt ${"%.0f".format(circ.sunAltC1)}°)" else ""
-                nativeCanvas.drawText("C1 (partial begins): $c1Str $timeSuffix$altStr", 10f, yPos, smallTextPaint)
-                yPos += smallLineH
+                val elStr = if (!circ.sunAltC1.isNaN()) " El ${"%.0f".format(circ.sunAltC1)}°" else ""
+                nativeCanvas.drawLabelValue("C1 partial begins: ", "$c1Str $timeSuffix$elStr", x, yPos)
+                yPos += lineH
             }
+            // C2
             if (!circ.c2.isNaN()) {
                 val c2Str = formatJDTime(circ.c2, timeOffset)
-                val altStr = if (!circ.sunAltC2.isNaN()) " (alt ${"%.0f".format(circ.sunAltC2)}°)" else ""
-                nativeCanvas.drawText("C2 (total/annular begins): $c2Str $timeSuffix$altStr", 10f, yPos, smallTextPaint)
-                yPos += smallLineH
+                val elStr = if (!circ.sunAltC2.isNaN()) " El ${"%.0f".format(circ.sunAltC2)}°" else ""
+                nativeCanvas.drawLabelValue("C2 totality begins: ", "$c2Str $timeSuffix$elStr", x, yPos)
+                yPos += lineH
             }
-            val midStr = formatJDTime(circ.mid, timeOffset)
-            val midAltStr = " (alt ${"%.0f".format(circ.sunAltMid)}°)"
-            nativeCanvas.drawText("Max eclipse: $midStr $timeSuffix$midAltStr", 10f, yPos, smallTextPaint)
-            yPos += smallLineH
-
+            // C3
             if (!circ.c3.isNaN()) {
                 val c3Str = formatJDTime(circ.c3, timeOffset)
-                val altStr = if (!circ.sunAltC3.isNaN()) " (alt ${"%.0f".format(circ.sunAltC3)}°)" else ""
-                nativeCanvas.drawText("C3 (total/annular ends): $c3Str $timeSuffix$altStr", 10f, yPos, smallTextPaint)
-                yPos += smallLineH
+                val elStr = if (!circ.sunAltC3.isNaN()) " El ${"%.0f".format(circ.sunAltC3)}°" else ""
+                nativeCanvas.drawLabelValue("C3 totality ends: ", "$c3Str $timeSuffix$elStr", x, yPos)
+                yPos += lineH
             }
+            // C4
             if (!circ.c4.isNaN()) {
                 val c4Str = formatJDTime(circ.c4, timeOffset)
-                val altStr = if (!circ.sunAltC4.isNaN()) " (alt ${"%.0f".format(circ.sunAltC4)}°)" else ""
-                nativeCanvas.drawText("C4 (partial ends): $c4Str $timeSuffix$altStr", 10f, yPos, smallTextPaint)
-                yPos += smallLineH
+                val elStr = if (!circ.sunAltC4.isNaN()) " El ${"%.0f".format(circ.sunAltC4)}°" else ""
+                nativeCanvas.drawLabelValue("C4 partial ends: ", "$c4Str $timeSuffix$elStr", x, yPos)
+                yPos += lineH
             }
-
             // Duration of totality/annularity
-            if (circ.duration > 0) {
-                val durMin = (circ.duration / 60).toInt()
-                val durSec = (circ.duration % 60).toInt()
-                nativeCanvas.drawText(
-                    "Duration: ${durMin}m ${durSec}s", 10f, yPos, textPaint
-                )
+            if (circ.duration > 0.0) {
+                val durLabel = if (eclipse.eclipseType == TOTAL_SOLAR_ECLIPSE || eclipse.eclipseType == HYBRID_SOLAR_ECLIPSE)
+                    "Duration of totality: " else "Duration of annularity: "
+                val mins = (circ.duration / 60.0).toInt()
+                val secs = (circ.duration % 60.0).toInt()
+                val durStr = if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+                nativeCanvas.drawLabelValue(durLabel, durStr, x, yPos)
                 yPos += lineH
             }
         }
@@ -1277,9 +1375,6 @@ private fun renderSolarEclipse(
 
     // === ECLIPSE GEOMETRY DIAGRAM ===
     drawEclipseGeometry(drawScope, eclipse, data, geomTop, geomHeight, w, totalEclipseBitmap)
-
-    // === WORLD MAP ===
-    drawWorldMap(drawScope, eclipse, data, shoreline, userLat, userLon, mapTop, mapHeight, w)
 }
 
 // ============================================================================
@@ -1316,15 +1411,17 @@ private fun drawEclipseGeometry(
     // At maximum, distance = sunR + moonR - 2 * sunR * magnitude (for Sun radius = 1)
     val mag = circ.maxMagnitude
 
+    val isTotal = circ.maxObscuration >= 0.999 && totalEclipseBitmap != null
+
     // Background
     drawScope.drawRect(
-        Color(0xFF0A0A20),
+        if (isTotal) Color.Black else Color(0xFF0A0A20),
         topLeft = Offset(0f, top),
         size = androidx.compose.ui.geometry.Size(width, height)
     )
 
     // If total at observer's location, show the photograph instead of the drawing
-    if (circ.maxObscuration >= 0.999 && totalEclipseBitmap != null) {
+    if (isTotal) {
         // Scale the image to fit the same area the drawing would occupy (2 * sunR * 1.3)
         val displayDiameter = (sunR * 2.6f).toInt()
         val bmpW = totalEclipseBitmap.width
@@ -1377,26 +1474,6 @@ private fun drawEclipseGeometry(
         )
     }
 
-    // Label
-    drawScope.drawIntoCanvas { canvas ->
-        val labelPaint = Paint().apply {
-            color = eclipse.typeColor.toArgb()
-            textSize = (width / 28f).coerceIn(12f, 18f)
-            typeface = Typeface.MONOSPACE
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-        }
-
-        val label = if (mag > 0) {
-            "Magnitude: ${"%.3f".format(mag)}  Obscuration: ${"%.1f".format(circ.maxObscuration * 100)}%%"
-        } else {
-            "Not visible from observer location"
-        }
-
-        canvas.nativeCanvas.drawText(
-            label, cx, top + height - 8f, labelPaint
-        )
-    }
 }
 
 // ============================================================================
@@ -1415,12 +1492,27 @@ private fun drawWorldMap(
     userLon: Double,
     mapTop: Float,
     mapHeight: Float,
-    mapWidth: Float
+    mapWidth: Float,
+    scale: Float = 1f,
+    offsetX: Float = 0f,
+    offsetY: Float = 0f
 ) {
     // Map dimensions (2:1 aspect ratio for equirectangular)
     val mw = mapWidth
     val mh = mapHeight.coerceAtMost(mw / 2f)
     val mTop = mapTop + (mapHeight - mh) / 2f
+
+    // Clip to the map area, then apply zoom/pan transform
+    drawScope.drawIntoCanvas { canvas ->
+        canvas.nativeCanvas.save()
+        canvas.nativeCanvas.clipRect(0f, mapTop, mapWidth, mapTop + mapHeight)
+        // Scale around center of map area, then apply pan offset
+        val cx = mw / 2f
+        val cy = mTop + mh / 2f
+        canvas.nativeCanvas.translate(cx + offsetX, cy + offsetY)
+        canvas.nativeCanvas.scale(scale, scale)
+        canvas.nativeCanvas.translate(-cx, -cy)
+    }
 
     // Background
     drawScope.drawRect(
@@ -1543,7 +1635,12 @@ private fun drawWorldMap(
     drawScope.drawLine(Color.Red, Offset(obsX - 8f, obsY), Offset(obsX + 8f, obsY), strokeWidth = 1f)
     drawScope.drawLine(Color.Red, Offset(obsX, obsY - 8f), Offset(obsX, obsY + 8f), strokeWidth = 1f)
 
-    // Map border
+    // Restore canvas state (undo clip + transform)
+    drawScope.drawIntoCanvas { canvas ->
+        canvas.nativeCanvas.restore()
+    }
+
+    // Map border (drawn without transform so it stays crisp)
     drawScope.drawRect(
         Color(0xFF555555),
         topLeft = Offset(0f, mTop),
