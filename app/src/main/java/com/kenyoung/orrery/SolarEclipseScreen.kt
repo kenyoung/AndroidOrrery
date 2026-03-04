@@ -1136,11 +1136,7 @@ private fun SolarEclipseDetailView(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var showCanvas by remember { mutableStateOf(false) }
-
-    val renderData = remember(eclipse, latitude, longitude) {
-        computeRenderData(eclipse, latitude, longitude)
-    }
+    var renderData by remember { mutableStateOf<SolarEclipseRenderData?>(null) }
 
     val totalEclipseBitmap = remember {
         context.assets.open("TotalSolarEclipse.png").use { inputStream ->
@@ -1148,9 +1144,11 @@ private fun SolarEclipseDetailView(
         }
     }
 
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(100)
-        showCanvas = true
+    LaunchedEffect(eclipse, latitude, longitude) {
+        renderData = null
+        renderData = withContext(Dispatchers.Default) {
+            computeRenderData(eclipse, latitude, longitude)
+        }
     }
 
     // Map zoom/pan state
@@ -1170,19 +1168,20 @@ private fun SolarEclipseDetailView(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        if (showCanvas) {
+        if (renderData != null) {
+            val data = renderData!!
             Column(modifier = Modifier.fillMaxSize()) {
                 // Upper area: info text + eclipse geometry
                 Canvas(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     renderSolarEclipseUpperArea(
-                        this, renderData, eclipse,
+                        this, data, eclipse,
                         useStandardTime, stdOffsetHours, stdTimeLabel,
                         totalEclipseBitmap
                     )
                 }
 
                 // Visibility hint above map when eclipse is not visible locally
-                if (!renderData.circumstances.isVisible) {
+                if (!data.circumstances.isVisible) {
                     Text(
                         text = "The eclipse is visible in the light blue region.",
                         color = Color(0xFF6699CC),
@@ -1212,7 +1211,7 @@ private fun SolarEclipseDetailView(
                         }
                 ) {
                     drawWorldMap(
-                        this, eclipse, renderData, shoreline,
+                        this, eclipse, data, shoreline,
                         latitude, longitude,
                         0f, size.height, size.width,
                         mapScale, mapOffsetX, mapOffsetY
