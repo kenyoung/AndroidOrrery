@@ -51,8 +51,6 @@ private const val HYBRID_SOLAR_ECLIPSE = 3
 private const val EARTH_FLATTENING_SE = 1.0 / 298.257223563
 private const val DEG_TO_RAD = Math.PI / 180.0
 private const val RAD_TO_DEG = 180.0 / Math.PI
-private const val SECONDS_PER_DAY_SE = 86400.0
-private const val UNIX_EPOCH_JD_SE = 2440587.5
 
 // Colors for eclipse types
 private val TotalColor = Color(0xFF00FF00)     // Green
@@ -1353,7 +1351,9 @@ private fun renderSolarEclipseUpperArea(
     val infoHeight = lineH * infoLines + lineH * 0.5f
 
     // Layout: info text at top, geometry diagram fills remaining space below
-    val geomHeight = (h - infoHeight) * 0.7f
+    val isTotal = circ.maxObscuration >= 0.999 && totalEclipseBitmap != null
+    // Total eclipse photo uses full remaining space; geometry diagram uses 70%
+    val geomHeight = if (isTotal) h - infoHeight else (h - infoHeight) * 0.7f
     val geomTop = h - geomHeight
 
     drawScope.drawIntoCanvas { canvas ->
@@ -1509,21 +1509,6 @@ private fun drawEclipseGeometry(
     val circ = data.circumstances
     val cx = width / 2f
     val cy = top + height / 2f
-
-    // Sun disk radius (pixels)
-    val sunR = (height * 0.35f).coerceAtMost(width * 0.2f)
-
-    // Moon/Sun angular size ratio from Besselian elements at maximum eclipse
-    // L1 ≈ semi_sun + semi_moon, L2 ≈ semi_sun - semi_moon (in Earth radii on fundamental plane)
-    val l1Mid = eclipse.evalPoly(eclipse.l1, 0.0)
-    val l2Mid = eclipse.evalPoly(eclipse.l2, 0.0)
-    val k = if (l1Mid + l2Mid != 0.0) abs(l1Mid - l2Mid) / (l1Mid + l2Mid) else 1.0
-    val moonR = (sunR * k).toFloat()
-
-    // Distance between centers (proportional to magnitude)
-    // At maximum, distance = sunR + moonR - 2 * sunR * magnitude (for Sun radius = 1)
-    val mag = circ.maxMagnitude
-
     val isTotal = circ.maxObscuration >= 0.999 && totalEclipseBitmap != null
 
     // Background
@@ -1535,11 +1520,10 @@ private fun drawEclipseGeometry(
 
     // If total at observer's location, show the photograph instead of the drawing
     if (isTotal) {
-        // Scale the image to fit the same area the drawing would occupy (2 * sunR * 1.3)
-        val displayDiameter = (sunR * 2.6f).toInt()
+        // Scale so image height fills 90% of available vertical space
         val bmpW = totalEclipseBitmap.width
         val bmpH = totalEclipseBitmap.height
-        val scale = displayDiameter.toFloat() / maxOf(bmpW, bmpH)
+        val scale = (height * 0.9f) / bmpH
         val dstW = (bmpW * scale).toInt()
         val dstH = (bmpH * scale).toInt()
 
@@ -1554,6 +1538,17 @@ private fun drawEclipseGeometry(
             dstSize = IntSize(dstW, dstH)
         )
     } else {
+        // Sun disk radius (pixels)
+        val sunR = (height * 0.35f).coerceAtMost(width * 0.2f)
+
+        // Moon/Sun angular size ratio from Besselian elements at maximum eclipse
+        // L1 ≈ semi_sun + semi_moon, L2 ≈ semi_sun - semi_moon (in Earth radii on fundamental plane)
+        val l1Mid = eclipse.evalPoly(eclipse.l1, 0.0)
+        val l2Mid = eclipse.evalPoly(eclipse.l2, 0.0)
+        val k = if (l1Mid + l2Mid != 0.0) abs(l1Mid - l2Mid) / (l1Mid + l2Mid) else 1.0
+        val moonR = (sunR * k).toFloat()
+
+        val mag = circ.maxMagnitude
         val separation = if (mag > 0) {
             ((1.0 + k - 2.0 * mag) * sunR).toFloat()
         } else {
@@ -1610,17 +1605,18 @@ private fun drawWorldMap(
     offsetX: Float = 0f,
     offsetY: Float = 0f
 ) {
-    // Map dimensions (2:1 aspect ratio for equirectangular)
-    val mw = mapWidth
-    val mh = mapHeight.coerceAtMost(mw / 2f)
+    // Map dimensions (enforce 2:1 aspect ratio for equirectangular)
+    val mh = mapHeight.coerceAtMost(mapWidth / 2f)
+    val mw = mh * 2f
+    val mLeft = (mapWidth - mw) / 2f
     val mTop = mapTop + (mapHeight - mh) / 2f
 
     // Clip to the map area, then apply zoom/pan transform
     drawScope.drawIntoCanvas { canvas ->
         canvas.nativeCanvas.save()
-        canvas.nativeCanvas.clipRect(0f, mapTop, mapWidth, mapTop + mapHeight)
+        canvas.nativeCanvas.clipRect(mLeft, mapTop, mLeft + mw, mapTop + mapHeight)
         // Scale around center of map area, then apply pan offset
-        val cx = mw / 2f
+        val cx = mLeft + mw / 2f
         val cy = mTop + mh / 2f
         canvas.nativeCanvas.translate(cx + offsetX, cy + offsetY)
         canvas.nativeCanvas.scale(scale, scale)
@@ -1630,12 +1626,12 @@ private fun drawWorldMap(
     // Background
     drawScope.drawRect(
         Color(0xFF000040),
-        topLeft = Offset(0f, mTop),
+        topLeft = Offset(mLeft, mTop),
         size = androidx.compose.ui.geometry.Size(mw, mh)
     )
 
     // Coordinate conversion helpers
-    fun lonToX(lon: Double): Float = ((lon + 180.0) / 360.0 * mw).toFloat()
+    fun lonToX(lon: Double): Float = ((lon + 180.0) / 360.0 * mw + mLeft).toFloat()
     fun latToY(lat: Double): Float = ((90.0 - lat) / 180.0 * mh + mTop).toFloat()
 
     // Draw penumbral visibility region (only when eclipse is not visible locally)
@@ -1742,8 +1738,8 @@ private fun drawWorldMap(
     // Draw equator and prime meridian (subtle guides)
     drawScope.drawLine(
         Color(0xFF333333),
-        Offset(0f, latToY(0.0)),
-        Offset(mw, latToY(0.0)),
+        Offset(mLeft, latToY(0.0)),
+        Offset(mLeft + mw, latToY(0.0)),
         strokeWidth = 0.5f
     )
     drawScope.drawLine(
@@ -1773,7 +1769,7 @@ private fun drawWorldMap(
     // Map border (drawn without transform so it stays crisp)
     drawScope.drawRect(
         Color(0xFF555555),
-        topLeft = Offset(0f, mTop),
+        topLeft = Offset(mLeft, mTop),
         size = androidx.compose.ui.geometry.Size(mw, mh),
         style = Stroke(width = 1f)
     )
