@@ -80,5 +80,7 @@ Data covers 2021-01-01 to 2031-01-01 at 6-hour resolution.
 
 Uses Compose `Canvas` with `drawIntoCanvas { canvas.nativeCanvas... }` for custom astronomical graphics. Gestural input via `pointerInput()` for pan/zoom on applicable screens.
 
+When adding a new feature, or fixing a bug, create a git branch first. Then work on changes to that branch until you are asked to merge it.
+
 Don't compile, build or run the app. Builds and testing will be done in Android Studio/
 Ask questions before generating new code if a prompt is unclear or ambiguous
