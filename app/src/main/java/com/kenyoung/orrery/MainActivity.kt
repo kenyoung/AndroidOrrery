@@ -101,8 +101,8 @@ class MainActivity : ComponentActivity() {
 // Navigation Enum
 enum class Screen {
     TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
-    JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE, CONSTELLATIONS,
-    TIMES, ANALEMMA, METEOR_SHOWERS
+    SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE,
+    CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -400,6 +400,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
                             "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
+                            "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Saturn" to Screen.SATURN,
@@ -469,6 +470,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
                     Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
+                    Screen.SOLAR_ECLIPSES -> SolarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
                     Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
