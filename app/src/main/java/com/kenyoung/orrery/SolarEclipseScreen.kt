@@ -156,7 +156,8 @@ private class SolarEclipseRenderData(
     val circumstances: LocalCircumstances,
     val centralPath: List<Pair<Float, Float>>,   // (lat, lon) in degrees
     val eclipseJD: Double,                        // JD of greatest eclipse (UT)
-    val eclipseUTHours: Double                    // UT hours of greatest eclipse
+    val eclipseUTHours: Double,                   // UT hours of greatest eclipse
+    val visibilityRegion: List<Triple<Float, Float, Float>> // (lat, lon, cellSize) in degrees
 )
 
 // ============================================================================
@@ -592,7 +593,7 @@ private fun computeObscuration(mag: Double, k: Double): Double {
 
 /**
  * Quick check: is this eclipse potentially visible from the given location?
- * Uses a simplified check on Sun altitude at greatest eclipse time.
+ * Scans ±4 hours from T0 in 10-minute steps for penumbral contact with Sun up.
  */
 private fun isEclipseLocallyVisible(
     eclipse: SolarEclipse,
@@ -601,15 +602,17 @@ private fun isEclipseLocallyVisible(
 ): Boolean {
     val obs = GeocentricObserver(latDeg)
 
-    // Check at T0 (close to greatest eclipse) and ±1 hour
-    for (dt in listOf(-1.0, -0.5, 0.0, 0.5, 1.0)) {
-        val result = shadowDistance(eclipse, dt, obs, lonDeg, latDeg)
+    // Scan ±4 hours in 10-minute steps (matches findContact range)
+    var t = -4.0
+    while (t <= 4.0) {
+        val result = shadowDistance(eclipse, t, obs, lonDeg, latDeg)
         val delta = result[0]
         val l1 = result[1]
         val sunAlt = result[3]
 
         // Eclipse visible if observer is within penumbral shadow and Sun is up
         if (delta < l1 && sunAlt > 0.0) return true
+        t += 10.0 / 60.0
     }
     return false
 }
@@ -663,6 +666,104 @@ private fun computeCentralPath(eclipse: SolarEclipse): List<Pair<Float, Float>> 
 }
 
 /**
+ * Check whether the eclipse is visible from (latDeg, lonDeg).
+ * Scans t from -4 to +4 hours looking for penumbral contact while the Sun is up.
+ * timeStep controls resolution: 0.25h (15 min) for coarse scan, finer for boundaries.
+ */
+private fun isPointVisible(
+    eclipse: SolarEclipse,
+    obs: GeocentricObserver,
+    latDeg: Double,
+    lonDeg: Double,
+    timeStep: Double = 0.25
+): Boolean {
+    var t = -4.0
+    while (t <= 4.0) {
+        val sd = shadowDistance(eclipse, t, obs, lonDeg, latDeg)
+        if (sd[0] < sd[1] && sd[3] > 0.0) return true
+        t += timeStep
+    }
+    return false
+}
+
+/**
+ * Compute visibility region with adaptive refinement at boundaries.
+ * Returns list of (lat, lon, cellSize) triples. Interior cells are 2°;
+ * boundary cells are subdivided to 0.5° for smoother edges.
+ */
+private fun computeVisibilityRegion(eclipse: SolarEclipse): List<Triple<Float, Float, Float>> {
+    val coarseStep = 2
+    val nLat = (180 / coarseStep) + 1  // -90 to 90 inclusive
+    val nLon = 360 / coarseStep        // -180 to 178 inclusive
+
+    // Coarse pass: build boolean grid
+    val grid = Array(nLat) { BooleanArray(nLon) }
+    val observers = Array(nLat) { i -> GeocentricObserver((-90 + i * coarseStep).toDouble()) }
+
+    for (i in 0 until nLat) {
+        val latDeg = (-90 + i * coarseStep).toDouble()
+        for (j in 0 until nLon) {
+            val lonDeg = (-180 + j * coarseStep).toDouble()
+            grid[i][j] = isPointVisible(eclipse, observers[i], latDeg, lonDeg)
+        }
+    }
+
+    // Identify boundary cells: visible cells with at least one non-visible neighbor,
+    // or non-visible cells with at least one visible neighbor
+    val isBoundary = Array(nLat) { BooleanArray(nLon) }
+    for (i in 0 until nLat) {
+        for (j in 0 until nLon) {
+            val v = grid[i][j]
+            for (di in -1..1) {
+                for (dj in -1..1) {
+                    if (di == 0 && dj == 0) continue
+                    val ni = i + di
+                    val nj = (j + dj + nLon) % nLon  // wrap longitude
+                    if (ni in 0 until nLat && grid[ni][nj] != v) {
+                        isBoundary[i][j] = true
+                    }
+                }
+            }
+        }
+    }
+
+    // Build result: interior visible cells at 2°, boundary cells refined to 0.5°
+    val result = mutableListOf<Triple<Float, Float, Float>>()
+    val fineStep = 0.5
+
+    for (i in 0 until nLat) {
+        val coarseLat = (-90 + i * coarseStep).toDouble()
+        for (j in 0 until nLon) {
+            val coarseLon = (-180 + j * coarseStep).toDouble()
+
+            if (!isBoundary[i][j]) {
+                // Interior: emit single coarse cell if visible
+                if (grid[i][j]) {
+                    result.add(Triple(coarseLat.toFloat(), coarseLon.toFloat(), coarseStep.toFloat()))
+                }
+            } else {
+                // Boundary: subdivide into 0.5° sub-cells with finer time steps (3 min)
+                // to avoid quantization artifacts at east/west edges
+                var subLat = coarseLat
+                while (subLat < coarseLat + coarseStep - 0.01) {
+                    val subObs = GeocentricObserver(subLat)
+                    var subLon = coarseLon
+                    while (subLon < coarseLon + coarseStep - 0.01) {
+                        if (isPointVisible(eclipse, subObs, subLat, subLon, timeStep = 0.05)) {
+                            result.add(Triple(subLat.toFloat(), subLon.toFloat(), fineStep.toFloat()))
+                        }
+                        subLon += fineStep
+                    }
+                    subLat += fineStep
+                }
+            }
+        }
+    }
+
+    return result
+}
+
+/**
  * Compute render data for the selected eclipse.
  */
 private fun computeRenderData(
@@ -676,8 +777,9 @@ private fun computeRenderData(
         if (it < 0) it + 24.0 else if (it >= 24.0) it - 24.0 else it
     }
     val eclipseJD = tToJD(eclipse, 0.0)
+    val visibilityRegion = if (circumstances.isVisible) emptyList() else computeVisibilityRegion(eclipse)
 
-    return SolarEclipseRenderData(circumstances, centralPath, eclipseJD, eclipseUTHours)
+    return SolarEclipseRenderData(circumstances, centralPath, eclipseJD, eclipseUTHours, visibilityRegion)
 }
 
 // ============================================================================
@@ -1079,6 +1181,16 @@ private fun SolarEclipseDetailView(
                     )
                 }
 
+                // Visibility hint above map when eclipse is not visible locally
+                if (!renderData.circumstances.isVisible) {
+                    Text(
+                        text = "The eclipse is visible in the light blue region.",
+                        color = Color(0xFF6699CC),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+                    )
+                }
+
                 // Lower area: world map with pinch-to-zoom
                 Canvas(
                     modifier = Modifier
@@ -1233,7 +1345,7 @@ private fun renderSolarEclipseUpperArea(
 
     // Count info lines to compute layout
     var infoLines = 7 // date, global header, max eclipse, saros/width, local header, local type, obscuration
-    if (circ.maxMagnitude <= 0.0) infoLines = 7 // last line becomes "not visible"
+    if (circ.maxMagnitude <= 0.0 || !circ.isVisible) infoLines = 7 // last line becomes "not visible"
     if (!circ.c1.isNaN()) infoLines++
     if (!circ.c2.isNaN()) infoLines++
     if (!circ.c3.isNaN()) infoLines++
@@ -1311,7 +1423,7 @@ private fun renderSolarEclipseUpperArea(
         yPos += lineH
 
         // Line 6: Local eclipse type
-        if (circ.maxMagnitude <= 0.0) {
+        if (circ.maxMagnitude <= 0.0 || !circ.isVisible) {
             valuePaint.color = Color.Red.toArgb()
             nativeCanvas.drawText("Eclipse not visible from this location", x, yPos, valuePaint)
             valuePaint.color = whiteArgb
@@ -1373,8 +1485,10 @@ private fun renderSolarEclipseUpperArea(
         }
     }
 
-    // === ECLIPSE GEOMETRY DIAGRAM ===
-    drawEclipseGeometry(drawScope, eclipse, data, geomTop, geomHeight, w, totalEclipseBitmap)
+    // === ECLIPSE GEOMETRY DIAGRAM (only when locally visible) ===
+    if (circ.maxMagnitude > 0.0 && circ.isVisible) {
+        drawEclipseGeometry(drawScope, eclipse, data, geomTop, geomHeight, w, totalEclipseBitmap)
+    }
 }
 
 // ============================================================================
@@ -1524,6 +1638,23 @@ private fun drawWorldMap(
     // Coordinate conversion helpers
     fun lonToX(lon: Double): Float = ((lon + 180.0) / 360.0 * mw).toFloat()
     fun latToY(lat: Double): Float = ((90.0 - lat) / 180.0 * mh + mTop).toFloat()
+
+    // Draw penumbral visibility region (only when eclipse is not visible locally)
+    if (!data.circumstances.isVisible && data.visibilityRegion.isNotEmpty()) {
+        val visColor = Color(0xFF6699CC)
+        for ((lat, lon, cellSize) in data.visibilityRegion) {
+            val cs = cellSize.toDouble()
+            val x = lonToX(lon.toDouble())
+            val y = latToY(lat.toDouble() + cs)  // top edge (higher lat = lower y)
+            val cellW = (cs / 360.0 * mw).toFloat()
+            val cellH = (cs / 180.0 * mh).toFloat()
+            drawScope.drawRect(
+                visColor,
+                topLeft = Offset(x, y),
+                size = androidx.compose.ui.geometry.Size(cellW, cellH)
+            )
+        }
+    }
 
     // Draw shoreline
     val shoreColor = Color.White
