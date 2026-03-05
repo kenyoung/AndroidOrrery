@@ -1454,14 +1454,16 @@ private fun renderSolarEclipseUpperArea(
             if (!circ.c2.isNaN()) {
                 val c2Str = formatJDTime(circ.c2, timeOffset)
                 val elStr = if (!circ.sunAltC2.isNaN()) " El ${"%.0f".format(circ.sunAltC2)}°" else ""
-                nativeCanvas.drawLabelValue("C2 totality begins: ", "$c2Str $timeSuffix$elStr", x, yPos)
+                val c2Phase = if (eclipse.eclipseType == ANNULAR_SOLAR_ECLIPSE) "annular" else "totality"
+                nativeCanvas.drawLabelValue("C2 $c2Phase begins: ", "$c2Str $timeSuffix$elStr", x, yPos)
                 yPos += lineH
             }
             // C3
             if (!circ.c3.isNaN()) {
                 val c3Str = formatJDTime(circ.c3, timeOffset)
                 val elStr = if (!circ.sunAltC3.isNaN()) " El ${"%.0f".format(circ.sunAltC3)}°" else ""
-                nativeCanvas.drawLabelValue("C3 totality ends: ", "$c3Str $timeSuffix$elStr", x, yPos)
+                val c3Phase = if (eclipse.eclipseType == ANNULAR_SOLAR_ECLIPSE) "annular" else "totality"
+                nativeCanvas.drawLabelValue("C3 $c3Phase ends: ", "$c3Str $timeSuffix$elStr", x, yPos)
                 yPos += lineH
             }
             // C4
