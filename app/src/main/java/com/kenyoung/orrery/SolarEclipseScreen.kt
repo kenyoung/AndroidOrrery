@@ -664,6 +664,49 @@ private fun computeCentralPath(eclipse: SolarEclipse): List<Pair<Float, Float>> 
 }
 
 /**
+ * Compute the current position of the umbral/antumbral shadow on Earth.
+ * Returns (lat, lon, isTotal) or null if the central shadow is not on Earth.
+ */
+private fun computeCurrentShadowPosition(
+    eclipse: SolarEclipse,
+    now: Instant
+): Triple<Float, Float, Boolean>? {
+    if (eclipse.eclipseType == PARTIAL_SOLAR_ECLIPSE) return null
+
+    // Convert current time to t (hours from T0)
+    val currentJD = now.epochSecond.toDouble() / 86400.0 + 2440587.5
+    val t0JD = tToJD(eclipse, 0.0)
+    val t = (currentJD - t0JD) * 24.0
+
+    if (t < -3.0 || t > 3.0) return null
+
+    val xVal = eclipse.evalPoly(eclipse.x, t)
+    val yVal = eclipse.evalPoly(eclipse.y, t)
+    val dVal = eclipse.evalPoly(eclipse.d, t)
+    val l2Val = eclipse.evalPoly(eclipse.l2, t)
+
+    val r2 = xVal * xVal + yVal * yVal
+    if (r2 >= 1.0) return null
+
+    val zeta = sqrt(1.0 - r2)
+    val dRad = dVal * DEG_TO_RAD
+    val sinD = sin(dRad)
+    val cosD = cos(dRad)
+
+    val sinPhi = yVal * cosD + zeta * sinD
+    val phi = asin(sinPhi.coerceIn(-1.0, 1.0)) * RAD_TO_DEG
+
+    val muVal = eclipse.evalPoly(eclipse.mu, t)
+    val hRad = atan2(xVal, zeta * cosD - yVal * sinD)
+    var lon = hRad * RAD_TO_DEG - muVal
+    while (lon > 180.0) lon -= 360.0
+    while (lon < -180.0) lon += 360.0
+
+    val isTotal = l2Val < 0.0
+    return Triple(phi.toFloat(), lon.toFloat(), isTotal)
+}
+
+/**
  * Check whether the eclipse is visible from (latDeg, lonDeg).
  * Scans t from -4 to +4 hours looking for penumbral contact while the Sun is up.
  * timeStep controls resolution: 0.25h (15 min) for coarse scan, finer for boundaries.
@@ -764,6 +807,35 @@ private fun computeVisibilityRegion(eclipse: SolarEclipse): List<Triple<Float, F
 /**
  * Compute render data for the selected eclipse.
  */
+/**
+ * Find the time t (hours from T0) of greatest eclipse — when the shadow axis
+ * is closest to Earth's center (minimum of x² + y²).
+ */
+private fun findGreatestEclipseT(eclipse: SolarEclipse): Double {
+    var bestT = 0.0
+    var bestR2 = Double.MAX_VALUE
+    // Coarse scan: 36-second steps
+    var t = -3.0
+    while (t <= 3.0) {
+        val x = eclipse.evalPoly(eclipse.x, t)
+        val y = eclipse.evalPoly(eclipse.y, t)
+        val r2 = x * x + y * y
+        if (r2 < bestR2) { bestR2 = r2; bestT = t }
+        t += 0.01
+    }
+    // Refine: 1-second steps around the best
+    t = bestT - 0.01
+    val tEnd = bestT + 0.01
+    while (t <= tEnd) {
+        val x = eclipse.evalPoly(eclipse.x, t)
+        val y = eclipse.evalPoly(eclipse.y, t)
+        val r2 = x * x + y * y
+        if (r2 < bestR2) { bestR2 = r2; bestT = t }
+        t += 1.0 / 3600.0
+    }
+    return bestT
+}
+
 private fun computeRenderData(
     eclipse: SolarEclipse,
     latDeg: Double,
@@ -771,10 +843,11 @@ private fun computeRenderData(
 ): SolarEclipseRenderData {
     val circumstances = computeLocalCircumstances(eclipse, latDeg, lonDeg)
     val centralPath = computeCentralPath(eclipse)
-    val eclipseUTHours = (eclipse.t0Hours() - eclipse.deltaT.toDouble() / 3600.0).let {
+    val greatestT = findGreatestEclipseT(eclipse)
+    val eclipseUTHours = (eclipse.t0Hours() + greatestT - eclipse.deltaT.toDouble() / 3600.0).let {
         if (it < 0) it + 24.0 else if (it >= 24.0) it - 24.0 else it
     }
-    val eclipseJD = tToJD(eclipse, 0.0)
+    val eclipseJD = tToJD(eclipse, greatestT)
     val visibilityRegion = if (circumstances.isVisible) emptyList() else computeVisibilityRegion(eclipse)
 
     return SolarEclipseRenderData(circumstances, centralPath, eclipseJD, eclipseUTHours, visibilityRegion)
@@ -861,6 +934,7 @@ fun SolarEclipseScreen(
             shoreline = shoreline ?: emptyList(),
             latitude = latitude,
             longitude = longitude,
+            now = now,
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
             useStandardTime = useStandardTime,
@@ -1127,6 +1201,7 @@ private fun SolarEclipseDetailView(
     shoreline: List<ShoreSegmentSE>,
     latitude: Double,
     longitude: Double,
+    now: Instant,
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useStandardTime: Boolean,
@@ -1135,6 +1210,11 @@ private fun SolarEclipseDetailView(
 ) {
     val context = LocalContext.current
     var renderData by remember { mutableStateOf<SolarEclipseRenderData?>(null) }
+
+    // Compute current shadow position (recomputes when now changes)
+    val shadowPos = remember(eclipse, now) {
+        computeCurrentShadowPosition(eclipse, now)
+    }
 
     val totalEclipseBitmap = remember {
         context.assets.open("TotalSolarEclipse.png").use { inputStream ->
@@ -1212,7 +1292,8 @@ private fun SolarEclipseDetailView(
                         this, eclipse, data, shoreline,
                         latitude, longitude,
                         0f, size.height, size.width,
-                        mapScale, mapOffsetX, mapOffsetY
+                        mapScale, mapOffsetX, mapOffsetY,
+                        shadowPos
                     )
                 }
 
@@ -1345,6 +1426,7 @@ private fun renderSolarEclipseUpperArea(
     if (circ.maxMagnitude <= 0.0 || !circ.isVisible) infoLines = 7 // last line becomes "not visible"
     if (!circ.c1.isNaN()) infoLines++
     if (!circ.c2.isNaN()) infoLines++
+    if (!circ.mid.isNaN()) infoLines++
     if (!circ.c3.isNaN()) infoLines++
     if (!circ.c4.isNaN()) infoLines++
     if (circ.duration > 0.0) infoLines++
@@ -1456,6 +1538,13 @@ private fun renderSolarEclipseUpperArea(
                 val elStr = if (!circ.sunAltC2.isNaN()) " El ${"%.0f".format(circ.sunAltC2)}°" else ""
                 val c2Phase = if (eclipse.eclipseType == ANNULAR_SOLAR_ECLIPSE) "annular" else "totality"
                 nativeCanvas.drawLabelValue("C2 $c2Phase begins: ", "$c2Str $timeSuffix$elStr", x, yPos)
+                yPos += lineH
+            }
+            // Mid Eclipse
+            if (!circ.mid.isNaN()) {
+                val midStr = formatJDTime(circ.mid, timeOffset)
+                val elStr = if (!circ.sunAltMid.isNaN()) " El ${"%.0f".format(circ.sunAltMid)}°" else ""
+                nativeCanvas.drawLabelValue("Mid Eclipse: ", "$midStr $timeSuffix$elStr", x, yPos)
                 yPos += lineH
             }
             // C3
@@ -1605,7 +1694,8 @@ private fun drawWorldMap(
     mapWidth: Float,
     scale: Float = 1f,
     offsetX: Float = 0f,
-    offsetY: Float = 0f
+    offsetY: Float = 0f,
+    shadowPos: Triple<Float, Float, Boolean>? = null  // (lat, lon, isTotal) of current shadow
 ) {
     // Map dimensions (enforce 2:1 aspect ratio for equirectangular)
     val mh = mapHeight.coerceAtMost(mapWidth / 2f)
@@ -1762,6 +1852,21 @@ private fun drawWorldMap(
     // Red crosshair
     drawScope.drawLine(Color.Red, Offset(obsX - 8f, obsY), Offset(obsX + 8f, obsY), strokeWidth = 1f)
     drawScope.drawLine(Color.Red, Offset(obsX, obsY - 8f), Offset(obsX, obsY + 8f), strokeWidth = 1f)
+
+    // Draw current shadow position dot (on top of observer marker)
+    if (shadowPos != null) {
+        val (sLat, sLon, isTotal) = shadowPos
+        val sx = lonToX(sLon.toDouble())
+        val sy = latToY(sLat.toDouble())
+        val shadowCenter = Offset(sx, sy)
+        if (isTotal) {
+            drawScope.drawCircle(Color.Black, radius = 5f, center = shadowCenter)
+        } else {
+            // Annular: yellow circle with black center
+            drawScope.drawCircle(Color.Yellow, radius = 5f, center = shadowCenter)
+            drawScope.drawCircle(Color.Black, radius = 2.5f, center = shadowCenter)
+        }
+    }
 
     // Restore canvas state (undo clip + transform)
     drawScope.drawIntoCanvas { canvas ->
