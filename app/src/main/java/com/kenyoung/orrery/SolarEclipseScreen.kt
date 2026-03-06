@@ -1864,7 +1864,7 @@ private fun drawWorldMap(
         } else {
             // Annular: yellow circle with black center
             drawScope.drawCircle(Color.Yellow, radius = 5f, center = shadowCenter)
-            drawScope.drawCircle(Color.Black, radius = 2.5f, center = shadowCenter)
+            drawScope.drawCircle(Color.Black, radius = 3.75f, center = shadowCenter)
         }
     }
 
