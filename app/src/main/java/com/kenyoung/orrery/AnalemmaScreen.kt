@@ -110,7 +110,7 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
 
         val yPadDegrees = 5.0
         var maxAltGraph = (maxAltPossible + yPadDegrees).coerceAtMost(90.0)
-        var minAltGraph = (minAltPossible - yPadDegrees).coerceAtLeast(-10.0)
+        val minAltGraph = (minAltPossible - yPadDegrees).coerceAtLeast(-10.0)
 
         if (minAltGraph >= maxAltGraph) {
             maxAltGraph = minAltGraph + 10.0

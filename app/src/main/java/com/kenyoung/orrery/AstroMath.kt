@@ -582,7 +582,7 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
 
 private fun refineTransit(bodyName: String, tInitial: Double, lon: Double): Double {
     var tGuess = tInitial
-    for (i in 0..4) {
+    repeat(5) {
         val jd = tGuess + UNIX_EPOCH_JD
         val state = AstroEngine.getBodyState(bodyName, jd)
         val (appRa, _) = j2000ToApparent(state.ra, state.dec, jd)
@@ -597,7 +597,7 @@ private fun refineTransit(bodyName: String, tInitial: Double, lon: Double): Doub
 private fun refineRiseSet(getAlt: (Double) -> Double, tTransit: Double, targetAlt: Double, lat: Double, isRise: Boolean): Double {
     var t = tTransit + if (isRise) -0.25 else 0.25
     val rateSign = if (isRise) 1.0 else -1.0
-    for (i in 0..9) {
+    for (_i in 0..9) {
         val alt = getAlt(t)
         val diff = alt - targetAlt
         val rate = rateSign * 360.0 * cos(Math.toRadians(lat))
@@ -718,7 +718,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 
     fun refineAltCrossing(tLo: Double, tHi: Double, rising: Boolean): Double {
         var lo = tLo; var hi = tHi
-        for (i in 0..15) {
+        repeat(16) {
             val mid = (lo + hi) / 2.0
             if ((getMoonState(mid).first < 0) == rising) lo = mid else hi = mid
         }
@@ -727,7 +727,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 
     fun refineHACrossing(tLo: Double, tHi: Double): Double {
         var lo = tLo; var hi = tHi
-        for (i in 0..15) {
+        repeat(16) {
             val mid = (lo + hi) / 2.0
             if (getMoonState(mid).second < 0) lo = mid else hi = mid
         }

@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
+private const val GALACTIC_CENTER_ANGLE = 266.85
+private const val CMB_DIPOLE_ANGLE = 171.67
+
 private fun buildOrbitPath(
     p: PlanetElements, cx: Float, cy: Float, pixelsPerAU: Float, steps: Int = 360
 ): androidx.compose.ui.graphics.Path {
@@ -224,7 +227,7 @@ fun ScaleOrrery(epochDay: Double) {
             if (vernalBoundsInitial.left < 0) vernalBaseX -= vernalBoundsInitial.left
             val vernalActualBounds = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
 
-            val gcRef = computeArrowBounds(0f, 0f, 266.85, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
+            val gcRef = computeArrowBounds(0f, 0f, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
             val gcBaseX = w - margin - gcRef.right
             val gcBaseY = h - margin - gcRef.bottom
             val gcActualBounds = android.graphics.RectF(
@@ -232,7 +235,7 @@ fun ScaleOrrery(epochDay: Double) {
                 gcBaseX + gcRef.right, gcBaseY + gcRef.bottom
             )
 
-            val cmbRef = computeArrowBounds(0f, 0f, 171.67, "To CMB", "Dipole", arrowLen, labelPaint)
+            val cmbRef = computeArrowBounds(0f, 0f, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, labelPaint)
             val cmbBaseX = margin - cmbRef.left
             val cmbBaseY = h - margin - cmbRef.bottom
             val cmbActualBounds = android.graphics.RectF(
@@ -303,8 +306,8 @@ fun ScaleOrrery(epochDay: Double) {
             val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
 
             drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint)
-            drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
-            drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
+            drawArbitraryArrow(gcBaseX, gcBaseY, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
+            drawArbitraryArrow(cmbBaseX, cmbBaseY, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
 
             if (!hasZoomed) {
                 drawIntoCanvas { canvas ->
@@ -368,7 +371,7 @@ fun SchematicOrrery(epochDay: Double) {
         if (vernalBoundsInitial.left < 0) vernalBaseX -= vernalBoundsInitial.left
         val vernalActualBounds = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
 
-        val gcRef = computeArrowBounds(0f, 0f, 266.85, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
+        val gcRef = computeArrowBounds(0f, 0f, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
         val gcBaseX = w - margin - gcRef.right
         val gcBaseY = h - margin - gcRef.bottom
         val gcActualBounds = android.graphics.RectF(
@@ -376,7 +379,7 @@ fun SchematicOrrery(epochDay: Double) {
             gcBaseX + gcRef.right, gcBaseY + gcRef.bottom
         )
 
-        val cmbRef = computeArrowBounds(0f, 0f, 171.67, "To CMB", "Dipole", arrowLen, labelPaint)
+        val cmbRef = computeArrowBounds(0f, 0f, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, labelPaint)
         val cmbBaseX = margin - cmbRef.left
         val cmbBaseY = h - margin - cmbRef.bottom
         val cmbActualBounds = android.graphics.RectF(
@@ -443,8 +446,8 @@ fun SchematicOrrery(epochDay: Double) {
         val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
 
         drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint)
-        drawArbitraryArrow(gcBaseX, gcBaseY, 266.85, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
-        drawArbitraryArrow(cmbBaseX, cmbBaseY, 171.67, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
+        drawArbitraryArrow(gcBaseX, gcBaseY, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
+        drawArbitraryArrow(cmbBaseX, cmbBaseY, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
 
         drawIntoCanvas { canvas ->
             val savedAlign = labelPaint.textAlign

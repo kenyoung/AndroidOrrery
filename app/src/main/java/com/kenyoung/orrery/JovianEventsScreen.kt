@@ -31,6 +31,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private const val MINUTE_IN_DAYS = 1.0 / 1440.0
+
 // --- DATA CLASSES ---
 
 enum class JovEventPixel {
@@ -142,7 +144,6 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
                 val dateHeaderHeight = 60f
                 val bottomPadding = 20f
                 val textSizeContent = 40f
-                val headerLabelColor = LabelColor
                 val dateLabelColor = LabelColor
                 val textGray = Color.Gray
                 val textGreen = Color(0xFF00FF00)
@@ -271,7 +272,7 @@ private suspend fun generateJovianEvents(startMJD: Double, nowInstant: Instant, 
     val nowMJD = (nowInstant.toEpochMilli() / MILLIS_PER_DAY) + UNIX_EPOCH_JD - MJD_OFFSET
     // Increase range to 3 days to check if they fit
     val endMJD = startMJD + 3.0
-    val stepSize = 1.0 / 1440.0
+    val stepSize = MINUTE_IN_DAYS
     val rawEvents = mutableListOf<RawEvent>()
 
     var tMJD = startMJD
@@ -388,13 +389,11 @@ private fun getCompleteSystemState(jd: Double): Map<String, MoonCompleteState> {
     val xShiftPerZ = shadowSign * shadowFactor
 
     val resultMap = mutableMapOf<String, MoonCompleteState>()
-    val moonRadii = mapOf("Io" to 0.0255, "Europa" to 0.0218, "Ganymede" to 0.0368, "Callisto" to 0.0337)
-
     val yScale = 16.0 / 15.0 // Jupiter equatorial/polar radius ratio
 
     for ((name, vec) in moonsMap) {
         val x = vec.x; val y = vec.y; val z = -vec.z // Invert Z
-        val mRad = moonRadii[name] ?: 0.0
+        val mRad = jovianMoonRadii[name] ?: 0.0
         val limitSq = (1.0 + mRad).pow(2)
 
         val yScaled = y * yScale
@@ -427,7 +426,7 @@ private fun getAltitude(jd: Double, body: String, lat: Double, lon: Double): Dou
 
 private fun refineTimeMJD(tMJD_before: Double, moon: String, typeIdx: Int): Double {
     var low = tMJD_before
-    var high = tMJD_before + (1.0/1440.0)
+    var high = tMJD_before + MINUTE_IN_DAYS
     for (i in 0..12) {
         val mid = (low + high) / 2.0
         val s = getSystemStateMJD(mid)[moon]!!

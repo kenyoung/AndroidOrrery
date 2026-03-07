@@ -6,6 +6,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.*
 
+private const val JUPITER_FLATTENING = 0.06487
+val jovianMoonRadii = mapOf("Io" to 0.0255, "Europa" to 0.0218, "Ganymede" to 0.0368, "Callisto" to 0.0337)
+
 val jovianCreamColor = Color(0xFFFDEEBD)
 val jovianMoonColors = mapOf(
     "Io" to Color.Red,
@@ -42,10 +45,7 @@ fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
     val xShiftPerZ = shadowSign * shadowFactor
 
     val resultMap = mutableMapOf<String, MoonPosHighPrec>()
-    val FLATTENING = 0.06487
-    val yScale = 1.0 / (1.0 - FLATTENING)
-
-    val moonRadii = mapOf("Io" to 0.0255, "Europa" to 0.0218, "Ganymede" to 0.0368, "Callisto" to 0.0337)
+    val yScale = 1.0 / (1.0 - JUPITER_FLATTENING)
 
     for ((name, pos) in moons) {
         val x = pos.x
@@ -58,7 +58,7 @@ fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
         val sDistSq = sX * sX + sYScaled * sYScaled
         val shadowOnDisk = (z > 0) && (sDistSq < 1.0)
 
-        val mRad = moonRadii[name] ?: 0.0
+        val mRad = jovianMoonRadii[name] ?: 0.0
         val cX = -(z * xShiftPerZ)
         val cY = 0.0
         val distEclipseSq = (x - cX).pow(2) + ((y - cY) * yScale).pow(2)
@@ -83,9 +83,8 @@ fun DrawScope.drawJovianSystem(
     val maxElongationRadii = 32.0
     val topScalePxPerRad = ((availableWidth * 1.15f) / (2 * maxElongationRadii)).toFloat()
 
-    val jFlatFactor = 0.06487
     val jW = topScalePxPerRad * 2f
-    val jH = jW * (1.0 - jFlatFactor).toFloat()
+    val jH = jW * (1.0 - JUPITER_FLATTENING).toFloat()
 
     val currentPos = calculateHighPrecisionPositions(jd)
 

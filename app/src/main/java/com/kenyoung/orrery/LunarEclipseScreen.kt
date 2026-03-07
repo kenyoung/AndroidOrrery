@@ -260,7 +260,7 @@ private fun computeEclipseRenderData(
         )
         if (prevUp && !currUp && moonsetTJD == null) {
             var lo = tJD - searchStep; var hi = tJD
-            for (i in 0 until 10) {
+            repeat(10) {
                 val mid = (lo + hi) / 2.0
                 if (moonAboveHorizonInterpolated(mid, userLatitude, userLongitude, searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg)) lo = mid else hi = mid
             }
@@ -269,7 +269,7 @@ private fun computeEclipseRenderData(
         }
         if (!prevUp && currUp && moonriseTJD == null) {
             var lo = tJD - searchStep; var hi = tJD
-            for (i in 0 until 10) {
+            repeat(10) {
                 val mid = (lo + hi) / 2.0
                 if (moonAboveHorizonInterpolated(mid, userLatitude, userLongitude, searchStart, searchEnd, interpStartRaH, interpStartDecDeg, interpEndRaH, interpEndDecDeg)) hi = mid else lo = mid
             }

@@ -27,6 +27,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+// Saturn oblateness: polar/equatorial radius ratio
+private const val SATURN_POLAR_RATIO = 0.902
+
 // Moon display colors
 private val saturnMoonColors = mapOf(
     "Enceladus" to Color(0xFFCB99FF),
@@ -226,11 +229,10 @@ fun SaturnScreen(
                     color = Color.White, fontSize = infoSize, fontFamily = mono)
                 // List moons currently occulted behind disk or A/B rings
                 val sinBOcc = abs(sin(Math.toRadians(saturnData.ringTiltB)))
-                val satPolarRatioOcc = 0.902
                 saturnData.moons.forEach { moon ->
                     if (moon.z > 0.0) {
                         val behindDisk = moon.x * moon.x +
-                                (moon.y / satPolarRatioOcc) * (moon.y / satPolarRatioOcc) <= 1.0
+                                (moon.y / SATURN_POLAR_RATIO) * (moon.y / SATURN_POLAR_RATIO) <= 1.0
                         val behindRing = if (sinBOcc > 0.01) {
                             val ringDist = sqrt(moon.x * moon.x + (moon.y / sinBOcc) * (moon.y / sinBOcc))
                             (ringDist in SaturnMoonEngine.B_RING_INNER..SaturnMoonEngine.B_RING_OUTER) ||
@@ -444,8 +446,7 @@ private fun DrawScope.drawSaturnSystem(
     val tiltB = data.ringTiltB
     val sinB = abs(sin(Math.toRadians(tiltB))).toFloat()
 
-    // Saturn oblateness: polar/equatorial ≈ 0.902
-    val satPolarRatio = 0.902f
+    val satPolarRatio = SATURN_POLAR_RATIO.toFloat()
 
     // Limb-darkened Saturn disk: concentric ellipses from outside in, progressively brighter.
     // Linear limb darkening: I(r) = 1 - u*(1 - sqrt(1 - r²)), u=0.5
@@ -570,12 +571,11 @@ private fun DrawScope.drawSaturnSystem(
     // Moon dots (skip moons occulted behind Saturn's disk or A/B rings)
     // Z convention: z > 0 = behind Saturn (away from Earth),
     //               z < 0 = in front (toward Earth)
-    val satPolarRatioOcc = 0.902
     val sinBOcc = abs(sin(Math.toRadians(data.ringTiltB)))
     data.moons.forEach { moon ->
         if (moon.z > 0.0) {
             // Behind the planet's disk?
-            if (moon.x * moon.x + (moon.y / satPolarRatioOcc) * (moon.y / satPolarRatioOcc) <= 1.0) return@forEach
+            if (moon.x * moon.x + (moon.y / SATURN_POLAR_RATIO) * (moon.y / SATURN_POLAR_RATIO) <= 1.0) return@forEach
             // Behind A or B ring? Ring at radius r projects as ellipse (r, r*sinB);
             // ring-plane distance = sqrt(x² + (y/sinB)²)
             if (sinBOcc > 0.01) {

@@ -442,7 +442,6 @@ fun CompassCanvas(
         // Layout
         val textY = 35f
         val rowHeight = 38f
-        val numDataRows = 9 // Sun, Moon, 7 planets
         // Total fixed vertical space (excluding 2*radius): header, gaps, table rows
         val fixedVerticalSpace = 719f
         val maxRadiusForHeight = (h - fixedVerticalSpace) / 2f
