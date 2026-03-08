@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -132,20 +134,31 @@ fun SaturnScreen(
     }
 
     // --- PINCH-TO-ZOOM STATE ---
-    // zFactor: zoom in/out so the most displaced moon (after PA rotation) sits near the edge.
-    // FOV half-extent = 22 / zFactor Saturn radii.
+    // zFactor: zoom in/out so all moons fit within the canvas.
+    // pxPerRadius = (min(w,h)/44) * scale, so a moon at (rx,ry) Saturn radii
+    // fits if scale < min(22*cw/(minDim*rx), 22*ch/(minDim*ry)) over all moons.
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val zFactor = run {
         val paRad = Math.toRadians(-saturnData.positionAngleP)
         val cosP = cos(paRad)
         val sinP = sin(paRad)
-        var maxExtent = 0.0
+        val cw = if (canvasSize.width > 0) canvasSize.width.toFloat() else 1f
+        val ch = if (canvasSize.height > 0) canvasSize.height.toFloat() else 1f
+        val minDim = min(cw, ch)
+        var bestScale = Double.MAX_VALUE
         saturnData.moons.forEach { moon ->
             val rx = abs(moon.x * cosP - moon.y * sinP)
             val ry = abs(moon.x * sinP + moon.y * cosP)
-            if (rx > maxExtent) maxExtent = rx
-            if (ry > maxExtent) maxExtent = ry
+            if (rx > 0.001) {
+                val s = 22.0 * cw / (minDim * rx * 1.05)
+                if (s < bestScale) bestScale = s
+            }
+            if (ry > 0.001) {
+                val s = 22.0 * ch / (minDim * ry * 1.05)
+                if (s < bestScale) bestScale = s
+            }
         }
-        if (maxExtent > 0.001) (22.0 / (maxExtent * 1.05)).toFloat() else 1f
+        if (bestScale < Double.MAX_VALUE) bestScale.toFloat() else 1f
     }
     var scale by remember { mutableStateOf(zFactor) }
     var hasZoomed by remember { mutableStateOf(false) }
@@ -195,6 +208,7 @@ fun SaturnScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .onSizeChanged { canvasSize = it }
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ ->
                         scale = (scale * zoom).coerceIn(minScale, maxScale)
@@ -418,8 +432,10 @@ private fun DrawScope.drawSaturnSystem(
     isNorthUp: Boolean,
     isEastRight: Boolean
 ) {
-    val w = size.width
-    val h = size.height
+    val dScale = density / REFERENCE_DENSITY
+    val w = size.width / dScale
+    val h = size.height / dScale
+    drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
     val centerX = w / 2f
     val centerY = h / 2f
 
@@ -622,7 +638,7 @@ private fun DrawScope.drawSaturnSystem(
         canvas.nativeCanvas.drawText(labelText, (barX0 + barX1) / 2f, barY - tickH - 4f, paint)
 
     }
-
+    drawIntoCanvas { it.nativeCanvas.restore() }
 }
 
 // Draw feathered atmospheric bands on Saturn's disk, clipped to the globe ellipse.

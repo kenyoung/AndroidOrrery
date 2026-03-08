@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -23,8 +23,6 @@ import kotlin.math.*
 @Composable
 fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-
     val bgColor = Color.Black
     val labelColor = LabelColor
     val eventBlue = Color(0xFF87CEFA) // Updated to match PlanetCompassScreen
@@ -54,10 +52,12 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
         val headerHeight = 120f
         val planetHeaderHeight = 60f
         val totalHeightPx = headerHeight + (7 * planetHeaderHeight) + (2 * 4 * rowHeight) + (5 * 2 * rowHeight) + 100f
-        val totalHeightDp = with(density) { totalHeightPx.toDp() }
+        val totalHeightDp = (totalHeightPx / REFERENCE_DENSITY).dp
 
         Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
-            val w = size.width
+            val dScale = density / REFERENCE_DENSITY
+            val w = size.width / dScale
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
             val titlePaintYellow = Paint().apply { color = labelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val titlePaintWhite = Paint().apply { color = textWhite.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val colHeaderPaint = Paint().apply { color = eventBlue.toArgb(); textSize = 40f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
@@ -122,6 +122,7 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
                     }
                 }
             }
+            drawIntoCanvas { it.nativeCanvas.restore() }
         }
     }
     TimeDisplayToggle(useLocalTime, onTimeDisplayChange)

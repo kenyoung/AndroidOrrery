@@ -83,8 +83,10 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        val w = size.width
-        val h = size.height
+        val dScale = density / REFERENCE_DENSITY
+        val w = size.width / dScale
+        val h = size.height / dScale
+        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
 
         val paddingY = 120f
         
@@ -363,5 +365,6 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
             textPaint.color = Color.White.toArgb()
             it.nativeCanvas.drawText("Now", nowX + 30f, nowY + 20f, textPaint)
         }
+        drawIntoCanvas { it.nativeCanvas.restore() }
     }
 }

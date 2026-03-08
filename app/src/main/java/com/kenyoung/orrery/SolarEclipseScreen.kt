@@ -1288,13 +1288,18 @@ private fun SolarEclipseDetailView(
                             }
                         }
                 ) {
+                    val dScale = density / REFERENCE_DENSITY
+                    val w = size.width / dScale
+                    val h = size.height / dScale
+                    drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
                     drawWorldMap(
                         this, eclipse, data, shoreline,
                         latitude, longitude,
-                        0f, size.height, size.width,
-                        mapScale, mapOffsetX, mapOffsetY,
+                        0f, h, w,
+                        mapScale, mapOffsetX / dScale, mapOffsetY / dScale,
                         shadowPos
                     )
+                    drawIntoCanvas { it.nativeCanvas.restore() }
                 }
 
                 // "Pinch to zoom" hint below the map
@@ -1377,10 +1382,14 @@ private fun renderSolarEclipseUpperArea(
     stdTimeLabel: String,
     totalEclipseBitmap: androidx.compose.ui.graphics.ImageBitmap? = null
 ) {
+    // Density-independent canvas scaling
+    val dScale = drawScope.density / REFERENCE_DENSITY
+    drawScope.drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+
     val timeOffset = if (useStandardTime) stdOffsetHours else 0.0
     val timeSuffix = if (useStandardTime) stdTimeLabel else "UT"
-    val w = drawScope.size.width
-    val h = drawScope.size.height
+    val w = drawScope.size.width / dScale
+    val h = drawScope.size.height / dScale
     val circ = data.circumstances
 
     // Paint setup — doubled font size for readability
@@ -1672,7 +1681,7 @@ private fun drawEclipseGeometry(
             style = Stroke(width = 1f)
         )
     }
-
+    drawScope.drawIntoCanvas { it.nativeCanvas.restore() }
 }
 
 // ============================================================================
@@ -1733,8 +1742,8 @@ private fun drawWorldMap(
             val cs = cellSize.toDouble()
             val x = lonToX(lon.toDouble())
             val y = latToY(lat.toDouble() + cs)  // top edge (higher lat = lower y)
-            val cellW = (cs / 360.0 * mw).toFloat()
-            val cellH = (cs / 180.0 * mh).toFloat()
+            val cellW = (cs / 360.0 * mw).toFloat() + 1f
+            val cellH = (cs / 180.0 * mh).toFloat() + 1f
             drawScope.drawRect(
                 visColor,
                 topLeft = Offset(x, y),

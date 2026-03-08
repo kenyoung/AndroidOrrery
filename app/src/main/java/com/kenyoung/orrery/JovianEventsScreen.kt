@@ -72,8 +72,6 @@ private data class RawEvent(
 @Composable
 fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
-    val density = LocalDensity.current
-
     val bgColor = Color.Black
 
     // --- TIME ZONE STATE ---
@@ -115,7 +113,12 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
         ) {
             val currentJD = mjdToJD(nowMJD)
             Canvas(modifier = Modifier.fillMaxSize()) {
-                drawJovianSystem(currentJD, size.width / 2f, size.height / 2f, size.width)
+                val dScale = density / REFERENCE_DENSITY
+                val w = size.width / dScale
+                val h = size.height / dScale
+                drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+                drawJovianSystem(currentJD, w / 2f, h / 2f, w)
+                drawIntoCanvas { it.nativeCanvas.restore() }
             }
         }
 
@@ -158,7 +161,8 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
                     .count()
                 val height3Days = headerHeight + (distinctDates3 * dateHeaderHeight) + (fullList.size * rowHeight) + bottomPadding
 
-                val screenHeight = constraints.maxHeight.toFloat()
+                val dScaleOuter = LocalDensity.current.density / REFERENCE_DENSITY
+                val screenHeight = constraints.maxHeight.toFloat() / dScaleOuter
 
                 // If 3 days fit, show all. Else filter to 2 days (standard behavior)
                 val list = if (height3Days <= screenHeight) {
@@ -176,11 +180,13 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
                     .count()
 
                 val totalHeightPx = headerHeight + (distinctDates * dateHeaderHeight) + (list.size * rowHeight) + bottomPadding
-                val totalHeightDp = with(density) { totalHeightPx.toDp() }
+                val totalHeightDp = (totalHeightPx / REFERENCE_DENSITY).dp
 
                 Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
-                        val w = size.width
+                        val dScale = density / REFERENCE_DENSITY
+                        val w = size.width / dScale
+                        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
 
                         // Paints
                         val titlePaint = Paint().apply { color = LabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
@@ -256,6 +262,7 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
                                 }
                             }
                         }
+                        drawIntoCanvas { it.nativeCanvas.restore() }
                     }
                 }
             }

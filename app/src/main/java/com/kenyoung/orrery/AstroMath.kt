@@ -29,6 +29,9 @@ const val MJD_OFFSET = 2400000.5           // JD - MJD
 const val UNIX_EPOCH_MJD = 40587.0         // MJD of Unix epoch (1970 Jan 1.0)
 const val B1875_JD = 2405889.2585          // B1875.0 epoch (for IAU constellation boundaries)
 
+// Canvas rendering scale reference — hardcoded pixel values were tuned for this density
+const val REFERENCE_DENSITY = 2.75f
+
 // --- RAW MATH FUNCTIONS ---
 
 fun solveKepler(M: Double, e: Double): Double {

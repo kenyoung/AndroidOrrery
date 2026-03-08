@@ -27,8 +27,10 @@ import kotlin.math.*
 fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, stdOffsetHours: Double) {
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
+            val dScale = density / REFERENCE_DENSITY
+            val w = size.width / dScale
+            val h = size.height / dScale
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
             val paddingLeft = 35f
             val paddingRight = 42f
             val drawingWidth = w - paddingLeft - paddingRight
@@ -687,6 +689,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, st
                     canvas.nativeCanvas.drawCircle(pos.x, pos.y, 10f, moonStroke)
                 }
             }
+            drawIntoCanvas { it.nativeCanvas.restore() }
         }
     }
 }

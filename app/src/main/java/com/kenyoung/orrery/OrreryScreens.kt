@@ -211,8 +211,10 @@ fun ScaleOrrery(epochDay: Double) {
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
+            val dScale = density / REFERENCE_DENSITY
+            val w = size.width / dScale
+            val h = size.height / dScale
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
             val cx = w / 2f
             val cy = h / 2f
             val planetRadius = 18f
@@ -317,6 +319,7 @@ fun ScaleOrrery(epochDay: Double) {
                     labelPaint.textAlign = savedAlign
                 }
             }
+            drawIntoCanvas { it.nativeCanvas.restore() }
         }
 
         if (!hasZoomed) {
@@ -356,8 +359,10 @@ fun SchematicOrrery(epochDay: Double) {
     }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
+        val dScale = density / REFERENCE_DENSITY
+        val w = size.width / dScale
+        val h = size.height / dScale
+        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
         val cx = w / 2f
         val planetRadius = 18f
         val margin = 5f
@@ -455,5 +460,6 @@ fun SchematicOrrery(epochDay: Double) {
             canvas.nativeCanvas.drawText(viewText, cx, viewLabelBaseline, labelPaint)
             labelPaint.textAlign = savedAlign
         }
+        drawIntoCanvas { it.nativeCanvas.restore() }
     }
 }

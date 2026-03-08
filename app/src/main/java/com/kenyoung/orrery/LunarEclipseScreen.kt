@@ -1428,11 +1428,15 @@ private fun renderEclipse(
     currentTJD: Double,
     moonBitmap: ImageBitmap
 ) {
+    // Density-independent canvas scaling
+    val dScale = drawScope.density / REFERENCE_DENSITY
+    drawScope.drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+
     // Time offset: 0 for UT, standardTimeOffsetHours for standard time
     val timeOffset = if (useStandardTime) standardTimeOffsetHours else 0.0
     val timeSuffix = if (useStandardTime) timeZoneAbbreviation else "UT"
-    val width = drawScope.size.width
-    val height = drawScope.size.height
+    val width = drawScope.size.width / dScale
+    val height = drawScope.size.height / dScale
 
     // Colors
     val colorBlack = Color.Black
@@ -1774,7 +1778,7 @@ private fun renderEclipse(
                     }
                     drawScope.drawRect(color,
                         Offset(earthMapLeft + segmentStart, screenY),
-                        androidx.compose.ui.geometry.Size((px - segmentStart).toFloat(), 1f))
+                        androidx.compose.ui.geometry.Size((px - segmentStart).toFloat(), 2f))
                 }
                 currentLevel = level
                 segmentStart = px
@@ -2369,4 +2373,5 @@ private fun renderEclipse(
 
         canvas.nativeCanvas.drawText(northText, northX, northY, labelPaint)
     }
+    drawScope.drawIntoCanvas { it.nativeCanvas.restore() }
 }
