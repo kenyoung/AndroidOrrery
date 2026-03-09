@@ -27,7 +27,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     // Basic setup
     val planets = remember { getOrreryPlanets() }
 
@@ -399,7 +399,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
                 )
             }
         }
-        TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
+        TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     }
 }
 

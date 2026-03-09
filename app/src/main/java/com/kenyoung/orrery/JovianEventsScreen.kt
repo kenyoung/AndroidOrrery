@@ -70,7 +70,7 @@ private data class RawEvent(
 // --- COMPOSABLE ---
 
 @Composable
-fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     val scrollState = rememberScrollState()
     val bgColor = Color.Black
 
@@ -269,7 +269,7 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
         }
 
         // --- BOTTOM: Radio Buttons ---
-        TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
+        TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     }
 }
 

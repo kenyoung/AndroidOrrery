@@ -124,6 +124,10 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     LaunchedEffect(useStandardTime) {
         prefs.edit().putBoolean("useStandardTime", useStandardTime).apply()
     }
+    var useDst by remember { mutableStateOf(prefs.getBoolean("useDst", false)) }
+    LaunchedEffect(useDst) {
+        prefs.edit().putBoolean("useDst", useDst).apply()
+    }
 
     var showFirstLaunchHint by remember { mutableStateOf(prefs.getBoolean("showFirstLaunchHint", true)) }
 
@@ -144,9 +148,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var manualEpochDay by remember { mutableStateOf(LocalDate.now().toEpochDay().toDouble()) }
     // Stores the last text entered by the user (Day, Month, Year, Hour, Min, Sec)
     var savedDateInput by remember { mutableStateOf<List<String>?>(null) }
-    // Clear saved date text when UT/Standard Time mode changes, so the dialog
+    // Clear saved date text when UT/Standard Time/DST mode changes, so the dialog
     // defaults to phone time in the new time system instead of stale values.
-    LaunchedEffect(useStandardTime) { savedDateInput = null }
+    LaunchedEffect(useStandardTime, useDst) { savedDateInput = null }
 
     var currentInstant by remember { mutableStateOf(Instant.now()) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -290,19 +294,26 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
         }
     }
 
+    val dstExtra = if (useDst) 1.0 else 0.0
     val (stdOffsetHours, stdTimeLabel) = if (locationMode == 0) {
-        val offset = zoneId.rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
-        val label = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.SHORT)
+        val offset = zoneId.rules.getStandardOffset(currentInstant).totalSeconds / 3600.0 + dstExtra
+        val label = java.util.TimeZone.getDefault().getDisplayName(useDst, java.util.TimeZone.SHORT)
         offset to label
     } else {
         val tzName = lookupTimezone(effectiveLat, effectiveLon)
         if (tzName != null) {
             try {
-                val offset = ZoneId.of(tzName).rules.getStandardOffset(currentInstant).totalSeconds / 3600.0
-                val label = java.util.TimeZone.getTimeZone(tzName).getDisplayName(false, java.util.TimeZone.SHORT)
+                val offset = ZoneId.of(tzName).rules.getStandardOffset(currentInstant).totalSeconds / 3600.0 + dstExtra
+                val label = java.util.TimeZone.getTimeZone(tzName).getDisplayName(useDst, java.util.TimeZone.SHORT)
                 offset to label
-            } catch (_: Exception) { effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0) }
-        } else effectiveLon / 15.0 to formatUtOffset(effectiveLon / 15.0)
+            } catch (_: Exception) {
+                val solarOffset = effectiveLon / 15.0 + dstExtra
+                solarOffset to formatUtOffset(solarOffset)
+            }
+        } else {
+            val solarOffset = effectiveLon / 15.0 + dstExtra
+            solarOffset to formatUtOffset(solarOffset)
+        }
     }
 
     if (showLocationDialog) {
@@ -331,6 +342,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             phoneInstant = Instant.now(),
             savedInput = savedDateInput,
             useStandardTime = useStandardTime,
+            useDst = useDst,
+            onDstChange = { useDst = it },
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
             onDismiss = { showDateDialog = false },
@@ -463,21 +476,21 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 val displayEpoch = if (isAnimating || !usePhoneTime) manualEpochDay else effectiveDate.toEpochDay().toDouble()
                 when (currentScreen) {
                     Screen.TRANSITS -> if (cache != null) GraphicsWindow(effectiveLat, effectiveLon, currentInstant, cache!!, stdOffsetHours) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
-                    Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
-                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours, useStandardTime) { useStandardTime = it }
-                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.ELEVATIONS -> PlanetElevationsScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
+                    Screen.PHENOMENA -> PlanetPhenomenaScreen(displayEpoch, stdOffsetHours, useStandardTime, useDst) { useStandardTime = it }
+                    Screen.COMPASS -> PlanetCompassScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
-                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
-                    Screen.SOLAR_ECLIPSES -> SolarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, onTimeDisplayChange = { useStandardTime = it })
+                    Screen.LUNAR_ECLIPSES -> LunarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, useDst = useDst, onTimeDisplayChange = { useStandardTime = it })
+                    Screen.SOLAR_ECLIPSES -> SolarEclipseScreen(latitude = effectiveLat, longitude = effectiveLon, now = currentInstant, stdOffsetHours = stdOffsetHours, stdTimeLabel = stdTimeLabel, useStandardTime = useStandardTime, useDst = useDst, onTimeDisplayChange = { useStandardTime = it })
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
-                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
-                    Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
+                    Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
+                    Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
                     Screen.CONSTELLATIONS -> ConstellationsScreen(currentInstant)
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
-                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime) { useStandardTime = it }
+                    Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
                 }
             }
         }
@@ -899,6 +912,8 @@ fun DateDialog(
     phoneInstant: Instant,
     savedInput: List<String>?,
     useStandardTime: Boolean,
+    useDst: Boolean,
+    onDstChange: (Boolean) -> Unit,
     stdOffsetHours: Double,
     stdTimeLabel: String,
     onDismiss: () -> Unit,
@@ -1021,7 +1036,18 @@ fun DateDialog(
                 }
 
                 if (errorMsg != null) { Spacer(modifier = Modifier.height(8.dp)); Text(errorMsg!!, color = Color.Red, fontSize = 14.sp) }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                val dstAlpha = if (useStandardTime) 1f else 0.38f
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = useDst,
+                        onCheckedChange = { onDstChange(it) },
+                        enabled = useStandardTime,
+                        colors = CheckboxDefaults.colors(checkedColor = Color.White, uncheckedColor = Color.Gray, checkmarkColor = Color.Black)
+                    )
+                    Text("Daylight Saving Time", color = Color.White.copy(alpha = dstAlpha))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancel", color = Color.White) }
                     Button(onClick = { validateAndSubmit() }, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) { Text("OK", color = Color.Black) }

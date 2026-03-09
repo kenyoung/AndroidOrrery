@@ -16,7 +16,8 @@ val LabelColor = Color(0xFFADD8E6) // Light Blue
 // --- SHARED UI COMPONENTS ---
 
 @Composable
-fun TimeDisplayToggle(useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun TimeDisplayToggle(useLocalTime: Boolean, useDst: Boolean = false, onTimeDisplayChange: (Boolean) -> Unit) {
+    val localTimeLabel = if (useDst) "Daylight Saving" else "Standard Time"
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
@@ -29,7 +30,7 @@ fun TimeDisplayToggle(useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> U
         Spacer(modifier = Modifier.width(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
-            Text("Standard Time", color = Color.White, fontSize = 14.sp)
+            Text(localTimeLabel, color = Color.White, fontSize = 14.sp)
         }
     }
 }

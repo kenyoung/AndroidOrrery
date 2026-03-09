@@ -980,6 +980,7 @@ fun LunarEclipseScreen(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useStandardTime: Boolean,
+    useDst: Boolean,
     onTimeDisplayChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -1020,6 +1021,7 @@ fun LunarEclipseScreen(
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
             useStandardTime = useStandardTime,
+            useDst = useDst,
             onTimeDisplayChange = onTimeDisplayChange,
             onBack = { selectedEclipse = null }
         )
@@ -1289,6 +1291,7 @@ private fun EclipseDetailView(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useStandardTime: Boolean,
+    useDst: Boolean,
     onTimeDisplayChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
@@ -1391,7 +1394,7 @@ private fun EclipseDetailView(
                                 unselectedColor = Color.Gray
                             )
                         )
-                        Text("Standard Time", color = Color.White, fontSize = 14.sp)
+                        Text(if (useDst) "Daylight Saving" else "Standard Time", color = Color.White, fontSize = 14.sp)
                     }
                 }
             }

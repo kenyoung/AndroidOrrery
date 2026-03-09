@@ -84,6 +84,7 @@ fun MeteorShowerScreen(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useLocalTime: Boolean,
+    useDst: Boolean,
     onTimeDisplayChange: (Boolean) -> Unit
 ) {
     var rowData by remember { mutableStateOf<List<ShowerRowData>?>(null) }
@@ -251,7 +252,7 @@ fun MeteorShowerScreen(
                     Text(" $timeLabel) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
             }
-            TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
+            TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
         }
     }
 }

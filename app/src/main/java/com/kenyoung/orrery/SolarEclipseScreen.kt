@@ -894,6 +894,7 @@ fun SolarEclipseScreen(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useStandardTime: Boolean,
+    useDst: Boolean,
     onTimeDisplayChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -938,6 +939,7 @@ fun SolarEclipseScreen(
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
             useStandardTime = useStandardTime,
+            useDst = useDst,
             onTimeDisplayChange = onTimeDisplayChange,
             onBack = { selectedEclipse = null }
         )
@@ -1205,6 +1207,7 @@ private fun SolarEclipseDetailView(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useStandardTime: Boolean,
+    useDst: Boolean,
     onTimeDisplayChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
@@ -1353,7 +1356,7 @@ private fun SolarEclipseDetailView(
                                 unselectedColor = Color.Gray
                             )
                         )
-                        Text("Standard Time", color = Color.White, fontSize = 14.sp)
+                        Text(if (useDst) "Daylight Saving" else "Standard Time", color = Color.White, fontSize = 14.sp)
                     }
                 }
             }

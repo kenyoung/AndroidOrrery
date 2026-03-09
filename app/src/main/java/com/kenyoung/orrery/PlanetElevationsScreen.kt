@@ -21,7 +21,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
 
     // 1. Setup Time and Date
     val offsetHours = lon / 15.0
@@ -706,6 +706,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
         drawIntoCanvas { it.nativeCanvas.restore() }
     }
-    TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
+    TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     } // Column
 }

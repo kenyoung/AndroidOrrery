@@ -69,6 +69,7 @@ fun SaturnScreen(
     stdOffsetHours: Double,
     stdTimeLabel: String,
     useLocalTime: Boolean,
+    useDst: Boolean,
     resetAnimTrigger: Int = 0,
     onAnimStoppedChange: (Boolean) -> Unit = {},
     onTimeDisplayChange: (Boolean) -> Unit
@@ -310,7 +311,7 @@ fun SaturnScreen(
         }
 
         // Time display toggle
-        TimeDisplayToggle(useLocalTime, onTimeDisplayChange)
+        TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     }
 }
 
