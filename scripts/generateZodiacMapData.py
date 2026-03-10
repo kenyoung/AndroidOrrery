@@ -36,13 +36,13 @@ DEC_MAX = 50.0
 DEC_RANGE = DEC_MAX - DEC_MIN
 
 # Fine grid resolution (10x the app's in-app grid)
-RA_STEPS = 3600
-DEC_STEPS = 1000
+RA_STEPS = 36000
+DEC_STEPS = 10000
 RA_STEP = 24.0 / RA_STEPS
 DEC_STEP = DEC_RANGE / DEC_STEPS
 
 # Zodiac constellation indices (matching ConstellationBoundary.kt constellationNames)
-ZODIAC_INDICES = {4, 6, 11, 21, 37, 45, 47, 66, 71, 76, 77, 85}
+ZODIAC_INDICES = {4, 6, 11, 21, 37, 45, 47, 58, 66, 71, 76, 77, 85}
 
 # For diagnostic output
 CONSTELLATION_NAMES = [
