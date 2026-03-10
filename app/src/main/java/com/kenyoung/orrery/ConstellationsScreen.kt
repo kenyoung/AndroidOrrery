@@ -237,7 +237,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
                 text = row.name,
                 style = TextStyle(
                     color = LabelColor,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.SansSerif
                 ),
@@ -247,7 +247,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
                 text = "  ${row.constellation}",
                 style = TextStyle(
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     fontFamily = FontFamily.SansSerif
                 ),
                 maxLines = 1
@@ -257,7 +257,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
             text = "${row.raString}  ${row.decString}",
             style = TextStyle(
                 color = Color(0xFFAAAAAA),
-                fontSize = 9.sp,
+                fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             ),
             maxLines = 1
@@ -286,35 +286,28 @@ private fun DrawScope.drawSkyMap(
     val boundaryColor = Color(0xFF66BBFF)
     val boundaryStroke = 1.0f
 
-    // Draw zodiac boundary segments
+    // Draw zodiac boundary segments (J2025.0 coordinates, slightly tilted after precession)
     for (seg in segments) {
-        val isHorizontal = seg.dec1 == seg.dec2
-
-        if (isHorizontal) {
-            val x1 = raToX(seg.ra1)
-            val x2 = raToX(seg.ra2)
-            val y = decToY(seg.dec1)
-            if (abs(x1 - x2) > w * 0.5f) {
-                // Crosses RA=12h map edge: draw pieces at both edges
-                val xLeft = min(x1, x2)
-                val xRight = max(x1, x2)
-                if (xLeft > 0.5f) drawLine(boundaryColor, Offset(0f, y), Offset(xLeft, y), strokeWidth = boundaryStroke)
-                if (xRight < w - 0.5f) drawLine(boundaryColor, Offset(xRight, y), Offset(w, y), strokeWidth = boundaryStroke)
-            } else {
-                drawLine(boundaryColor, Offset(min(x1, x2), y), Offset(max(x1, x2), y), strokeWidth = boundaryStroke)
-            }
+        val x1 = raToX(seg.ra1)
+        val y1 = decToY(seg.dec1)
+        val x2 = raToX(seg.ra2)
+        val y2 = decToY(seg.dec2)
+        if (abs(x1 - x2) <= w * 0.5f) {
+            drawLine(boundaryColor, Offset(x1, y1), Offset(x2, y2), strokeWidth = boundaryStroke)
         } else {
-            // Vertical segment
-            val x = raToX(seg.ra1)
-            val y1 = decToY(seg.dec1)
-            val y2 = decToY(seg.dec2)
-            drawLine(boundaryColor, Offset(x, min(y1, y2)), Offset(x, max(y1, y2)), strokeWidth = boundaryStroke)
-            // If this vertical segment is at RA=12h (map edge), also draw at the other edge
-            if (x < 2f) {
-                drawLine(boundaryColor, Offset(w, min(y1, y2)), Offset(w, max(y1, y2)), strokeWidth = boundaryStroke)
-            } else if (x > w - 2f) {
-                drawLine(boundaryColor, Offset(0f, min(y1, y2)), Offset(0f, max(y1, y2)), strokeWidth = boundaryStroke)
+            // Segment crosses RA=12h map edge — draw as two pieces
+            val nearLeft: Offset
+            val nearRight: Offset
+            if (x1 < x2) {
+                nearLeft = Offset(x1, y1); nearRight = Offset(x2, y2)
+            } else {
+                nearLeft = Offset(x2, y2); nearRight = Offset(x1, y1)
             }
+            val dx = nearLeft.x + w - nearRight.x
+            val tRight = (w - nearRight.x) / dx
+            val yEdge = nearRight.y + tRight * (nearLeft.y - nearRight.y)
+            drawLine(boundaryColor, nearRight, Offset(w, yEdge), strokeWidth = boundaryStroke)
+            drawLine(boundaryColor, Offset(0f, yEdge), nearLeft, strokeWidth = boundaryStroke)
         }
     }
 
@@ -346,7 +339,7 @@ private fun DrawScope.drawSkyMap(
     // Zodiac constellation symbols in white
     val zodiacPaint = android.graphics.Paint().apply {
         color = android.graphics.Color.WHITE
-        textSize = 48f
+        textSize = 36f
         textAlign = android.graphics.Paint.Align.CENTER
         isAntiAlias = true
     }
