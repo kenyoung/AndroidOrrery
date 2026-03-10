@@ -283,8 +283,8 @@ private fun DrawScope.drawSkyMap(
         return (h * (DEC_MAX - dec) / DEC_RANGE).toFloat()
     }
 
-    val boundaryColor = Color(0xFF66BBFF)
-    val boundaryStroke = 1.0f
+    val boundaryColor = LabelColor
+    val boundaryStroke = 1.5f
 
     // Draw zodiac boundary segments (J2025.0 coordinates, slightly tilted after precession)
     for (seg in segments) {
