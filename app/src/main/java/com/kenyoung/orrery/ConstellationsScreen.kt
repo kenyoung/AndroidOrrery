@@ -360,6 +360,9 @@ private fun DrawScope.drawSkyMap(
         return (h * (DEC_MAX - dec) / DEC_RANGE).toFloat()
     }
 
+    // Border box
+    drawRect(Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+
     val boundaryColor = LabelColor
     val boundaryStroke = 2.25f
 
@@ -474,10 +477,13 @@ private fun DrawScope.drawStarMap(
         return (h * (DEC_MAX - dec) / DEC_RANGE).toFloat()
     }
 
+    // Border box
+    drawRect(Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
+
     // Stars — size and brightness scale with magnitude
     // Magnitude range: ~-1.5 (Sirius) to 3.0
     val magMin = -1.5  // brightest
-    val magMax = 3.0   // faintest
+    val magMax = 3.5   // faintest
     val magRange = magMax - magMin
     val maxRadius = 5f
     val minRadius = 1f
