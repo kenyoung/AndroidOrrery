@@ -413,7 +413,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(20.dp)
+            modifier = Modifier.height(24.dp)
         ) {
             Text(
                 text = row.name,
@@ -422,7 +422,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.SansSerif,
-                    lineHeight = 20.sp
+                    lineHeight = 24.sp
                 ),
                 maxLines = 1
             )
@@ -432,7 +432,7 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
                     color = Color.White,
                     fontSize = 14.sp,
                     fontFamily = FontFamily.SansSerif,
-                    lineHeight = 20.sp
+                    lineHeight = 24.sp
                 ),
                 maxLines = 1
             )
