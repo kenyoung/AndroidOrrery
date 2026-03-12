@@ -21,7 +21,7 @@ from astropy.coordinates import SkyCoord, FK5
 import astropy.units as u
 
 ASSETS_DIR = '../app/src/main/assets'
-MAG_LIMIT = 3.0
+MAG_LIMIT = 3.5
 
 
 def main():

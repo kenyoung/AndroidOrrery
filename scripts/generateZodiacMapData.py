@@ -36,8 +36,8 @@ DEC_MAX = 50.0
 DEC_RANGE = DEC_MAX - DEC_MIN
 
 # Fine grid resolution (10x the app's in-app grid)
-RA_STEPS = 36000
-DEC_STEPS = 10000
+RA_STEPS = int(36000*1.4)
+DEC_STEPS = int(10000*1.4)
 RA_STEP = 24.0 / RA_STEPS
 DEC_STEP = DEC_RANGE / DEC_STEPS
 

@@ -5,10 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -23,10 +28,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import java.io.BufferedInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 private val zodiacSymbols = mapOf(
@@ -179,15 +187,67 @@ private fun loadZodiacMapData(context: android.content.Context): ZodiacMapData {
 }
 
 @Composable
-fun ConstellationsScreen(instant: Instant) {
+fun ConstellationsScreen(
+    displayEpoch: Double,
+    currentInstant: Instant,
+    stdOffsetHours: Double,
+    stdTimeLabel: String,
+    useStandardTime: Boolean,
+    resetAnimTrigger: Int = 0,
+    onAnimStoppedChange: (Boolean) -> Unit = {}
+) {
     val context = LocalContext.current
     ConstellationBoundary.ensureLoaded(context)
 
-    val jd = instant.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+    // --- ANIMATION STATE ---
+    var isAnimating by remember { mutableStateOf(false) }
+    var animDayOffset by remember { mutableStateOf(0.0) }
+
+    // Report stopped state to parent; reset on trigger from parent
+    LaunchedEffect(isAnimating, animDayOffset) {
+        onAnimStoppedChange(!isAnimating && animDayOffset > 0.0)
+    }
+    LaunchedEffect(resetAnimTrigger) {
+        if (resetAnimTrigger > 0) { animDayOffset = 0.0; isAnimating = false }
+    }
+
+    // Animation loop: 30 fps, 1/6 day (4 hours) per frame
+    LaunchedEffect(isAnimating) {
+        if (isAnimating) {
+            while (isAnimating) {
+                animDayOffset += 1.0 / 6.0
+                delay(33)
+            }
+        }
+    }
+
+    // Compute effective JD
+    val effectiveJD = if (isAnimating || animDayOffset > 0.0) {
+        displayEpoch + animDayOffset + UNIX_EPOCH_JD
+    } else {
+        currentInstant.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+    }
+    val jd = effectiveJD
+
+    // Date/time string for animation display
+    val showDateTime = isAnimating || animDayOffset > 0.0
+    val displayOffsetSeconds = if (useStandardTime) (stdOffsetHours * 3600).toLong() else 0L
+    val displayZone = ZoneId.ofOffset("", java.time.ZoneOffset.ofTotalSeconds(displayOffsetSeconds.toInt()))
+    val timeLabel = if (useStandardTime) stdTimeLabel else "UT"
+    val dateStr = if (showDateTime) {
+        val millis = Math.round((jd - UNIX_EPOCH_JD) * MILLIS_PER_DAY / 60000.0) * 60000L
+        val displayInstant = Instant.ofEpochMilli(millis)
+        DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(displayZone).format(displayInstant)
+    } else ""
+    val timeStr = if (showDateTime) {
+        val millis = Math.round((jd - UNIX_EPOCH_JD) * MILLIS_PER_DAY / 60000.0) * 60000L
+        val displayInstant = Instant.ofEpochMilli(millis)
+        DateTimeFormatter.ofPattern("HH:mm").withZone(displayZone).format(displayInstant) + " $timeLabel"
+    } else ""
 
     val bodies = listOf("Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune")
 
-    val rows = remember(instant) {
+    val rows = remember(jd) {
         bodies.map { name ->
             val state = AstroEngine.getBodyState(name, jd)
             val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
@@ -195,8 +255,13 @@ fun ConstellationsScreen(instant: Instant) {
             val b1875RaHours = normalizeDegrees(b1875Ra) * DEGREES_TO_HOURS
             val constellationName = ConstellationBoundary.findConstellation(b1875RaHours, b1875Dec)
             val symbol = zodiacSymbols[constellationName]
+            val displayName = when (constellationName) {
+                "Capricornus" -> "Capricorn."
+                "Sagittarius" -> "Sagittar."
+                else -> constellationName
+            }
             val constellation = buildString {
-                append(constellationName)
+                append(displayName)
                 if (symbol != null) append("  $symbol")
             }
             val appRaHours = normalizeDegrees(appRa) * DEGREES_TO_HOURS
@@ -250,11 +315,35 @@ fun ConstellationsScreen(instant: Instant) {
                 modifier = Modifier.onSizeChanged { headerHeightPx.value = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Constellations",
-                    style = TextStyle(color = LabelColor, fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (showDateTime) {
+                        Text(
+                            text = dateStr,
+                            style = TextStyle(color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace),
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    Text(
+                        text = "Constellations",
+                        style = TextStyle(color = LabelColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    )
+                    if (showDateTime) {
+                        Text(
+                            text = timeStr,
+                            style = TextStyle(color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace),
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
 
                 val pairs = listOf(
                     rows[0] to rows[1],
@@ -300,6 +389,19 @@ fun ConstellationsScreen(instant: Instant) {
             ) {
                 drawStarMap(brightStars, rows, obliquity)
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { isAnimating = !isAnimating },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isAnimating) Color.Red else Color.DarkGray,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                Text(if (isAnimating) "Stop" else "Animate", fontSize = 14.sp)
+            }
         }
     }
 }
@@ -309,14 +411,18 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(20.dp)
+        ) {
             Text(
                 text = row.name,
                 style = TextStyle(
                     color = LabelColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.SansSerif
+                    fontFamily = FontFamily.SansSerif,
+                    lineHeight = 20.sp
                 ),
                 maxLines = 1
             )
@@ -325,7 +431,8 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
                 style = TextStyle(
                     color = Color.White,
                     fontSize = 14.sp,
-                    fontFamily = FontFamily.SansSerif
+                    fontFamily = FontFamily.SansSerif,
+                    lineHeight = 20.sp
                 ),
                 maxLines = 1
             )
@@ -335,9 +442,11 @@ private fun ObjectCell(row: ObjectRow, modifier: Modifier = Modifier) {
             style = TextStyle(
                 color = Color(0xFFAAAAAA),
                 fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 14.sp
             ),
-            maxLines = 1
+            maxLines = 1,
+            modifier = Modifier.height(14.dp)
         )
     }
 }

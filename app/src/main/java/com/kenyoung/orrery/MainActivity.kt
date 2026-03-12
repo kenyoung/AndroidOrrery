@@ -487,7 +487,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.JOVIAN_MOONS -> JovianMoonsScreen(displayEpoch, currentInstant, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(currentInstant, effectiveLat, effectiveLon, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
                     Screen.SATURN -> SaturnScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
-                    Screen.CONSTELLATIONS -> ConstellationsScreen(currentInstant)
+                    Screen.CONSTELLATIONS -> ConstellationsScreen(displayEpoch, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.METEOR_SHOWERS -> MeteorShowerScreen(displayEpoch, effectiveLat, effectiveLon, currentInstant, stdOffsetHours, stdTimeLabel, useStandardTime, useDst) { useStandardTime = it }
