@@ -466,8 +466,8 @@ private const val M_AP7_ROT_RADS = 0.3334731722518321
 private const val INV_RES0_U_GNOMONIC = 2.6180339887498948482
 
 private fun posAngleRads(rads: Double): Double {
-    val tmp = if (rads < 0.0) rads + M_2PI else rads
-    return if (rads >= M_2PI) tmp - M_2PI else tmp
+    val result = rads % M_2PI
+    return if (result < 0.0) result + M_2PI else result
 }
 
 private fun geoAzimuthRads(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

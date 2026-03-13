@@ -173,8 +173,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
         // sub-second precision at epoch day magnitudes (~20000), so the sub-second
         // part is pure floating-point noise.
         val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
-        val localDate = LocalDate.ofEpochDay(days + totalSeconds / 86400)
-        val localTime = LocalTime.ofSecondOfDay(totalSeconds % 86400)
+        val localDate = LocalDate.ofEpochDay(days + totalSeconds / SECONDS_PER_DAY.toLong())
+        val localTime = LocalTime.ofSecondOfDay(totalSeconds % SECONDS_PER_DAY.toLong())
         val refInstant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant()
         val standardOffset = zoneId.rules.getStandardOffset(refInstant)
         return LocalDateTime.of(localDate, localTime).toInstant(standardOffset)
@@ -353,8 +353,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     val days = utEpochDay.toLong()
                     val frac = utEpochDay - days
                     val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
-                    val ld = LocalDate.ofEpochDay(days + totalSeconds / 86400)
-                    val lt = LocalTime.ofSecondOfDay(totalSeconds % 86400)
+                    val ld = LocalDate.ofEpochDay(days + totalSeconds / SECONDS_PER_DAY.toLong())
+                    val lt = LocalTime.ofSecondOfDay(totalSeconds % SECONDS_PER_DAY.toLong())
                     currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
                     manualEpochDay = getManualFromInstant(currentInstant)
                     savedDateInput = inputStrings

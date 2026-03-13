@@ -60,8 +60,7 @@ fun calculateHighPrecisionPositions(jd: Double): Map<String, MoonPosHighPrec> {
 
         val mRad = jovianMoonRadii[name] ?: 0.0
         val cX = -(z * xShiftPerZ)
-        val cY = 0.0
-        val distEclipseSq = (x - cX).pow(2) + ((y - cY) * yScale).pow(2)
+        val distEclipseSq = (x - cX).pow(2) + (y * yScale).pow(2)
         val isEclipsed = (z < 0) && (distEclipseSq < (1.0 + mRad).pow(2))
 
         resultMap[name] = MoonPosHighPrec(x, y, z, sX, sY, shadowOnDisk, isEclipsed)

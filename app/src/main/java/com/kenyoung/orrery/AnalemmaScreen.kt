@@ -42,8 +42,8 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
     val curveColor = Color.Green
     val markerColorInt = Color.Yellow.toArgb()
     val labelColorInt = LabelColor.toArgb()
-    val lightBlueInt = 0xFF87CEFA.toInt()
     val lightBlueColor = Color(0xFF87CEFA)
+    val lightBlueInt = lightBlueColor.toArgb()
     val textColorInt = Color.White.toArgb()
     val nowColor = Color.Red
 

@@ -207,6 +207,64 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
         )
     }
 
+    // --- BUILD PLOT LIST ---
+    // Computes visual positions and events for Sun, Moon, and planets.
+    // Shared by the main periodic loop and the set-time watcher.
+    fun buildPlotList(jdStart: Double, currentUtEpochDay: Double): List<PlotObject> {
+        val offset = lon / 15.0
+        val newList = mutableListOf<PlotObject>()
+
+        // === SUN ===
+        val sunEventData = computeSunEvents(epochDay, lat, lon, offset, jdStart, currentUtEpochDay, eventCaches["Sun"])
+        eventCaches["Sun"] = sunEventData
+
+        val sunState = AstroEngine.getBodyState("Sun", jdStart)
+        val (sunAppRa, sunAppDec) = j2000ToApparent(sunState.ra, sunState.dec, jdStart)
+        newList.add(PlotObject("Sun", "☉", redColorInt, sunAppRa, sunAppDec,
+            sunEventData.events, HORIZON_REFRACTED, anchorEpochDay = sunEventData.anchorEpochDay))
+
+        // Anchor Moon/planet events to the observing night: before sunrise,
+        // use the previous local day so events stay stable all night.
+        val nowUtFracDay = currentUtEpochDay - floor(currentUtEpochDay)
+        val currentLocalSolar = normalizeTime(nowUtFracDay * 24.0 + offset)
+        val eventEpochDay = if (currentLocalSolar < sunEventData.events.rise) epochDay - 1.0 else epochDay
+
+        // === MOON ===
+        val moonState = AstroEngine.getBodyState("Moon", jdStart)
+        val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, jdStart)
+        val lstVal = calculateLSTHours(jdStart, lon)
+        val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
+        val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
+        val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
+
+        val moonEventData = computeMoonEvents(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])
+        eventCaches["Moon"] = moonEventData
+
+        newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec,
+            moonEventData.events, moonTargetAlt,
+            moonEventData.transitTomorrow, moonEventData.setTomorrow, moonEventData.anchorEpochDay,
+            moonEventData.riseDec, moonEventData.transitDec, moonEventData.setDec))
+
+        // === PLANETS ===
+        for (p in planets) {
+            if (p.name != "Earth") {
+                val state = AstroEngine.getBodyState(p.name, jdStart)
+                val (pAppRa, pAppDec) = j2000ToApparent(state.ra, state.dec, jdStart)
+                val col = p.color.toArgb()
+
+                val planetEventData = computePlanetEventsCache(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, p, pAppDec, eventCaches[p.name])
+                eventCaches[p.name] = planetEventData
+
+                newList.add(PlotObject(p.name, p.symbol, col, pAppRa, pAppDec,
+                    planetEventData.events, PLANET_HORIZON_ALT,
+                    planetEventData.transitTomorrow, planetEventData.setTomorrow, planetEventData.anchorEpochDay,
+                    planetEventData.riseDec, planetEventData.transitDec, planetEventData.setDec))
+            }
+        }
+
+        return newList
+    }
+
     // --- ASYNC CALCULATION (recalculates ~1s before each minute-boundary redraw) ---
     // Event recalculation is conditional per object:
     //   All: on cache reset (manual time / app start) or set time in past (auto-advance)
@@ -219,10 +277,8 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
         while (true) {
             val snapNow = currentNow
             withContext(Dispatchers.Default) {
-            val offset = lon / 15.0
             val jdStart = snapNow.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
             val currentUtEpochDay = jdStart - UNIX_EPOCH_JD
-            val newList = mutableListOf<PlotObject>()
 
             // Detect epochDay changes: midnight (+1.0) resets Sun only;
             // any other change (manual time entry) resets all objects.
@@ -235,58 +291,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             }
             prevEpochDay = epochDay
 
-            // === SUN ===
-            val sunEventData = computeSunEvents(epochDay, lat, lon, offset, jdStart, currentUtEpochDay, eventCaches["Sun"])
-            eventCaches["Sun"] = sunEventData
-
-            // Sun visual position (always recomputed)
-            val sunState = AstroEngine.getBodyState("Sun", jdStart)
-            val (sunAppRa, sunAppDec) = j2000ToApparent(sunState.ra, sunState.dec, jdStart)
-            newList.add(PlotObject("Sun", "☉", redColorInt, sunAppRa, sunAppDec,
-                sunEventData.events, HORIZON_REFRACTED, anchorEpochDay = sunEventData.anchorEpochDay))
-
-            // Anchor Moon/planet events to the observing night: before sunrise,
-            // use the previous local day so events stay stable all night.
-            val nowUtFracDay = currentUtEpochDay - floor(currentUtEpochDay)
-            val currentLocalSolar = normalizeTime(nowUtFracDay * 24.0 + offset)
-            val eventEpochDay = if (currentLocalSolar < sunEventData.events.rise) epochDay - 1.0 else epochDay
-
-            // === MOON ===
-            // Moon visual position (always recomputed)
-            val moonState = AstroEngine.getBodyState("Moon", jdStart)
-            val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, jdStart)
-            val lstVal = calculateLSTHours(jdStart, lon)
-            val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
-            val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
-            val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
-
-            val moonEventData = computeMoonEvents(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])
-            eventCaches["Moon"] = moonEventData
-
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec,
-                moonEventData.events, moonTargetAlt,
-                moonEventData.transitTomorrow, moonEventData.setTomorrow, moonEventData.anchorEpochDay,
-                moonEventData.riseDec, moonEventData.transitDec, moonEventData.setDec))
-
-            // === PLANETS ===
-            for (p in planets) {
-                if (p.name != "Earth") {
-                    // Planet visual position (always recomputed)
-                    val state = AstroEngine.getBodyState(p.name, jdStart)
-                    val (pAppRa, pAppDec) = j2000ToApparent(state.ra, state.dec, jdStart)
-                    val col = p.color.toArgb()
-
-                    val planetEventData = computePlanetEventsCache(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, p, pAppDec, eventCaches[p.name])
-                    eventCaches[p.name] = planetEventData
-
-                    newList.add(PlotObject(p.name, p.symbol, col, pAppRa, pAppDec,
-                        planetEventData.events, PLANET_HORIZON_ALT,
-                        planetEventData.transitTomorrow, planetEventData.setTomorrow, planetEventData.anchorEpochDay,
-                        planetEventData.riseDec, planetEventData.transitDec, planetEventData.setDec))
-                }
-            }
-
-            plotData = newList
+            plotData = buildPlotList(jdStart, currentUtEpochDay)
         }
         // Wait until ~1 second before the next minute boundary so fresh
         // data is ready when the once-per-minute redraw fires at :00.
@@ -331,54 +336,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             val jdStart = wallNow.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
             val currentUtEpochDay = jdStart - UNIX_EPOCH_JD
 
-            // Recompute Sun events (needed to determine eventEpochDay anchor)
-            val sunEventData = computeSunEvents(epochDay, lat, lon, offset, jdStart, currentUtEpochDay, eventCaches["Sun"])
-            eventCaches["Sun"] = sunEventData
-
-            val nowUtFracDay = currentUtEpochDay - floor(currentUtEpochDay)
-            val currentLocalSolar = normalizeTime(nowUtFracDay * 24.0 + offset)
-            val eventEpochDay = if (currentLocalSolar < sunEventData.events.rise) epochDay - 1.0 else epochDay
-
-            // Rebuild plotData, recalculating only stale objects (the compute
-            // functions return the existing cache when events are still fresh)
-            val newList = mutableListOf<PlotObject>()
-
-            // Sun
-            val sunState = AstroEngine.getBodyState("Sun", jdStart)
-            val (sunAppRa, sunAppDec) = j2000ToApparent(sunState.ra, sunState.dec, jdStart)
-            newList.add(PlotObject("Sun", "☉", redColorInt, sunAppRa, sunAppDec,
-                sunEventData.events, HORIZON_REFRACTED, anchorEpochDay = sunEventData.anchorEpochDay))
-
-            // Moon
-            val moonState = AstroEngine.getBodyState("Moon", jdStart)
-            val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, jdStart)
-            val lstVal = calculateLSTHours(jdStart, lon)
-            val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
-            val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
-            val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
-            val moonEventData = computeMoonEvents(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])
-            eventCaches["Moon"] = moonEventData
-            newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec,
-                moonEventData.events, moonTargetAlt,
-                moonEventData.transitTomorrow, moonEventData.setTomorrow, moonEventData.anchorEpochDay,
-                moonEventData.riseDec, moonEventData.transitDec, moonEventData.setDec))
-
-            // Planets
-            for (p in planets) {
-                if (p.name != "Earth") {
-                    val state = AstroEngine.getBodyState(p.name, jdStart)
-                    val (pAppRa, pAppDec) = j2000ToApparent(state.ra, state.dec, jdStart)
-                    val col = p.color.toArgb()
-                    val planetEventData = computePlanetEventsCache(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, p, pAppDec, eventCaches[p.name])
-                    eventCaches[p.name] = planetEventData
-                    newList.add(PlotObject(p.name, p.symbol, col, pAppRa, pAppDec,
-                        planetEventData.events, PLANET_HORIZON_ALT,
-                        planetEventData.transitTomorrow, planetEventData.setTomorrow, planetEventData.anchorEpochDay,
-                        planetEventData.riseDec, planetEventData.transitDec, planetEventData.setDec))
-                }
-            }
-
-            plotData = newList
+            plotData = buildPlotList(jdStart, currentUtEpochDay)
         }
     }
 
