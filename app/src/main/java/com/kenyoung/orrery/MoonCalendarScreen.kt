@@ -23,6 +23,12 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private fun phaseAnglePair(epochDay: Double, lon: Double): Pair<Double, Double> {
+    val phase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay, lon))
+    val nextPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay + 1.0, lon))
+    return Pair(phase, nextPhase)
+}
+
 @Composable
 fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateChange: (LocalDate) -> Unit) {
     val bgColor = Color.Black
@@ -157,8 +163,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
 
             for (d in 1..daysInMonth) {
                 val epochDay = mDate.withDayOfMonth(d).toEpochDay().toDouble()
-                val phaseAngle = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay, lon))
-                val nextPhaseAngle = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay + 1.0, lon))
+                val (phaseAngle, nextPhaseAngle) = phaseAnglePair(epochDay, lon)
 
                 // Full Moon Check: Crossing 180
                 if (phaseAngle < 180 && nextPhaseAngle >= 180) {
@@ -208,8 +213,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
             for (d in 1..daysInMonth) {
                 val dayDate = mDate.withDayOfMonth(d)
                 val epochDay = dayDate.toEpochDay().toDouble()
-                val phaseAngle = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay, lon))
-                val nextPhaseAngle = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay + 1.0, lon))
+                val (phaseAngle, nextPhaseAngle) = phaseAnglePair(epochDay, lon)
 
                 val yCenter = topMargin + headerHeight + ((d - 1) * rowHeight) + (rowHeight / 2)
 

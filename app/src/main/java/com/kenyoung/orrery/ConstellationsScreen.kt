@@ -79,6 +79,34 @@ private const val DEC_MIN = -50.0
 private const val DEC_MAX = 50.0
 private const val DEC_RANGE = DEC_MAX - DEC_MIN
 
+private fun DrawScope.raToX(raHours: Double): Float {
+    val chartRa = if (raHours > 12.0) raHours - 24.0 else raHours
+    return (size.width * (12.0 - chartRa) / 24.0).toFloat()
+}
+
+private fun DrawScope.decToY(dec: Double): Float {
+    return (size.height * (DEC_MAX - dec) / DEC_RANGE).toFloat()
+}
+
+private fun DrawScope.drawEcliptic(obliquity: Double) {
+    val w = size.width
+    val epsRad = Math.toRadians(obliquity)
+    val eclipticPoints = (0..360).map { lambdaDeg ->
+        val lambdaRad = Math.toRadians(lambdaDeg.toDouble())
+        val ra = Math.toDegrees(atan2(sin(lambdaRad) * cos(epsRad), cos(lambdaRad)))
+        val dec = Math.toDegrees(asin(sin(lambdaRad) * sin(epsRad)))
+        val raH = normalizeDegrees(ra) * DEGREES_TO_HOURS
+        Offset(raToX(raH), decToY(dec))
+    }
+    for (i in 0 until eclipticPoints.size - 1) {
+        val p1 = eclipticPoints[i]
+        val p2 = eclipticPoints[i + 1]
+        if (abs(p1.x - p2.x) < w * 0.5f) {
+            drawLine(Color.Red, p1, p2, strokeWidth = 3.0f)
+        }
+    }
+}
+
 /**
  * Boundary segment in RA/Dec coordinates (B1875.0 hours/degrees).
  */
@@ -562,15 +590,6 @@ private fun DrawScope.drawSkyMap(
     val w = size.width
     val h = size.height
 
-    fun raToX(raHours: Double): Float {
-        val chartRa = if (raHours > 12.0) raHours - 24.0 else raHours
-        return (w * (12.0 - chartRa) / 24.0).toFloat()
-    }
-
-    fun decToY(dec: Double): Float {
-        return (h * (DEC_MAX - dec) / DEC_RANGE).toFloat()
-    }
-
     // Border box
     drawRect(Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
 
@@ -610,22 +629,7 @@ private fun DrawScope.drawSkyMap(
     val veX = raToX(0.0)
     drawLine(Color.White, Offset(veX, 0f), Offset(veX, h), strokeWidth = 1f)
 
-    // Ecliptic curve (red)
-    val epsRad = Math.toRadians(obliquity)
-    val eclipticPoints = (0..360).map { lambdaDeg ->
-        val lambdaRad = Math.toRadians(lambdaDeg.toDouble())
-        val ra = Math.toDegrees(atan2(sin(lambdaRad) * cos(epsRad), cos(lambdaRad)))
-        val dec = Math.toDegrees(asin(sin(lambdaRad) * sin(epsRad)))
-        val raH = normalizeDegrees(ra) * DEGREES_TO_HOURS
-        Offset(raToX(raH), decToY(dec))
-    }
-    for (i in 0 until eclipticPoints.size - 1) {
-        val p1 = eclipticPoints[i]
-        val p2 = eclipticPoints[i + 1]
-        if (abs(p1.x - p2.x) < w * 0.5f) {
-            drawLine(Color.Red, p1, p2, strokeWidth = 3.0f)
-        }
-    }
+    drawEcliptic(obliquity)
 
     // Zodiac constellation symbols in white
     val zodiacPaint = android.graphics.Paint().apply {
@@ -679,15 +683,6 @@ private fun DrawScope.drawStarMap(
     val w = size.width
     val h = size.height
 
-    fun raToX(raHours: Double): Float {
-        val chartRa = if (raHours > 12.0) raHours - 24.0 else raHours
-        return (w * (12.0 - chartRa) / 24.0).toFloat()
-    }
-
-    fun decToY(dec: Double): Float {
-        return (h * (DEC_MAX - dec) / DEC_RANGE).toFloat()
-    }
-
     // Border box
     drawRect(Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
 
@@ -721,22 +716,7 @@ private fun DrawScope.drawStarMap(
     val veX = raToX(0.0)
     drawLine(Color.White, Offset(veX, 0f), Offset(veX, h), strokeWidth = 1f)
 
-    // Ecliptic curve (red)
-    val epsRad = Math.toRadians(obliquity)
-    val eclipticPoints = (0..360).map { lambdaDeg ->
-        val lambdaRad = Math.toRadians(lambdaDeg.toDouble())
-        val ra = Math.toDegrees(atan2(sin(lambdaRad) * cos(epsRad), cos(lambdaRad)))
-        val dec = Math.toDegrees(asin(sin(lambdaRad) * sin(epsRad)))
-        val raH = normalizeDegrees(ra) * DEGREES_TO_HOURS
-        Offset(raToX(raH), decToY(dec))
-    }
-    for (i in 0 until eclipticPoints.size - 1) {
-        val p1 = eclipticPoints[i]
-        val p2 = eclipticPoints[i + 1]
-        if (abs(p1.x - p2.x) < w * 0.5f) {
-            drawLine(Color.Red, p1, p2, strokeWidth = 3.0f)
-        }
-    }
+    drawEcliptic(obliquity)
 
     // Planet symbols in green
     val symbolPaint = android.graphics.Paint().apply {

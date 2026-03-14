@@ -166,15 +166,22 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
 
     val zoneId = ZoneId.systemDefault()
 
-    fun getInstantFromManual(epochDay: Double): Instant {
+    // Split an epoch day into LocalDate and LocalTime, rounding to the
+    // nearest second (double can't represent fractional days to sub-second
+    // precision at epoch day magnitudes ~20000).
+    fun epochDayToDateTime(epochDay: Double): Pair<LocalDate, LocalTime> {
         val days = floor(epochDay).toLong()
         val frac = epochDay - days
-        // Round to nearest second — double can't represent fractional days to
-        // sub-second precision at epoch day magnitudes (~20000), so the sub-second
-        // part is pure floating-point noise.
         val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
-        val localDate = LocalDate.ofEpochDay(days + totalSeconds / SECONDS_PER_DAY.toLong())
-        val localTime = LocalTime.ofSecondOfDay(totalSeconds % SECONDS_PER_DAY.toLong())
+        val secPerDay = SECONDS_PER_DAY.toLong()
+        return Pair(
+            LocalDate.ofEpochDay(days + totalSeconds / secPerDay),
+            LocalTime.ofSecondOfDay(totalSeconds % secPerDay)
+        )
+    }
+
+    fun getInstantFromManual(epochDay: Double): Instant {
+        val (localDate, localTime) = epochDayToDateTime(epochDay)
         val refInstant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant()
         val standardOffset = zoneId.rules.getStandardOffset(refInstant)
         return LocalDateTime.of(localDate, localTime).toInstant(standardOffset)
@@ -350,11 +357,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             onConfirm = { usePhone, utEpochDay, inputStrings ->
                 usePhoneTime = usePhone
                 if (!usePhone && utEpochDay != null) {
-                    val days = utEpochDay.toLong()
-                    val frac = utEpochDay - days
-                    val totalSeconds = Math.round(frac * SECONDS_PER_DAY)
-                    val ld = LocalDate.ofEpochDay(days + totalSeconds / SECONDS_PER_DAY.toLong())
-                    val lt = LocalTime.ofSecondOfDay(totalSeconds % SECONDS_PER_DAY.toLong())
+                    val (ld, lt) = epochDayToDateTime(utEpochDay)
                     currentInstant = LocalDateTime.of(ld, lt).toInstant(ZoneOffset.UTC)
                     manualEpochDay = getManualFromInstant(currentInstant)
                     savedDateInput = inputStrings
