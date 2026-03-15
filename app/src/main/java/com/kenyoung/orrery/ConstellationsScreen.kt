@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -919,16 +920,50 @@ private fun DrawScope.drawSimpleDisk(
 }
 
 /**
- * Draws Mars with limb darkening, subtle dark surface markings, and polar ice caps.
+ * Mars surface albedo patch: position, size, opacity, rotation, and color.
+ * Positions are in fractions of the disk radius from center (-1 to 1).
+ */
+private data class MarsPatch(
+    val xFrac: Float, val yFrac: Float,
+    val wFrac: Float, val hFrac: Float,
+    val alpha: Float, val rotDeg: Float,
+    val color: Color
+)
+
+/** Irregular dark and light patches approximating major Mars albedo features. */
+private val marsPatches = listOf(
+    // Large dark region left of center (Syrtis Major-like)
+    MarsPatch(-0.15f, -0.05f, 0.38f, 0.50f, 0.18f, -20f, Color(0xFF5A2810)),
+    // Darker core within Syrtis
+    MarsPatch(-0.10f, -0.10f, 0.18f, 0.30f, 0.14f, -15f, Color(0xFF3D1A08)),
+    // Northern dark area (Mare Acidalium-like) - extends to upper-right limb
+    MarsPatch(0.30f, -0.50f, 0.50f, 0.40f, 0.16f, 10f, Color(0xFF4A2818)),
+    // Southern dark area (Mare Erythraeum-like)
+    MarsPatch(-0.05f, 0.30f, 0.45f, 0.28f, 0.13f, 15f, Color(0xFF603018)),
+    // Equatorial dark strip (Sinus Sabaeus-like)
+    MarsPatch(0.25f, 0.08f, 0.30f, 0.14f, 0.15f, -8f, Color(0xFF502010)),
+    // Dark patch far left (Sinus Meridiani-like) - extends to left limb
+    MarsPatch(-0.55f, 0.10f, 0.35f, 0.25f, 0.14f, 25f, Color(0xFF4A2010)),
+    // Small dark spot upper right
+    MarsPatch(0.35f, -0.22f, 0.16f, 0.20f, 0.12f, -25f, Color(0xFF5A2818)),
+    // Subtle dark blush lower left
+    MarsPatch(-0.30f, 0.25f, 0.20f, 0.16f, 0.10f, 40f, Color(0xFF5A3020)),
+    // Light patch (Hellas basin-like) - lighter than base
+    MarsPatch(0.18f, 0.38f, 0.28f, 0.22f, 0.12f, -5f, Color(0xFFE8C090)),
+    // Light patch (Arabia Terra-like)
+    MarsPatch(-0.05f, -0.28f, 0.30f, 0.20f, 0.08f, 12f, Color(0xFFDDB880)),
+    // Subtle warm patch right of center
+    MarsPatch(0.30f, 0.15f, 0.22f, 0.18f, 0.07f, -15f, Color(0xFFD4A068)),
+)
+
+/**
+ * Draws Mars with limb darkening, irregular surface albedo markings, and polar ice caps.
  * subEarthLatDeg: positive = north pole tilted toward Earth, negative = south pole.
  */
 private fun DrawScope.drawMarsDisk(
     cx: Float, cy: Float, radiusPx: Float, color: Color,
     phaseAngleDeg: Double, litFromLeft: Boolean, subEarthLatDeg: Double
 ) {
-    // Darker terrain color for surface variation
-    val darkTerrain = Color(0xFF8B4513)
-
     // Limb-darkened base disk
     val limbSteps = maxOf(10, (radiusPx / 2).toInt())
     val limbU = 0.4f
@@ -940,53 +975,49 @@ private fun DrawScope.drawMarsDisk(
         drawCircle(c, radius = radiusPx * r, center = Offset(cx, cy))
     }
 
-    // Dark surface markings clipped to disk
+    // Surface albedo markings clipped to disk
     val diskClip = Path().apply {
         addOval(Rect(cx - radiusPx, cy - radiusPx, cx + radiusPx, cy + radiusPx))
     }
     clipPath(diskClip) {
-        // Subtle dark band near equator (Syrtis Major / Mare region approximation)
-        val bandColor = darkTerrain.copy(alpha = 0.20f)
-        val bandTop = cy - radiusPx * 0.15f
-        val bandBot = cy + radiusPx * 0.25f
-        drawRect(bandColor, topLeft = Offset(cx - radiusPx, bandTop),
-            size = Size(radiusPx * 2, bandBot - bandTop))
-        // Feathered edges
-        val feather = radiusPx * 0.12f
-        val fadeColor = bandColor.copy(alpha = 0f)
-        drawRect(
-            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(fadeColor, bandColor), startY = bandTop - feather, endY = bandTop + feather
-            ),
-            topLeft = Offset(cx - radiusPx, bandTop - feather),
-            size = Size(radiusPx * 2, feather * 2)
-        )
-        drawRect(
-            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(bandColor, fadeColor), startY = bandBot - feather, endY = bandBot + feather
-            ),
-            topLeft = Offset(cx - radiusPx, bandBot - feather),
-            size = Size(radiusPx * 2, feather * 2)
-        )
+        // Draw irregular dark and light patches
+        for (patch in marsPatches) {
+            val patchCx = cx + patch.xFrac * radiusPx
+            val patchCy = cy + patch.yFrac * radiusPx
+            val patchW = patch.wFrac * radiusPx * 2
+            val patchH = patch.hFrac * radiusPx * 2
+            val patchColor = patch.color.copy(alpha = patch.alpha)
+            rotate(degrees = patch.rotDeg, pivot = Offset(patchCx, patchCy)) {
+                // Draw feathered patch: outer ring at reduced opacity for soft edges
+                val featherFrac = 0.3f
+                val outerColor = patchColor.copy(alpha = patchColor.alpha * 0.3f)
+                drawOval(
+                    outerColor,
+                    topLeft = Offset(
+                        patchCx - patchW / 2 * (1 + featherFrac),
+                        patchCy - patchH / 2 * (1 + featherFrac)
+                    ),
+                    size = Size(patchW * (1 + featherFrac), patchH * (1 + featherFrac))
+                )
+                // Core patch
+                drawOval(
+                    patchColor,
+                    topLeft = Offset(patchCx - patchW / 2, patchCy - patchH / 2),
+                    size = Size(patchW, patchH)
+                )
+            }
+        }
 
         // Polar ice caps
-        // subEarthLatDeg > 0: north pole tilted toward Earth, south pole away
-        // Ice cap extends ~10° from each pole
         val capAngularRadiusDeg = 10.0
         val capAngularRadius = Math.toRadians(capAngularRadiusDeg)
         val de = Math.toRadians(subEarthLatDeg)
-
-        // Orthographic projection: pole at lat 90 viewed from sub-Earth lat De
-        // y_pole = R * cos(De), screen y = cy - R*cos(De) (north up)
         val northPoleY = cy - radiusPx * cos(de).toFloat()
         val southPoleY = cy + radiusPx * cos(de).toFloat()
-
-        // Cap semi-major axis on disk (horizontal extent, no foreshortening)
         val capSize = (radiusPx * sin(capAngularRadius)).toFloat()
         val capColor = Color(0xCCFFFFFF)
 
-        // North cap visible when De > -capAngularRadius (cap edge peeks over limb)
-        // Foreshortening = sin(De): 0 at equator view, 1 looking straight at pole
+        // North cap visible when De > -capAngularRadius
         if (subEarthLatDeg > -capAngularRadiusDeg) {
             val foreShorten = sin(de).toFloat().coerceIn(0.1f, 1f)
             drawOval(
@@ -997,7 +1028,6 @@ private fun DrawScope.drawMarsDisk(
         }
 
         // South cap visible when De < capAngularRadius
-        // Foreshortening = -sin(De) = sin(-De): 0 at equator, 1 looking at south pole
         if (subEarthLatDeg < capAngularRadiusDeg) {
             val foreShorten = (-sin(de)).toFloat().coerceIn(0.1f, 1f)
             drawOval(
