@@ -599,7 +599,6 @@ fun CompassCanvas(
                     isPre = isUp && currentLocalSolar < transitH
                     isPost = isUp && currentLocalSolar >= transitH
                 }
-                val anchorDate = floor(obj.anchorEpochDay).toLong()
 
                 // Name
                 paints.tableDataLeft.color = if (isUp) paints.greenInt else paints.redInt
@@ -612,7 +611,7 @@ fun CompassCanvas(
                 // Rise — un-normalized display hours for date comparison
                 val riseRaw = obj.events.rise - offset + displayOffsetHours
                 val riseDisplay = normalizeTime(riseRaw)
-                val riseTomorrow = anchorDate + floor(riseRaw / 24.0).toLong() > currentDisplayDate
+                val riseTomorrow = isEventTomorrow(obj.anchorEpochDay, riseRaw, currentDisplayDate)
                 val riseStr = formatTimeMM(riseDisplay, false) + if (riseTomorrow) "*" else ""
                 val riseColor = if (!isUp) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = riseColor
@@ -625,7 +624,7 @@ fun CompassCanvas(
                 // Transit — restore 24h if pulled from next day, for correct date calc
                 val transRaw = (obj.events.transit + if (obj.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
                 val transDisplay = normalizeTime(transRaw)
-                val transTomorrow = anchorDate + floor(transRaw / 24.0).toLong() > currentDisplayDate
+                val transTomorrow = isEventTomorrow(obj.anchorEpochDay, transRaw, currentDisplayDate)
                 val transStr = formatTimeMM(transDisplay, false) + if (transTomorrow) "*" else ""
                 val transColor = if (isPre) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = transColor
@@ -638,7 +637,7 @@ fun CompassCanvas(
                 // Set — restore 24h if pulled from next day, for correct date calc
                 val setRaw = (obj.events.set + if (obj.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
                 val setDisplay = normalizeTime(setRaw)
-                val setIsTomorrow = anchorDate + floor(setRaw / 24.0).toLong() > currentDisplayDate
+                val setIsTomorrow = isEventTomorrow(obj.anchorEpochDay, setRaw, currentDisplayDate)
                 val setStr = formatTimeMM(setDisplay, false) + if (setIsTomorrow) "*" else ""
                 val setColor = if (isPost) paints.whiteInt else paints.grayInt
                 paints.tableDataLeft.color = setColor

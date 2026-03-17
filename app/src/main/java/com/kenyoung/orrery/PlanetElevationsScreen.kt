@@ -147,10 +147,8 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         var anyAsterisk = false
 
         fun isRiseTomorrow(ev: PlanetEvents, anchorEpochDay: Double): Boolean {
-            if (ev.rise.isNaN()) return false
-            val anchorDate = floor(anchorEpochDay).toLong()
             val riseRaw = ev.rise - offsetHours + displayOffsetHours
-            return anchorDate + floor(riseRaw / 24.0).toLong() > currentDisplayDate
+            return isEventTomorrow(anchorEpochDay, riseRaw, currentDisplayDate)
         }
 
         // --- DRAW TWILIGHT SHADING ---

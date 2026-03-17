@@ -802,6 +802,15 @@ fun calculateMoonPosition(epochDay: Double): RaDec {
     val dec = Math.toDegrees(asin(z))
     return RaDec(ra, dec)
 }
+// Returns true if an event at [eventRawHours] (un-normalized local hours relative to anchor
+// midnight) falls on a later calendar day than [currentDisplayDate] in the display timezone.
+// Used by Compass and Elevations to append "*" to times that belong to the next day.
+fun isEventTomorrow(anchorEpochDay: Double, eventRawHours: Double, currentDisplayDate: Long): Boolean {
+    if (eventRawHours.isNaN()) return false
+    val anchorDate = floor(anchorEpochDay).toLong()
+    return anchorDate + floor(eventRawHours / 24.0).toLong() > currentDisplayDate
+}
+
 fun calculateLST(instant: Instant, lon: Double): String {
     val jd = instant.epochSecond / SECONDS_PER_DAY + UNIX_EPOCH_JD
     val lst = calculateLSTHours(jd, lon)
