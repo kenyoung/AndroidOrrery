@@ -100,6 +100,69 @@ private fun computeArrowBounds(
     )
 }
 
+private data class ArrowLayout(
+    val vernalBaseX: Float, val vernalBaseY: Float, val vernalBounds: android.graphics.RectF,
+    val gcBaseX: Float, val gcBaseY: Float, val gcBounds: android.graphics.RectF,
+    val cmbBaseX: Float, val cmbBaseY: Float, val cmbBounds: android.graphics.RectF,
+    val viewText: String, val viewLabelBaseline: Float, val viewLabelTop: Float, val viewLabelBounds: android.graphics.RectF
+)
+
+private fun computeArrowLayout(w: Float, h: Float, cx: Float, margin: Float, arrowLen: Float, labelPaint: Paint): ArrowLayout {
+    var vernalBaseX = cx
+    val vernalBaseY = margin + arrowLen
+    val vernalBoundsInitial = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
+    if (vernalBoundsInitial.right > w) vernalBaseX -= (vernalBoundsInitial.right - w)
+    if (vernalBoundsInitial.left < 0) vernalBaseX -= vernalBoundsInitial.left
+    val vernalActualBounds = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
+
+    val gcRef = computeArrowBounds(0f, 0f, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
+    val gcBaseX = w - margin - gcRef.right
+    val gcBaseY = h - margin - gcRef.bottom
+    val gcActualBounds = android.graphics.RectF(
+        gcBaseX + gcRef.left, gcBaseY + gcRef.top,
+        gcBaseX + gcRef.right, gcBaseY + gcRef.bottom
+    )
+
+    val cmbRef = computeArrowBounds(0f, 0f, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, labelPaint)
+    val cmbBaseX = margin - cmbRef.left
+    val cmbBaseY = h - margin - cmbRef.bottom
+    val cmbActualBounds = android.graphics.RectF(
+        cmbBaseX + cmbRef.left, cmbBaseY + cmbRef.top,
+        cmbBaseX + cmbRef.right, cmbBaseY + cmbRef.bottom
+    )
+
+    val viewText = "View from above the Sun's north pole"
+    val viewTextWidth = labelPaint.measureText(viewText)
+    val viewLabelBaseline = gcActualBounds.top - labelPaint.descent()
+    val viewLabelTop = viewLabelBaseline + labelPaint.ascent()
+    val viewLabelBounds = android.graphics.RectF(
+        cx - viewTextWidth / 2f, viewLabelTop,
+        cx + viewTextWidth / 2f, viewLabelBaseline + labelPaint.descent()
+    )
+
+    return ArrowLayout(
+        vernalBaseX, vernalBaseY, vernalActualBounds,
+        gcBaseX, gcBaseY, gcActualBounds,
+        cmbBaseX, cmbBaseY, cmbActualBounds,
+        viewText, viewLabelBaseline, viewLabelTop, viewLabelBounds
+    )
+}
+
+private fun DrawScope.drawArrowLabels(layout: ArrowLayout, cx: Float, arrowLen: Float, labelPaint: Paint, showViewLabel: Boolean) {
+    val arrowPaint = Paint().apply { color = 0xFF87CEFA.toInt(); style = Paint.Style.FILL }
+    drawArbitraryArrow(layout.vernalBaseX, layout.vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint)
+    drawArbitraryArrow(layout.gcBaseX, layout.gcBaseY, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
+    drawArbitraryArrow(layout.cmbBaseX, layout.cmbBaseY, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
+    if (showViewLabel) {
+        drawIntoCanvas { canvas ->
+            val savedAlign = labelPaint.textAlign
+            labelPaint.textAlign = Paint.Align.CENTER
+            canvas.nativeCanvas.drawText(layout.viewText, cx, layout.viewLabelBaseline, labelPaint)
+            labelPaint.textAlign = savedAlign
+        }
+    }
+}
+
 private fun maxRadiusAvoidingRect(cx: Float, cy: Float, rect: android.graphics.RectF): Float {
     val nearestX = cx.coerceIn(rect.left, rect.right)
     val nearestY = cy.coerceIn(rect.top, rect.bottom)
@@ -221,37 +284,7 @@ fun ScaleOrrery(epochDay: Double) {
             val arrowLen = 80f
 
             // --- Step 1: Compute label bounding boxes ---
-            var vernalBaseX = cx
-            val vernalBaseY = margin + arrowLen
-            val vernalBoundsInitial = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
-            if (vernalBoundsInitial.right > w) vernalBaseX -= (vernalBoundsInitial.right - w)
-            if (vernalBoundsInitial.left < 0) vernalBaseX -= vernalBoundsInitial.left
-            val vernalActualBounds = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
-
-            val gcRef = computeArrowBounds(0f, 0f, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
-            val gcBaseX = w - margin - gcRef.right
-            val gcBaseY = h - margin - gcRef.bottom
-            val gcActualBounds = android.graphics.RectF(
-                gcBaseX + gcRef.left, gcBaseY + gcRef.top,
-                gcBaseX + gcRef.right, gcBaseY + gcRef.bottom
-            )
-
-            val cmbRef = computeArrowBounds(0f, 0f, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, labelPaint)
-            val cmbBaseX = margin - cmbRef.left
-            val cmbBaseY = h - margin - cmbRef.bottom
-            val cmbActualBounds = android.graphics.RectF(
-                cmbBaseX + cmbRef.left, cmbBaseY + cmbRef.top,
-                cmbBaseX + cmbRef.right, cmbBaseY + cmbRef.bottom
-            )
-
-            val viewText = "View from above the Sun's north pole"
-            val viewTextWidth = labelPaint.measureText(viewText)
-            val viewLabelBaseline = gcActualBounds.top - labelPaint.descent()
-            val viewLabelTop = viewLabelBaseline + labelPaint.ascent()
-            val viewLabelBounds = android.graphics.RectF(
-                cx - viewTextWidth / 2f, viewLabelTop,
-                cx + viewTextWidth / 2f, viewLabelBaseline + labelPaint.descent()
-            )
+            val arrows = computeArrowLayout(w, h, cx, margin, arrowLen, labelPaint)
 
             // --- Step 2: Compute pixelsPerAU dynamically ---
             val maxRadius = minOf(
@@ -259,10 +292,10 @@ fun ScaleOrrery(epochDay: Double) {
                 w - cx - planetRadius,
                 cy - planetRadius,
                 h - cy - planetRadius,
-                maxRadiusAvoidingRect(cx, cy, vernalActualBounds) - planetRadius,
-                maxRadiusAvoidingRect(cx, cy, gcActualBounds) - planetRadius,
-                maxRadiusAvoidingRect(cx, cy, cmbActualBounds) - planetRadius,
-                maxRadiusAvoidingRect(cx, cy, viewLabelBounds) - planetRadius
+                maxRadiusAvoidingRect(cx, cy, arrows.vernalBounds) - planetRadius,
+                maxRadiusAvoidingRect(cx, cy, arrows.gcBounds) - planetRadius,
+                maxRadiusAvoidingRect(cx, cy, arrows.cmbBounds) - planetRadius,
+                maxRadiusAvoidingRect(cx, cy, arrows.viewLabelBounds) - planetRadius
             ).coerceAtLeast(50f)
             val pixelsPerAU = maxRadius / neptuneAU
             val currentPixelsPerAU = pixelsPerAU * scale
@@ -303,21 +336,7 @@ fun ScaleOrrery(epochDay: Double) {
             }
 
             // --- Step 4: Draw labels ---
-            val lightBlue = 0xFF87CEFA.toInt()
-            val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
-
-            drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint)
-            drawArbitraryArrow(gcBaseX, gcBaseY, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
-            drawArbitraryArrow(cmbBaseX, cmbBaseY, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
-
-            if (!hasZoomed) {
-                drawIntoCanvas { canvas ->
-                    val savedAlign = labelPaint.textAlign
-                    labelPaint.textAlign = Paint.Align.CENTER
-                    canvas.nativeCanvas.drawText(viewText, cx, viewLabelBaseline, labelPaint)
-                    labelPaint.textAlign = savedAlign
-                }
-            }
+            drawArrowLabels(arrows, cx, arrowLen, labelPaint, showViewLabel = !hasZoomed)
             }
         }
 
@@ -365,48 +384,18 @@ fun SchematicOrrery(epochDay: Double) {
         val arrowLen = 80f
 
         // --- Step 1: Compute all label bounding boxes ---
-        var vernalBaseX = cx
-        val vernalBaseY = margin + arrowLen
-        val vernalBoundsInitial = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
-        if (vernalBoundsInitial.right > w) vernalBaseX -= (vernalBoundsInitial.right - w)
-        if (vernalBoundsInitial.left < 0) vernalBaseX -= vernalBoundsInitial.left
-        val vernalActualBounds = computeArrowBounds(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, labelPaint)
-
-        val gcRef = computeArrowBounds(0f, 0f, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, labelPaint, labelBelow = true)
-        val gcBaseX = w - margin - gcRef.right
-        val gcBaseY = h - margin - gcRef.bottom
-        val gcActualBounds = android.graphics.RectF(
-            gcBaseX + gcRef.left, gcBaseY + gcRef.top,
-            gcBaseX + gcRef.right, gcBaseY + gcRef.bottom
-        )
-
-        val cmbRef = computeArrowBounds(0f, 0f, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, labelPaint)
-        val cmbBaseX = margin - cmbRef.left
-        val cmbBaseY = h - margin - cmbRef.bottom
-        val cmbActualBounds = android.graphics.RectF(
-            cmbBaseX + cmbRef.left, cmbBaseY + cmbRef.top,
-            cmbBaseX + cmbRef.right, cmbBaseY + cmbRef.bottom
-        )
-
-        val viewText = "View from above the Sun's north pole"
-        val viewTextWidth = labelPaint.measureText(viewText)
-        val viewLabelBaseline = gcActualBounds.top - labelPaint.descent()
-        val viewLabelTop = viewLabelBaseline + labelPaint.ascent()
-        val viewLabelBounds = android.graphics.RectF(
-            cx - viewTextWidth / 2f, viewLabelTop,
-            cx + viewTextWidth / 2f, viewLabelBaseline + labelPaint.descent()
-        )
+        val arrows = computeArrowLayout(w, h, cx, margin, arrowLen, labelPaint)
 
         // --- Step 2: Determine center and max radius ---
-        val cy = (vernalActualBounds.bottom + viewLabelTop) / 2f
+        val cy = (arrows.vernalBounds.bottom + arrows.viewLabelTop) / 2f
 
         val maxRadius = minOf(
             cx - planetRadius,
             w - cx - planetRadius,
-            cy - vernalActualBounds.bottom - planetRadius,
-            viewLabelTop - cy - planetRadius,
-            maxRadiusAvoidingRect(cx, cy, gcActualBounds) - planetRadius,
-            maxRadiusAvoidingRect(cx, cy, cmbActualBounds) - planetRadius
+            cy - arrows.vernalBounds.bottom - planetRadius,
+            arrows.viewLabelTop - cy - planetRadius,
+            maxRadiusAvoidingRect(cx, cy, arrows.gcBounds) - planetRadius,
+            maxRadiusAvoidingRect(cx, cy, arrows.cmbBounds) - planetRadius
         ).coerceAtLeast(50f)
         val orbitStep = maxRadius / 8f
 
@@ -443,19 +432,7 @@ fun SchematicOrrery(epochDay: Double) {
         }
 
         // --- Step 4: Draw labels ---
-        val lightBlue = 0xFF87CEFA.toInt()
-        val arrowPaint = Paint().apply { color = lightBlue; style = Paint.Style.FILL }
-
-        drawArbitraryArrow(vernalBaseX, vernalBaseY, 0.0, "To Vernal", "Equinox", arrowLen, arrowPaint, labelPaint)
-        drawArbitraryArrow(gcBaseX, gcBaseY, GALACTIC_CENTER_ANGLE, "To Galactic", "Center", arrowLen, arrowPaint, labelPaint, labelBelow = true)
-        drawArbitraryArrow(cmbBaseX, cmbBaseY, CMB_DIPOLE_ANGLE, "To CMB", "Dipole", arrowLen, arrowPaint, labelPaint)
-
-        drawIntoCanvas { canvas ->
-            val savedAlign = labelPaint.textAlign
-            labelPaint.textAlign = Paint.Align.CENTER
-            canvas.nativeCanvas.drawText(viewText, cx, viewLabelBaseline, labelPaint)
-            labelPaint.textAlign = savedAlign
-        }
+        drawArrowLabels(arrows, cx, arrowLen, labelPaint, showViewLabel = true)
         }
     }
 }
