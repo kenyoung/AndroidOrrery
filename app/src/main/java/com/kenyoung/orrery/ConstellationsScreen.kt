@@ -22,8 +22,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +37,11 @@ import kotlinx.coroutines.delay
 import java.io.BufferedInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -274,6 +279,9 @@ fun ConstellationsScreen(
 ) {
     val context = LocalContext.current
     ConstellationBoundary.ensureLoaded(context)
+    val marsBitmap = remember {
+        context.assets.open("MarsAsset.png").use { BitmapFactory.decodeStream(it) }.asImageBitmap()
+    }
 
     // --- ANIMATION STATE ---
     var isAnimating by remember { mutableStateOf(false) }
@@ -529,7 +537,7 @@ fun ConstellationsScreen(
                     .width(mapWidthDp)
                     .aspectRatio(1.5f)
             ) {
-                drawPlanetDisks(planetDisks, northUp = lat >= 0.0)
+                drawPlanetDisks(planetDisks, northUp = lat >= 0.0, marsBitmap = marsBitmap)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -752,7 +760,7 @@ private const val RULER_TICK_ARCSEC = 20.0
 private const val ROW1_MAX_RADIUS_ARCSEC = 32.5       // Venus at inferior conjunction (~0.26 AU)
 private const val SATURN_MAX_RING_RADIUS_ARCSEC = 24.0 // A ring outer at ~8.0 AU
 
-private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Boolean) {
+private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Boolean, marsBitmap: ImageBitmap) {
     val w = size.width
     val h = size.height
 
@@ -801,7 +809,7 @@ private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Bool
     // Draw row 1: Mercury, Venus, Mars, Jupiter
     for ((i, disk) in row1.withIndex()) {
         val cx = cellWidth * (i + 0.5f)
-        drawSinglePlanet(disk, cx, row1CenterY, pxPerRad, northUp)
+        drawSinglePlanet(disk, cx, row1CenterY, pxPerRad, northUp, marsBitmap)
 
         val arcsec = Math.toDegrees(disk.angularRadiusRad) * 2.0 * 3600.0
         val symbol = planetSymbols[disk.name] ?: ""
@@ -824,7 +832,7 @@ private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Bool
     val row2Offset = (w - 3 * cellWidth) / 2f
     for ((i, disk) in row2.withIndex()) {
         val cx = row2Offset + cellWidth * (i + 0.5f)
-        drawSinglePlanet(disk, cx, row2CenterY, pxPerRad, northUp)
+        drawSinglePlanet(disk, cx, row2CenterY, pxPerRad, northUp, marsBitmap)
 
         val arcsec = Math.toDegrees(disk.angularRadiusRad) * 2.0 * 3600.0
         val symbol = planetSymbols[disk.name] ?: ""
@@ -877,7 +885,7 @@ private fun DrawScope.drawScaleRuler(
 }
 
 private fun DrawScope.drawSinglePlanet(
-    disk: PlanetDiskInfo, cx: Float, cy: Float, pxPerRad: Float, northUp: Boolean
+    disk: PlanetDiskInfo, cx: Float, cy: Float, pxPerRad: Float, northUp: Boolean, marsBitmap: ImageBitmap
 ) {
     val eqRadiusPx = (disk.angularRadiusRad * pxPerRad).toFloat()
     val polarRadiusPx = eqRadiusPx * disk.polarRatio.toFloat()
@@ -893,7 +901,7 @@ private fun DrawScope.drawSinglePlanet(
     when (disk.name) {
         "Saturn" -> drawSaturnWithRings(d, cx, cy, eqRadiusPx, polarRadiusPx)
         "Jupiter" -> drawJupiterDisk(cx, cy, eqRadiusPx, polarRadiusPx, disk.phaseAngleDeg, litFromLeft, northUp)
-        "Mars" -> drawMarsDisk(cx, cy, eqRadiusPx, disk.baseColor, disk.phaseAngleDeg, litFromLeft, subEarthLat)
+        "Mars" -> drawMarsDisk(cx, cy, eqRadiusPx, disk.phaseAngleDeg, litFromLeft, marsBitmap)
         else -> drawSimpleDisk(cx, cy, eqRadiusPx, disk.baseColor, disk.phaseAngleDeg, litFromLeft)
     }
 }
@@ -923,117 +931,45 @@ private fun DrawScope.drawSimpleDisk(
  * Mars surface albedo patch: position, size, opacity, rotation, and color.
  * Positions are in fractions of the disk radius from center (-1 to 1).
  */
-private data class MarsPatch(
-    val xFrac: Float, val yFrac: Float,
-    val wFrac: Float, val hFrac: Float,
-    val alpha: Float, val rotDeg: Float,
-    val color: Color
-)
-
-/** Irregular dark and light patches approximating major Mars albedo features. */
-private val marsPatches = listOf(
-    // Large dark region left of center (Syrtis Major-like)
-    MarsPatch(-0.15f, -0.05f, 0.38f, 0.50f, 0.18f, -20f, Color(0xFF5A2810)),
-    // Darker core within Syrtis
-    MarsPatch(-0.10f, -0.10f, 0.18f, 0.30f, 0.14f, -15f, Color(0xFF3D1A08)),
-    // Northern dark area (Mare Acidalium-like) - extends to upper-right limb
-    MarsPatch(0.30f, -0.50f, 0.50f, 0.40f, 0.16f, 10f, Color(0xFF4A2818)),
-    // Southern dark area (Mare Erythraeum-like)
-    MarsPatch(-0.05f, 0.30f, 0.45f, 0.28f, 0.13f, 15f, Color(0xFF603018)),
-    // Equatorial dark strip (Sinus Sabaeus-like)
-    MarsPatch(0.25f, 0.08f, 0.30f, 0.14f, 0.15f, -8f, Color(0xFF502010)),
-    // Dark patch far left (Sinus Meridiani-like) - extends to left limb
-    MarsPatch(-0.55f, 0.10f, 0.35f, 0.25f, 0.14f, 25f, Color(0xFF4A2010)),
-    // Small dark spot upper right
-    MarsPatch(0.35f, -0.22f, 0.16f, 0.20f, 0.12f, -25f, Color(0xFF5A2818)),
-    // Subtle dark blush lower left
-    MarsPatch(-0.30f, 0.25f, 0.20f, 0.16f, 0.10f, 40f, Color(0xFF5A3020)),
-    // Light patch (Hellas basin-like) - lighter than base
-    MarsPatch(0.18f, 0.38f, 0.28f, 0.22f, 0.12f, -5f, Color(0xFFE8C090)),
-    // Light patch (Arabia Terra-like)
-    MarsPatch(-0.05f, -0.28f, 0.30f, 0.20f, 0.08f, 12f, Color(0xFFDDB880)),
-    // Subtle warm patch right of center
-    MarsPatch(0.30f, 0.15f, 0.22f, 0.18f, 0.07f, -15f, Color(0xFFD4A068)),
-)
-
 /**
- * Draws Mars with limb darkening, irregular surface albedo markings, and polar ice caps.
- * subEarthLatDeg: positive = north pole tilted toward Earth, negative = south pole.
+ * Draws Mars using a photo bitmap with limb darkening and phase shadow.
  */
 private fun DrawScope.drawMarsDisk(
-    cx: Float, cy: Float, radiusPx: Float, color: Color,
-    phaseAngleDeg: Double, litFromLeft: Boolean, subEarthLatDeg: Double
+    cx: Float, cy: Float, radiusPx: Float,
+    phaseAngleDeg: Double, litFromLeft: Boolean, bitmap: ImageBitmap
 ) {
-    // Limb-darkened base disk
-    val limbSteps = maxOf(10, (radiusPx / 2).toInt())
-    val limbU = 0.4f
-    for (i in 0 until limbSteps) {
-        val r = 1.0f - i.toFloat() / limbSteps
-        val cosTheta = sqrt(1.0f - r * r)
-        val brightness = 1.0f - limbU * (1.0f - cosTheta)
-        val c = Color(color.red * brightness, color.green * brightness, color.blue * brightness)
-        drawCircle(c, radius = radiusPx * r, center = Offset(cx, cy))
-    }
-
-    // Surface albedo markings clipped to disk
+    // Draw the photo bitmap scaled to the disk size, clipped to a circle
     val diskClip = Path().apply {
         addOval(Rect(cx - radiusPx, cy - radiusPx, cx + radiusPx, cy + radiusPx))
     }
     clipPath(diskClip) {
-        // Draw irregular dark and light patches
-        for (patch in marsPatches) {
-            val patchCx = cx + patch.xFrac * radiusPx
-            val patchCy = cy + patch.yFrac * radiusPx
-            val patchW = patch.wFrac * radiusPx * 2
-            val patchH = patch.hFrac * radiusPx * 2
-            val patchColor = patch.color.copy(alpha = patch.alpha)
-            rotate(degrees = patch.rotDeg, pivot = Offset(patchCx, patchCy)) {
-                // Draw feathered patch: outer ring at reduced opacity for soft edges
-                val featherFrac = 0.3f
-                val outerColor = patchColor.copy(alpha = patchColor.alpha * 0.3f)
-                drawOval(
-                    outerColor,
-                    topLeft = Offset(
-                        patchCx - patchW / 2 * (1 + featherFrac),
-                        patchCy - patchH / 2 * (1 + featherFrac)
-                    ),
-                    size = Size(patchW * (1 + featherFrac), patchH * (1 + featherFrac))
-                )
-                // Core patch
-                drawOval(
-                    patchColor,
-                    topLeft = Offset(patchCx - patchW / 2, patchCy - patchH / 2),
-                    size = Size(patchW, patchH)
-                )
-            }
-        }
+        val diameter = (radiusPx * 2).toInt()
+        drawImage(
+            bitmap,
+            srcOffset = IntOffset.Zero,
+            srcSize = IntSize(bitmap.width, bitmap.height),
+            dstOffset = IntOffset((cx - radiusPx).toInt(), (cy - radiusPx).toInt()),
+            dstSize = IntSize(diameter, diameter)
+        )
+    }
 
-        // Polar ice caps
-        val capAngularRadiusDeg = 10.0
-        val capAngularRadius = Math.toRadians(capAngularRadiusDeg)
-        val de = Math.toRadians(subEarthLatDeg)
-        val northPoleY = cy - radiusPx * cos(de).toFloat()
-        val southPoleY = cy + radiusPx * cos(de).toFloat()
-        val capSize = (radiusPx * sin(capAngularRadius)).toFloat()
-        val capColor = Color(0xCCFFFFFF)
-
-        // North cap visible when De > -capAngularRadius
-        if (subEarthLatDeg > -capAngularRadiusDeg) {
-            val foreShorten = sin(de).toFloat().coerceIn(0.1f, 1f)
-            drawOval(
-                capColor,
-                topLeft = Offset(cx - capSize, northPoleY - capSize * foreShorten),
-                size = Size(capSize * 2, capSize * 2 * foreShorten)
-            )
-        }
-
-        // South cap visible when De < capAngularRadius
-        if (subEarthLatDeg < capAngularRadiusDeg) {
-            val foreShorten = (-sin(de)).toFloat().coerceIn(0.1f, 1f)
-            drawOval(
-                capColor,
-                topLeft = Offset(cx - capSize, southPoleY - capSize * foreShorten),
-                size = Size(capSize * 2, capSize * 2 * foreShorten)
+    // Limb darkening overlay — draw as rings so each band only darkens its own annulus
+    val limbSteps = maxOf(10, (radiusPx / 2).toInt())
+    val limbU = 0.4f
+    for (i in 0 until limbSteps) {
+        val rOuter = 1.0f - i.toFloat() / limbSteps
+        val rInner = 1.0f - (i + 1).toFloat() / limbSteps
+        val rMid = (rOuter + rInner) / 2f
+        val cosTheta = sqrt(1.0f - rMid * rMid)
+        val darkening = limbU * (1.0f - cosTheta)
+        if (darkening > 0.01f) {
+            val strokeWidth = (rOuter - rInner) * radiusPx
+            val strokeRadius = (rOuter + rInner) / 2f * radiusPx
+            drawCircle(
+                Color.Black.copy(alpha = darkening),
+                radius = strokeRadius,
+                center = Offset(cx, cy),
+                style = Stroke(width = strokeWidth)
             )
         }
     }
