@@ -113,12 +113,9 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
         ) {
             val currentJD = mjdToJD(nowMJD)
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val dScale = density / REFERENCE_DENSITY
-                val w = size.width / dScale
-                val h = size.height / dScale
-                drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+                withDensityScaling { w, h ->
                 drawJovianSystem(currentJD, w / 2f, h / 2f, w)
-                drawIntoCanvas { it.nativeCanvas.restore() }
+                }
             }
         }
 
@@ -184,9 +181,7 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
 
                 Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
-                        val dScale = density / REFERENCE_DENSITY
-                        val w = size.width / dScale
-                        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+                        withDensityScaling { w, _ ->
 
                         // Paints
                         val titlePaint = Paint().apply { color = LabelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
@@ -262,7 +257,7 @@ fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOff
                                 }
                             }
                         }
-                        drawIntoCanvas { it.nativeCanvas.restore() }
+                        }
                     }
                 }
             }

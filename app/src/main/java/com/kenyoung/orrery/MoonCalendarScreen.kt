@@ -108,10 +108,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 )
             }
     ) {
-        val dScale = density / REFERENCE_DENSITY
-        val w = size.width / dScale
-        val h = size.height / dScale
-        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+        withDensityScaling { w, h ->
 
         val topMargin = 80f // For Year
         val headerHeight = 50f
@@ -263,7 +260,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 }
             }
         }
-        drawIntoCanvas { it.nativeCanvas.restore() }
+        }
     }
 }
 

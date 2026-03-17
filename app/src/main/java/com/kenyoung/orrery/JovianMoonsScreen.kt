@@ -140,10 +140,7 @@ fun JovianMoonsScreen(
         // 3. Main Graphic Area
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val dScale = density / REFERENCE_DENSITY
-                val w = size.width / dScale
-                val h = size.height / dScale
-                drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+                withDensityScaling { w, h ->
                 val topSectionH = 120f
                 val scaleSectionH = 100f
                 val graphSectionH = h - topSectionH - scaleSectionH
@@ -277,7 +274,7 @@ fun JovianMoonsScreen(
                     }
                 }
                 drawScale(col1X); drawScale(col2X)
-                drawIntoCanvas { it.nativeCanvas.restore() }
+                }
             }
         }
 

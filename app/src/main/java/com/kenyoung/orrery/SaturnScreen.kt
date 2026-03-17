@@ -433,10 +433,7 @@ private fun DrawScope.drawSaturnSystem(
     isNorthUp: Boolean,
     isEastRight: Boolean
 ) {
-    val dScale = density / REFERENCE_DENSITY
-    val w = size.width / dScale
-    val h = size.height / dScale
-    drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+    withDensityScaling { w, h ->
     val centerX = w / 2f
     val centerY = h / 2f
 
@@ -639,7 +636,7 @@ private fun DrawScope.drawSaturnSystem(
         canvas.nativeCanvas.drawText(labelText, (barX0 + barX1) / 2f, barY - tickH - 4f, paint)
 
     }
-    drawIntoCanvas { it.nativeCanvas.restore() }
+    }
 }
 
 // Draw feathered atmospheric bands on Saturn's disk, clipped to the globe ellipse.

@@ -55,9 +55,7 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
         val totalHeightDp = (totalHeightPx / REFERENCE_DENSITY).dp
 
         Canvas(modifier = Modifier.fillMaxWidth().height(totalHeightDp)) {
-            val dScale = density / REFERENCE_DENSITY
-            val w = size.width / dScale
-            drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+            withDensityScaling { w, _ ->
             val titlePaintYellow = Paint().apply { color = labelColor.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val titlePaintWhite = Paint().apply { color = textWhite.toArgb(); textSize = 48f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val colHeaderPaint = Paint().apply { color = eventBlue.toArgb(); textSize = 40f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT; isAntiAlias = true }
@@ -122,7 +120,7 @@ fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime
                     }
                 }
             }
-            drawIntoCanvas { it.nativeCanvas.restore() }
+            }
         }
     }
     TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)

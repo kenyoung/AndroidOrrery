@@ -376,10 +376,7 @@ fun CompassCanvas(
     stdOffsetHours: Double
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val dScale = density / REFERENCE_DENSITY
-        val w = size.width / dScale
-        val h = size.height / dScale
-        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+        withDensityScaling { w, h ->
 
         val tickTriangleHeight = 25f
         val tickTriangleHalfBase = 12f
@@ -661,7 +658,7 @@ fun CompassCanvas(
                 nc.drawText("* Tomorrow", cols[0], currY + 5f, paints.tableDataLeft)
             }
         }
-        drawIntoCanvas { it.nativeCanvas.restore() }
+        }
     }
 }
 

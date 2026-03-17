@@ -1292,17 +1292,15 @@ private fun SolarEclipseDetailView(
                         }
                 ) {
                     val dScale = density / REFERENCE_DENSITY
-                    val w = size.width / dScale
-                    val h = size.height / dScale
-                    drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+                    withDensityScaling { w, h ->
                     drawWorldMap(
-                        this, eclipse, data, shoreline,
+                        this@Canvas, eclipse, data, shoreline,
                         latitude, longitude,
                         0f, h, w,
                         mapScale, mapOffsetX / dScale, mapOffsetY / dScale,
                         shadowPos
                     )
-                    drawIntoCanvas { it.nativeCanvas.restore() }
+                    }
                 }
 
                 // "Pinch to zoom" hint below the map

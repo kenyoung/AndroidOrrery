@@ -81,10 +81,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
 
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
     Canvas(modifier = Modifier.fillMaxSize().weight(1f)) {
-        val dScale = density / REFERENCE_DENSITY
-        val w = size.width / dScale
-        val h = size.height / dScale
-        drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
+        withDensityScaling { w, h ->
 
         // Native Paints
         val axisTextPaint = Paint().apply { color = brightBlue.toArgb(); textSize = 24f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE }
@@ -704,7 +701,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 it.nativeCanvas.drawText("* Tomorrow", 20f, lstSubtitleBaseline, tomorrowPaint)
             }
         }
-        drawIntoCanvas { it.nativeCanvas.restore() }
+        }
     }
     TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     } // Column
