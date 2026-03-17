@@ -185,13 +185,12 @@ private val nutMults = arrayOf(
 // Cache: nutation changes negligibly over ~1 day, so reuse the last result
 // when T is within 1 day (1/36525 century). Eliminates >99% of 63-term
 // evaluations during the Transits cache build.
-@Volatile private var cachedNutT = Double.NaN
-@Volatile private var cachedNutResult: NutationResult? = null
+@Volatile private var cachedNutation: Pair<Double, NutationResult>? = null
 private const val NUT_CACHE_TOL = 1.0 / DAYS_PER_JULIAN_CENTURY // ~1 day in Julian centuries
 
 fun calculateNutation(T: Double): NutationResult {
-    val cached = cachedNutResult
-    if (cached != null && abs(T - cachedNutT) < NUT_CACHE_TOL) return cached
+    val cached = cachedNutation  // single atomic read
+    if (cached != null && abs(T - cached.first) < NUT_CACHE_TOL) return cached.second
 
     val D = normalizeDegrees(297.85036 + 445267.111480 * T - 0.0019142 * T * T + T * T * T / 189474.0)
     val M = normalizeDegrees(357.52772 + 35999.050340 * T - 0.0001603 * T * T - T * T * T / 300000.0)
@@ -224,8 +223,7 @@ fun calculateNutation(T: Double): NutationResult {
     eps += 23.0 + 26.0 / 60.0 + 21.448 / 3600.0 + deltaEps / 3600.0
 
     val result = NutationResult(deltaPhi, deltaEps, eps)
-    cachedNutT = T
-    cachedNutResult = result
+    cachedNutation = Pair(T, result)  // single atomic write
     return result
 }
 
