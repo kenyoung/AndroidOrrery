@@ -26,6 +26,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private const val LABEL_OFFSET_GAP = 25f
+
 @Composable
 fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
     // Basic setup
@@ -507,7 +509,7 @@ fun CompassCanvas(
 
                 var iter = 0
                 while (iter < 10) {
-                    val dist = radius - currentLineLen - 25f
+                    val dist = radius - currentLineLen - LABEL_OFFSET_GAP
                     val sx = center.x + dist * cosA; val sy = center.y + dist * sinA + (halfH/2f)
                     val rect = Rect((sx-halfW-5).toInt(), (sy-halfH-5).toInt(), (sx+halfW+5).toInt(), (sy+halfH+5).toInt())
                     var hit = false

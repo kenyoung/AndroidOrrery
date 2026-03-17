@@ -20,6 +20,10 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private const val PADDING_Y = 120f
+private const val PADDING_LEFT = 180f
+private const val PADDING_RIGHT = 100f
+
 @Composable
 fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
     // Determine the "observing date" based on longitude-derived local time.
@@ -88,11 +92,11 @@ fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
         val h = size.height / dScale
         drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
 
-        val paddingY = 120f
-        
+        val paddingY = PADDING_Y
+
         // ASYMMETRIC PADDING:
-        val paddingLeft = 180f
-        val paddingRight = 100f
+        val paddingLeft = PADDING_LEFT
+        val paddingRight = PADDING_RIGHT
 
         val graphW = w - paddingLeft - paddingRight
         val graphH = h - 2 * paddingY

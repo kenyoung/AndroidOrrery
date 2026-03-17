@@ -26,6 +26,8 @@ import kotlin.math.*
 
 private const val GALACTIC_CENTER_ANGLE = 266.85
 private const val CMB_DIPOLE_ANGLE = 171.67
+private const val PLANET_CIRCLE_RADIUS = 18f
+private const val LAYOUT_MARGIN = 5f
 
 private fun buildOrbitPath(
     p: PlanetElements, cx: Float, cy: Float, pixelsPerAU: Float, steps: Int = 360
@@ -217,8 +219,8 @@ fun ScaleOrrery(epochDay: Double) {
             drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
             val cx = w / 2f
             val cy = h / 2f
-            val planetRadius = 18f
-            val margin = 5f
+            val planetRadius = PLANET_CIRCLE_RADIUS
+            val margin = LAYOUT_MARGIN
             val arrowLen = 80f
 
             // --- Step 1: Compute label bounding boxes ---
@@ -364,8 +366,8 @@ fun SchematicOrrery(epochDay: Double) {
         val h = size.height / dScale
         drawIntoCanvas { canvas -> canvas.nativeCanvas.save(); canvas.nativeCanvas.scale(dScale, dScale) }
         val cx = w / 2f
-        val planetRadius = 18f
-        val margin = 5f
+        val planetRadius = PLANET_CIRCLE_RADIUS
+        val margin = LAYOUT_MARGIN
         val arrowLen = 80f
 
         // --- Step 1: Compute all label bounding boxes ---

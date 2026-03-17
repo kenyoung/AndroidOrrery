@@ -23,6 +23,10 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private const val MOON_STRIP_MARGIN = 50f
+private const val MONTH_LABEL_TEXT_SIZE = 30f
+private const val LABEL_GRID_CELL_SIZE = 4f
+
 @Composable
 fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, stdOffsetHours: Double) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -61,8 +65,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, st
             }
 
             // Reduce drawing width to leave room on the right for moon phase figures.
-            val moonMargin = 50f
-            val pixelsPerHour = (drawingWidth - moonMargin) / nMaxDuration
+            val pixelsPerHour = (drawingWidth - MOON_STRIP_MARGIN) / nMaxDuration
 
             fun normalizeGraphTime(time: Double): Double {
                 var diff = time - 24.0
@@ -257,7 +260,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, st
 
             // Grid Lines & Month Labels
             drawIntoCanvas { canvas ->
-                val monthPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
+                val monthPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = MONTH_LABEL_TEXT_SIZE; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
                 val gridPaint = Paint().apply { color = 0xFF666666.toInt(); strokeWidth = 1f; style = Paint.Style.STROKE }
 
                 // Helper to get Y for non-scrolling (fixed window)
@@ -343,7 +346,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, st
             }
 
             drawIntoCanvas { canvas ->
-                val timePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
+                val timePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = MONTH_LABEL_TEXT_SIZE; textAlign = Paint.Align.CENTER; isAntiAlias = true; typeface = Typeface.MONOSPACE }
                 for (utHour in 0..23) {
                     val localSolar = normalizeTime(utHour.toDouble() + offsetHours)
                     val k = normalizeGraphTime(localSolar)
@@ -400,7 +403,7 @@ fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, st
                 fun baselineBelow(cy: Float, dims: LabelDims): Float = cy + labelGap - dims.topOffset
 
                 // --- Spatial grid for curve-overlap detection ---
-                val gridCellSize = 4f
+                val gridCellSize = LABEL_GRID_CELL_SIZE
                 val gridW = ceil(w / gridCellSize).toInt()
                 val gridH = ceil(h / gridCellSize).toInt()
                 val curveGrid = Array(gridH) { IntArray(gridW) }
