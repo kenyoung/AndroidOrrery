@@ -14,8 +14,10 @@ const val DEGREES_TO_HOURS = 1.0 / 15.0
 // Horizon and twilight altitude thresholds (degrees)
 const val HORIZON_REFRACTED = -0.833      // Sun/Moon apparent rise/set
 const val PLANET_HORIZON_ALT = -0.5667    // Refraction-corrected horizon for point sources
+const val CIVIL_TWILIGHT = -6.0
 const val NAUTICAL_TWILIGHT = -12.0
 const val ASTRONOMICAL_TWILIGHT = -18.0
+const val GOLDEN_HOUR_ALT = 6.0
 
 // Julian Date epoch constants
 const val J2000_JD = 2451545.0                  // J2000.0 epoch (2000 Jan 1.5 UT)

@@ -40,6 +40,7 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
 
     // State to hold calculated data
     var plotData by remember { mutableStateOf<List<PlotObject>>(emptyList()) }
+    var twilightData by remember { mutableStateOf<TwilightTimes?>(null) }
     // Colors & Paints
     val bgColor = Color.Black
     val labelColor = Color.Green
@@ -134,6 +135,9 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
         val nowUtFracDay = currentUtEpochDay - floor(currentUtEpochDay)
         val currentLocalSolar = normalizeTime(nowUtFracDay * 24.0 + offset)
         val eventEpochDay = if (currentLocalSolar < sunEventData.events.rise) epochDay - 1.0 else epochDay
+
+        // Compute twilight boundary times for the observing night
+        twilightData = computeTwilightTimes(eventEpochDay, lat, lon, offset)
 
         // === MOON ===
         val moonState = AstroEngine.getBodyState("Moon", jdStart)
@@ -253,6 +257,7 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
             } else {
                 CompassCanvas(
                     plotData = plotData,
+                    twilightData = twilightData,
                     lat = lat,
                     lon = lon,
                     now = now,
@@ -269,8 +274,9 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
 
 // --- CANVAS COMPONENT ---
 @Composable
-fun CompassCanvas(
+private fun CompassCanvas(
     plotData: List<PlotObject>,
+    twilightData: TwilightTimes?,
     lat: Double,
     lon: Double,
     now: Instant,
@@ -305,8 +311,8 @@ fun CompassCanvas(
         // Layout
         val textY = 35f
         val rowHeight = 38f
-        // Total fixed vertical space (excluding 2*radius): header, gaps, table rows
-        val fixedVerticalSpace = 719f
+        // Total fixed vertical space (excluding 2*radius): header, gaps, planet table, twilight table
+        val fixedVerticalSpace = 960f
         val maxRadiusForHeight = (h - fixedVerticalSpace) / 2f
         val radius = min(w * 0.36f, min(h * 0.34f, maxRadiusForHeight)).coerceAtLeast(60f)
         val gap = 40f // Fixed gap instead of proportional
@@ -555,6 +561,81 @@ fun CompassCanvas(
                 currY += rowHeight
             }
 
+            // --- TWILIGHT TABLE ---
+            currY += 15f
+            val tw = twilightData
+            if (tw != null) {
+                val twDuskX = w * 0.62f
+                val twDawnX = w * 0.84f
+
+                // Find the chronologically next twilight event.
+                // Dusk events occur in order 0→4 (sun descending through thresholds).
+                // Dawn events occur in order 4→0 (sun ascending back through thresholds).
+                var nextIsDusk = true
+                var nextIndex = -1
+                val duskMidnightUt = floor(tw.duskAnchor) - offset / 24.0
+                val dawnMidnightUt = floor(tw.dawnAnchor) - offset / 24.0
+                for (i in 0..4) {
+                    if (!tw.dusk[i].isNaN() && duskMidnightUt + tw.dusk[i] / 24.0 > currentUtEpochDay) {
+                        nextIsDusk = true; nextIndex = i; break
+                    }
+                }
+                if (nextIndex == -1) {
+                    for (i in 4 downTo 0) {
+                        if (!tw.dawn[i].isNaN() && dawnMidnightUt + tw.dawn[i] / 24.0 > currentUtEpochDay) {
+                            nextIsDusk = false; nextIndex = i
+                        } else if (!tw.dawn[i].isNaN()) {
+                            break // past events; all earlier dawn events are also past
+                        }
+                    }
+                }
+
+                // Column headers
+                nc.drawText("Dusk", twDuskX, currY, paints.tableHeaderCenter)
+                nc.drawText("Dawn", twDawnX, currY, paints.tableHeaderCenter)
+                currY += rowHeight
+
+                for (i in 0..4) {
+                    // Row label (light blue, matching column headers)
+                    paints.tableDataLeft.color = paints.tableHeaderCenter.color
+                    nc.drawText(TWILIGHT_LABELS[i], cols[0], currY, paints.tableDataLeft)
+
+                    // Dusk time (beginning of interval)
+                    val duskH = tw.dusk[i]
+                    if (duskH.isNaN()) {
+                        paints.tableDataCenter.color = paints.grayInt
+                        nc.drawText("---", twDuskX, currY, paints.tableDataCenter)
+                    } else {
+                        val duskRaw = duskH - offset + displayOffsetHours
+                        val duskDisplay = normalizeTime(duskRaw)
+                        val duskTomorrow = isEventTomorrow(tw.duskAnchor, duskRaw, currentDisplayDate)
+                        val duskStr = formatTimeMM(duskDisplay, false) + if (duskTomorrow) "*" else ""
+                        if (duskTomorrow) anyAsterisk = true
+                        val isNext = nextIsDusk && nextIndex == i
+                        paints.tableDataCenter.color = if (isNext) paints.whiteInt else paints.grayInt
+                        nc.drawText(duskStr, twDuskX, currY, paints.tableDataCenter)
+                    }
+
+                    // Dawn time (end of interval)
+                    val dawnH = tw.dawn[i]
+                    if (dawnH.isNaN()) {
+                        paints.tableDataCenter.color = paints.grayInt
+                        nc.drawText("---", twDawnX, currY, paints.tableDataCenter)
+                    } else {
+                        val dawnRaw = dawnH - offset + displayOffsetHours
+                        val dawnDisplay = normalizeTime(dawnRaw)
+                        val dawnTomorrow = isEventTomorrow(tw.dawnAnchor, dawnRaw, currentDisplayDate)
+                        val dawnStr = formatTimeMM(dawnDisplay, false) + if (dawnTomorrow) "*" else ""
+                        if (dawnTomorrow) anyAsterisk = true
+                        val isNext = !nextIsDusk && nextIndex == i
+                        paints.tableDataCenter.color = if (isNext) paints.whiteInt else paints.grayInt
+                        nc.drawText(dawnStr, twDawnX, currY, paints.tableDataCenter)
+                    }
+
+                    currY += rowHeight
+                }
+            }
+
             // "* Tomorrow" footnote if any time has an asterisk
             if (anyAsterisk) {
                 paints.tableDataLeft.color = LabelColor.toArgb()
@@ -570,6 +651,26 @@ fun CompassCanvas(
 data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false, val anchorEpochDay: Double = 0.0, val riseDec: Double = Double.NaN, val transitDec: Double = Double.NaN, val setDec: Double = Double.NaN)
 
 // EventCache is defined in EventComputation.kt
+
+private data class TwilightTimes(
+    val dusk: List<Double>,     // 5 SET times in local solar hours (golden, sunset, civil, nautical, astro)
+    val dawn: List<Double>,     // 5 RISE times in local solar hours (golden, sunrise, civil, nautical, astro)
+    val duskAnchor: Double,     // epoch day for dusk times
+    val dawnAnchor: Double      // epoch day for dawn times (duskAnchor + 1)
+)
+
+private val TWILIGHT_ALTITUDES = doubleArrayOf(
+    GOLDEN_HOUR_ALT, HORIZON_REFRACTED, CIVIL_TWILIGHT, NAUTICAL_TWILIGHT, ASTRONOMICAL_TWILIGHT
+)
+private val TWILIGHT_LABELS = arrayOf(
+    "\"Golden Hour\"", "Civil Twilight", "Nautical Twilight", "Astronomical Twilight", "Darkness"
+)
+
+private fun computeTwilightTimes(eventEpochDay: Double, lat: Double, lon: Double, offset: Double): TwilightTimes {
+    val dusk = TWILIGHT_ALTITUDES.map { alt -> calculateSunTimes(eventEpochDay, lat, lon, offset, alt).set }
+    val dawn = TWILIGHT_ALTITUDES.map { alt -> calculateSunTimes(eventEpochDay + 1.0, lat, lon, offset, alt).rise }
+    return TwilightTimes(dusk, dawn, eventEpochDay, eventEpochDay + 1.0)
+}
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,
@@ -590,6 +691,7 @@ class CompassPaints(
 
     val tableDataLeft = Paint().apply { textSize=29f; textAlign=Paint.Align.LEFT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
     val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
+    val tableDataCenter = Paint().apply { textSize=29f; textAlign=Paint.Align.CENTER; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 }
 
 // --- SHARED MATH HELPERS ---
