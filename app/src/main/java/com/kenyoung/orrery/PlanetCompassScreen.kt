@@ -29,7 +29,10 @@ import kotlin.math.*
 private const val LABEL_OFFSET_GAP = 25f
 
 @Composable
-fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val epochDay = obs.epochDay; val lat = obs.lat; val lon = obs.lon; val now = obs.now
+    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val useLocalTime = obs.useStandardTime; val useDst = obs.useDst
     // Basic setup
     val planets = remember { getOrreryPlanets() }
 
@@ -73,24 +76,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             baseMidnightUT + cache.events.set / 24.0 < currentUtEpochDay
         }
         if (!needCalc) return cache!!
-
-        var sunAnchor = epochDay
-        var (sunRise, sunSet) = calculateSunTimes(epochDay, lat, lon, offset)
-        var (sunTransit, _) = calculateSunTransit(epochDay, lon, offset)
-
-        val baseMidnightUT = floor(epochDay) - offset / 24.0
-        if (baseMidnightUT + sunSet / 24.0 < currentUtEpochDay) {
-            sunAnchor = epochDay + 1.0
-            val (r, s) = calculateSunTimes(epochDay + 1.0, lat, lon, offset)
-            val (t, _) = calculateSunTransit(epochDay + 1.0, lon, offset)
-            sunRise = r; sunSet = s; sunTransit = t
-        }
-
-        return EventCache(
-            events = PlanetEvents(sunRise, sunTransit, sunSet),
-            calcJd = jdStart,
-            anchorEpochDay = sunAnchor
-        )
+        return computeSunEventData(epochDay, lat, lon, offset, currentUtEpochDay).copy(calcJd = jdStart)
     }
 
     fun computeMoonEvents(
@@ -107,49 +93,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             baseMidnightUT + setHours / 24.0 < currentUtEpochDay
         }
         if (!needCalc) return cache!!
-
-        var moonEvBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
-        var moonEvNext = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
-        var moonAnchor = eventEpochDay
-
-        val baseMidnightUT = floor(eventEpochDay) - offset / 24.0
-        val checkTransAbs = if (moonEvBase.transit >= moonEvBase.rise) moonEvBase.transit else moonEvNext.transit + 24.0
-        val checkSetAbs = if (moonEvBase.set >= checkTransAbs) moonEvBase.set else moonEvNext.set + 24.0
-        if (baseMidnightUT + checkSetAbs / 24.0 < currentUtEpochDay) {
-            moonEvBase = moonEvNext
-            moonEvNext = calculateMoonEvents(eventEpochDay + 2.0, lat, lon, offset)
-            moonAnchor = eventEpochDay + 1.0
-        }
-
-        val moonTransitAbs = if (moonEvBase.transit >= moonEvBase.rise) moonEvBase.transit else moonEvNext.transit + 24.0
-        val moonSetAbs = if (moonEvBase.set >= moonTransitAbs) moonEvBase.set else moonEvNext.set + 24.0
-        val moonTransitTomorrow = moonTransitAbs >= 24.0
-        val moonSetTomorrow = moonSetAbs >= 24.0
-        val moonEvents = PlanetEvents(moonEvBase.rise,
-            if (moonTransitTomorrow) moonTransitAbs - 24.0 else moonTransitAbs,
-            if (moonSetTomorrow) moonSetAbs - 24.0 else moonSetAbs)
-
-        val anchorMidnightJD = floor(moonAnchor) + UNIX_EPOCH_JD - offset / 24.0
-        val moonDecAt = { jd: Double ->
-            val st = AstroEngine.getBodyState("Moon", jd)
-            val (appRa, appDec) = j2000ToApparent(st.ra, st.dec, jd)
-            val lst = calculateLSTHours(jd, lon)
-            toTopocentric(appRa, appDec, st.distGeo, lat, lon, lst).dec
-        }
-        val moonRiseDec = if (!moonEvents.rise.isNaN()) moonDecAt(anchorMidnightJD + moonEvents.rise / 24.0) else fallbackDec
-        val moonTransitDec = if (!moonEvents.transit.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.transit + if (moonTransitTomorrow) 24.0 else 0.0) / 24.0) else fallbackDec
-        val moonSetDec = if (!moonEvents.set.isNaN()) moonDecAt(anchorMidnightJD + (moonEvents.set + if (moonSetTomorrow) 24.0 else 0.0) / 24.0) else fallbackDec
-
-        return EventCache(
-            events = moonEvents,
-            calcJd = jdStart,
-            anchorEpochDay = moonAnchor,
-            transitTomorrow = moonTransitTomorrow,
-            setTomorrow = moonSetTomorrow,
-            riseDec = moonRiseDec,
-            transitDec = moonTransitDec,
-            setDec = moonSetDec
-        )
+        return computeMoonEventData(eventEpochDay, lat, lon, offset, currentUtEpochDay, fallbackDec).copy(calcJd = jdStart)
     }
 
     fun computePlanetEventsCache(
@@ -166,47 +110,7 @@ fun PlanetCompassScreen(epochDay: Double, lat: Double, lon: Double, now: Instant
             baseMidnightUT + setHours / 24.0 < currentUtEpochDay
         }
         if (!needCalc) return cache!!
-
-        var pAnchor = eventEpochDay
-        var evD = calculatePlanetEvents(eventEpochDay, lat, lon, offset, p)
-        var evD1 = calculatePlanetEvents(eventEpochDay + 1.0, lat, lon, offset, p)
-
-        var pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
-        var pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
-
-        val baseMidnightUT = floor(eventEpochDay) - offset / 24.0
-        if (baseMidnightUT + pSetAbs / 24.0 < currentUtEpochDay) {
-            pAnchor = eventEpochDay + 1.0
-            evD = evD1
-            evD1 = calculatePlanetEvents(eventEpochDay + 2.0, lat, lon, offset, p)
-            pTransitAbs = if (evD.transit >= evD.rise) evD.transit else evD1.transit + 24.0
-            pSetAbs = if (evD.set >= pTransitAbs) evD.set else evD1.set + 24.0
-        }
-
-        val pTransitTomorrow = pTransitAbs >= 24.0
-        val pSetTomorrow = pSetAbs >= 24.0
-        val events = PlanetEvents(evD.rise,
-            if (pTransitTomorrow) pTransitAbs - 24.0 else pTransitAbs,
-            if (pSetTomorrow) pSetAbs - 24.0 else pSetAbs)
-
-        val pAnchorMidnightJD = floor(pAnchor) + UNIX_EPOCH_JD - offset / 24.0
-        val pRiseJD = pAnchorMidnightJD + evD.rise / 24.0
-        val pTransitJD = pAnchorMidnightJD + (events.transit + if (pTransitTomorrow) 24.0 else 0.0) / 24.0
-        val pSetJD = pAnchorMidnightJD + (events.set + if (pSetTomorrow) 24.0 else 0.0) / 24.0
-        val pRiseDec = if (!evD.rise.isNaN()) { val s = AstroEngine.getBodyState(p.name, pRiseJD); j2000ToApparent(s.ra, s.dec, pRiseJD).second } else fallbackDec
-        val pTransitDec = if (!events.transit.isNaN()) { val s = AstroEngine.getBodyState(p.name, pTransitJD); j2000ToApparent(s.ra, s.dec, pTransitJD).second } else fallbackDec
-        val pSetDec = if (!events.set.isNaN()) { val s = AstroEngine.getBodyState(p.name, pSetJD); j2000ToApparent(s.ra, s.dec, pSetJD).second } else fallbackDec
-
-        return EventCache(
-            events = events,
-            calcJd = jdStart,
-            anchorEpochDay = pAnchor,
-            transitTomorrow = pTransitTomorrow,
-            setTomorrow = pSetTomorrow,
-            riseDec = pRiseDec,
-            transitDec = pTransitDec,
-            setDec = pSetDec
-        )
+        return computePlanetEventData(eventEpochDay, lat, lon, offset, currentUtEpochDay, p, fallbackDec).copy(calcJd = jdStart)
     }
 
     // --- BUILD PLOT LIST ---
@@ -665,16 +569,7 @@ fun CompassCanvas(
 
 data class PlotObject(val name: String, val symbol: String, val color: Int, val ra: Double, val dec: Double, val events: PlanetEvents, val targetAlt: Double, val transitTomorrow: Boolean = false, val setTomorrow: Boolean = false, val anchorEpochDay: Double = 0.0, val riseDec: Double = Double.NaN, val transitDec: Double = Double.NaN, val setDec: Double = Double.NaN)
 
-data class EventCache(
-    val events: PlanetEvents,
-    val calcJd: Double,
-    val anchorEpochDay: Double,
-    val transitTomorrow: Boolean = false,
-    val setTomorrow: Boolean = false,
-    val riseDec: Double = Double.NaN,
-    val transitDec: Double = Double.NaN,
-    val setDec: Double = Double.NaN
-)
+// EventCache is defined in EventComputation.kt
 
 class CompassPaints(
     val greenInt: Int, val redInt: Int, val whiteInt: Int, val grayInt: Int,

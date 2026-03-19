@@ -64,16 +64,14 @@ private val saturnAtmoBands = listOf(
 
 @Composable
 fun SaturnScreen(
-    epochDay: Double,
-    currentInstant: Instant,
-    stdOffsetHours: Double,
-    stdTimeLabel: String,
-    useLocalTime: Boolean,
-    useDst: Boolean,
+    obs: ObserverState,
     resetAnimTrigger: Int = 0,
     onAnimStoppedChange: (Boolean) -> Unit = {},
     onTimeDisplayChange: (Boolean) -> Unit
 ) {
+    val epochDay = obs.epochDay; val currentInstant = obs.now
+    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val useLocalTime = obs.useStandardTime; val useDst = obs.useDst
     // --- TIME ZONE ---
     val zoneId: ZoneId = if (useLocalTime)
         ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt())

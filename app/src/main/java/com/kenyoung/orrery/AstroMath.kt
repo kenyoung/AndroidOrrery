@@ -87,7 +87,7 @@ private fun calculateObliquity(jd: Double): Double {
 // Convert Equatorial (RA/Dec) to Ecliptic (Lon/Lat) in ecliptic of date.
 // RA/Dec are J2000 (ICRF); obliquity is of-date; general precession in
 // ecliptic longitude shifts the result from J2000 equinox to equinox of date.
-fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): EclipticCoords {
     val t = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val eps = Math.toRadians(calculateObliquity(jd))
     val alpha = Math.toRadians(raDeg)
@@ -103,7 +103,7 @@ fun equatorialToEcliptic(raDeg: Double, decDeg: Double, jd: Double): Pair<Double
     // General precession in ecliptic longitude (Meeus eq. 21.6)
     val precessionDeg = 1.396971 * t + 0.0003086 * t * t
 
-    return Pair(normalizeDegrees(Math.toDegrees(lambda) + precessionDeg), Math.toDegrees(beta))
+    return EclipticCoords(normalizeDegrees(Math.toDegrees(lambda) + precessionDeg), Math.toDegrees(beta))
 }
 
 // --- NUTATION (IAU 1980, 63-term series) ---
@@ -229,7 +229,7 @@ fun calculateNutation(T: Double): NutationResult {
 
 // --- PRECESSION (Meeus 21.3) ---
 // Converts J2000 (ICRF) equatorial coordinates to mean-of-date equatorial coordinates
-internal fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+internal fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): RaDec {
     val T = (jd - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T
@@ -264,13 +264,13 @@ internal fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): Pair
     val raNew = normalizeDegrees(Math.toDegrees(atan2(A, B)) + Math.toDegrees(zRad))
     val decNew = Math.toDegrees(asin(C.coerceIn(-1.0, 1.0)))
 
-    return Pair(raNew, decNew)
+    return RaDec(raNew, decNew)
 }
 
 // --- J2000 TO APPARENT (precession + nutation) ---
 // Converts J2000 equatorial coordinates to apparent (true) equatorial coordinates of date.
 // Use for display Az/Alt only — rise/set algorithms are calibrated with HORIZON_REFRACTED.
-fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Double> {
+fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): RaDec {
     // Step 1: precess J2000 → mean of date
     val (meanRa, meanDec) = precessJ2000ToDate(raDeg, decDeg, jd)
 
@@ -289,7 +289,7 @@ fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): Pair<Double, Dou
             (cos(alphaRad) * tan(deltaRad)) * dEpsDeg
     val dDelta = (sin(epsRad) * cos(alphaRad)) * dPsiDeg + sin(alphaRad) * dEpsDeg
 
-    return Pair(normalizeDegrees(meanRa + dAlpha), meanDec + dDelta)
+    return RaDec(normalizeDegrees(meanRa + dAlpha), meanDec + dDelta)
 }
 
 // --- PARALLAX CORRECTION ---
@@ -336,7 +336,7 @@ fun toTopocentric(
 
 // --- SHARED UTILS ---
 
-fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Double): Pair<Double, Double> {
+fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Double): AzAlt {
     val haRad = Math.toRadians((lstHours - raHours) * 15.0)
     val latRad = Math.toRadians(latDeg)
     val decRad = Math.toRadians(decDeg)
@@ -350,7 +350,7 @@ fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Do
         val azRadAbs = acos(cosAz.coerceIn(-1.0, 1.0))
         if (sin(haRad) > 0) 360.0 - Math.toDegrees(azRadAbs) else Math.toDegrees(azRadAbs)
     }
-    return Pair(azDeg, Math.toDegrees(altRad))
+    return AzAlt(azDeg, Math.toDegrees(altRad))
 }
 
 // Calculate altitude only (when azimuth is not needed)
@@ -608,7 +608,7 @@ private fun refineRiseSet(getAlt: (Double) -> Double, tTransit: Double, targetAl
     return t
 }
 
-fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): Pair<Double, Double> {
+fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, altitude: Double = HORIZON_REFRACTED): RiseSet {
     // Use integer date — fractional epoch days from manual time entry shift the
     // scan start forward, causing events between now and now+|offset| to be missed.
     val epochDayInt = floor(epochDay)
@@ -625,17 +625,17 @@ fun calculateSunTimes(epochDay: Double, lat: Double, lon: Double, timezoneOffset
 
     // Polar day/night check
     val transitAlt = getAlt(tTransit)
-    if (transitAlt < altitude) return Pair(Double.NaN, Double.NaN)
+    if (transitAlt < altitude) return RiseSet(Double.NaN, Double.NaN)
     val nadirAlt = getAlt(tTransit + 0.5)
-    if (nadirAlt > altitude) return Pair(Double.NaN, Double.NaN)
+    if (nadirAlt > altitude) return RiseSet(Double.NaN, Double.NaN)
 
     val tRise = refineRiseSet(::getAlt, tTransit, altitude, lat, isRise = true)
     val tSet = refineRiseSet(::getAlt, tTransit, altitude, lat, isRise = false)
 
-    return Pair(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
+    return RiseSet(jdFracToLocalHours(tRise, timezoneOffset), jdFracToLocalHours(tSet, timezoneOffset))
 }
 
-fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): Pair<Double, Double> {
+fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): TransitInfo {
     val jd = floor(epochDay) + UNIX_EPOCH_JD + 0.5
     val sunNoon = AstroEngine.getBodyState("Sun", jd)
     val (appRa, appDec) = j2000ToApparent(sunNoon.ra, sunNoon.dec, jd)
@@ -643,7 +643,7 @@ fun calculateSunTransit(epochDay: Double, lon: Double, timezoneOffset: Double): 
     val gmst = (6.697374558 + 0.06570982441908 * n) % 24.0
     val gmstFixed = if (gmst < 0) gmst + 24.0 else gmst
     val transitUT = normalizeTime(appRa / 15.0 - lon / 15.0 - gmstFixed)
-    return Pair(normalizeTime(transitUT + timezoneOffset), appDec)
+    return TransitInfo(normalizeTime(transitUT + timezoneOffset), appDec)
 }
 
 fun calculatePlanetEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, p: PlanetElements): PlanetEvents {

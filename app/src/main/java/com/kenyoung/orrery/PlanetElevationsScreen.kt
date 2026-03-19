@@ -21,7 +21,10 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Instant, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun PlanetElevationsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val epochDay = obs.epochDay; val lat = obs.lat; val lon = obs.lon; val now = obs.now
+    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val useLocalTime = obs.useStandardTime; val useDst = obs.useDst
 
     // 1. Setup Time and Date
     val offsetHours = lon / 15.0
@@ -503,35 +506,17 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         }
 
         // --- DRAW MOON (Row 2) ---
-        // Use Standard Calculator (matches TransitsScreen)
-        var moonEv = calculateMoonEvents(epochDayInt, lat, lon, offsetHours, pairedRiseSet = true)
-        var moonEpochBase = epochDayInt
-
-        // If all Moon events are in the past, advance to the next day
-        if (!moonEv.rise.isNaN() && !moonEv.set.isNaN()) {
-            val moonDayStartUT = floor(epochDayInt) - offsetHours / 24.0
-            val moonSetAbsLocal = if (moonEv.set >= moonEv.rise) moonEv.set else moonEv.set + 24.0
-            if (moonDayStartUT + moonSetAbsLocal / 24.0 < currentUtEpochDay) {
-                moonEv = calculateMoonEvents(epochDayInt + 1.0, lat, lon, offsetHours, pairedRiseSet = true)
-                moonEpochBase = epochDayInt + 1.0
-            }
-        }
-
-        // Dec: Use apparent topocentric dec at transit for tick marks
-        var moonDec = run {
-            val fallbackJD = moonEpochBase + UNIX_EPOCH_JD + 0.5
+        val moonFallbackDec = run {
+            val fallbackJD = epochDayInt + UNIX_EPOCH_JD + 0.5
             val st = AstroEngine.getBodyState("Moon", fallbackJD)
             val (ar, ad) = j2000ToApparent(st.ra, st.dec, fallbackJD)
             val lst = calculateLSTHours(fallbackJD, lon)
             toTopocentric(ar, ad, st.distGeo, lat, lon, lst).dec
         }
-        if (!moonEv.transit.isNaN()) {
-            val transitJD = moonEpochBase + UNIX_EPOCH_JD + ((moonEv.transit - offsetHours) / 24.0)
-            val mTrans = AstroEngine.getBodyState("Moon", transitJD)
-            val (appRa, appDec) = j2000ToApparent(mTrans.ra, mTrans.dec, transitJD)
-            val lstAtTransit = calculateLSTHours(transitJD, lon)
-            moonDec = toTopocentric(appRa, appDec, mTrans.distGeo, lat, lon, lstAtTransit).dec
-        }
+        val moonEventData = computeMoonEventData(epochDayInt, lat, lon, offsetHours, currentUtEpochDay, moonFallbackDec, pairedRiseSet = true)
+        val moonEv = moonEventData.events
+        val moonEpochBase = moonEventData.anchorEpochDay
+        val moonDec = moonEventData.transitDec
 
         val moonY = firstBodyY + bodySpacing
         // Check Moon current altitude (like Sun)
@@ -544,7 +529,7 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
             val moonSdDeg = Math.toDegrees(Math.asin(1737400.0 / (mSt.distGeo * AU_METERS)))
             calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec) > PLANET_HORIZON_ALT - moonSdDeg
         }
-        val moonCircumpolar = moonEv.rise.isNaN() && moonEv.set.isNaN() && moonAboveHorizon
+        val moonCircumpolar = moonEventData.isCircumpolar
         val moonIsUp = moonAboveHorizon
         val moonPhaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
         val moonIllumination = (1.0 - cos(Math.toRadians(moonPhaseAngle))) / 2.0 * 100.0
@@ -558,30 +543,16 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
         // --- DRAW PLANETS (Rows 3+) ---
         planetList.forEachIndexed { i, p ->
             val yPos = firstBodyY + (i + 2) * bodySpacing
-            // Use Standard Calculator (matches TransitsScreen)
-            var ev = calculatePlanetEvents(epochDayInt, lat, lon, offsetHours, p)
-            var planetEpochBase = epochDayInt
-
-            // If planet has set, advance to next day's events (matches Compass auto-advance)
-            if (!ev.rise.isNaN() && !ev.set.isNaN()) {
-                val setAbs = if (ev.set >= ev.rise) ev.set else ev.set + 24.0
-                val baseMidnightUT = floor(epochDayInt) - offsetHours / 24.0
-                if (baseMidnightUT + setAbs / 24.0 < currentUtEpochDay) {
-                    ev = calculatePlanetEvents(epochDayInt + 1.0, lat, lon, offsetHours, p)
-                    planetEpochBase = epochDayInt + 1.0
-                }
+            // Compute planet events with shared logic (advance, dec, circumpolar)
+            val pFallbackDec = run {
+                val s = AstroEngine.getBodyState(p.name, epochDayInt + UNIX_EPOCH_JD)
+                j2000ToApparent(s.ra, s.dec, epochDayInt + UNIX_EPOCH_JD).dec
             }
-
-            val jd = planetEpochBase + UNIX_EPOCH_JD
-            // Apparent dec at transit time for tick marks and max-alt display
-            val transitDec = if (!ev.transit.isNaN()) {
-                val transitJD = jd + ((ev.transit - offsetHours) / 24.0)
-                val s = AstroEngine.getBodyState(p.name, transitJD)
-                j2000ToApparent(s.ra, s.dec, transitJD).second
-            } else {
-                val s = AstroEngine.getBodyState(p.name, jd)
-                j2000ToApparent(s.ra, s.dec, jd).second
-            }
+            val planetEventData = computePlanetEventData(epochDayInt, lat, lon, offsetHours, currentUtEpochDay, p, pFallbackDec)
+            val ev = planetEventData.events
+            val planetEpochBase = planetEventData.anchorEpochDay
+            val transitDec = planetEventData.transitDec
+            val pCircumpolar = planetEventData.isCircumpolar
             // Check planet current altitude (like Sun/Moon)
             val pAboveHorizon = run {
                 val currentJD = now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -590,7 +561,6 @@ fun PlanetElevationsScreen(epochDay: Double, lat: Double, lon: Double, now: Inst
                 val pLst = calculateLSTHours(currentJD, lon)
                 calculateAltitude(pLst - pRa / 15.0, lat, pDc) > PLANET_HORIZON_ALT
             }
-            val pCircumpolar = ev.rise.isNaN() && ev.set.isNaN() && pAboveHorizon
             val pIsUp = pAboveHorizon
             val pLabelColor = if (isNightNow && pIsUp) labelGreen else labelRed
             val planetAsterisk = isRiseTomorrow(ev, planetEpochBase)

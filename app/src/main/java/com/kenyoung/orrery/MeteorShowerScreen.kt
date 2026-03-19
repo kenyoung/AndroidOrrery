@@ -76,17 +76,11 @@ val meteorShowersList = listOf(
 )
 
 @Composable
-fun MeteorShowerScreen(
-    currentEpochDay: Double,
-    lat: Double,
-    lon: Double,
-    currentInstant: Instant,
-    stdOffsetHours: Double,
-    stdTimeLabel: String,
-    useLocalTime: Boolean,
-    useDst: Boolean,
-    onTimeDisplayChange: (Boolean) -> Unit
-) {
+fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val currentEpochDay = obs.epochDay; val lat = obs.lat; val lon = obs.lon
+    val currentInstant = obs.now; val stdOffsetHours = obs.stdOffsetHours
+    val stdTimeLabel = obs.stdTimeLabel; val useLocalTime = obs.useStandardTime
+    val useDst = obs.useDst
     var rowData by remember { mutableStateOf<List<ShowerRowData>?>(null) }
     var tonightDarkHours by remember { mutableStateOf(0.0) }
     var tonightStartEpoch by remember { mutableStateOf(Double.NaN) }

@@ -268,15 +268,13 @@ private fun loadZodiacMapData(context: android.content.Context): ZodiacMapData {
 
 @Composable
 fun ConstellationsScreen(
-    displayEpoch: Double,
-    currentInstant: Instant,
-    lat: Double,
-    stdOffsetHours: Double,
-    stdTimeLabel: String,
-    useStandardTime: Boolean,
+    obs: ObserverState,
     resetAnimTrigger: Int = 0,
     onAnimStoppedChange: (Boolean) -> Unit = {}
 ) {
+    val displayEpoch = obs.epochDay; val currentInstant = obs.now
+    val lat = obs.lat; val stdOffsetHours = obs.stdOffsetHours
+    val stdTimeLabel = obs.stdTimeLabel; val useStandardTime = obs.useStandardTime
     val context = LocalContext.current
     ConstellationBoundary.ensureLoaded(context)
     val marsBitmap = remember {
@@ -927,10 +925,6 @@ private fun DrawScope.drawSimpleDisk(
     }
 }
 
-/**
- * Mars surface albedo patch: position, size, opacity, rotation, and color.
- * Positions are in fractions of the disk radius from center (-1 to 1).
- */
 /**
  * Draws Mars using a photo bitmap with limb darkening and phase shadow.
  */

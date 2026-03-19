@@ -70,7 +70,10 @@ private data class RawEvent(
 // --- COMPOSABLE ---
 
 @Composable
-fun JovianEventsScreen(currentInstant: Instant, lat: Double, lon: Double, stdOffsetHours: Double, stdTimeLabel: String, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun JovianEventsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val currentInstant = obs.now; val lat = obs.lat; val lon = obs.lon
+    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val useLocalTime = obs.useStandardTime; val useDst = obs.useDst
     val scrollState = rememberScrollState()
     val bgColor = Color.Black
 

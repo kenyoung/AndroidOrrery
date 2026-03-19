@@ -887,16 +887,10 @@ private fun filterEclipses(
 // ============================================================================
 
 @Composable
-fun SolarEclipseScreen(
-    latitude: Double,
-    longitude: Double,
-    now: Instant,
-    stdOffsetHours: Double,
-    stdTimeLabel: String,
-    useStandardTime: Boolean,
-    useDst: Boolean,
-    onTimeDisplayChange: (Boolean) -> Unit
-) {
+fun SolarEclipseScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val latitude = obs.lat; val longitude = obs.lon; val now = obs.now
+    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val useStandardTime = obs.useStandardTime; val useDst = obs.useDst
     val context = LocalContext.current
 
     var eclipses by remember { mutableStateOf<List<SolarEclipse>?>(null) }

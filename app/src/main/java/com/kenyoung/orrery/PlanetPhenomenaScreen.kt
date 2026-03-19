@@ -21,7 +21,9 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
-fun PlanetPhenomenaScreen(epochDay: Double, stdOffsetHours: Double, useLocalTime: Boolean, useDst: Boolean, onTimeDisplayChange: (Boolean) -> Unit) {
+fun PlanetPhenomenaScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+    val epochDay = obs.epochDay; val stdOffsetHours = obs.stdOffsetHours
+    val useLocalTime = obs.useStandardTime; val useDst = obs.useDst
     val scrollState = rememberScrollState()
     val bgColor = Color.Black
     val labelColor = LabelColor

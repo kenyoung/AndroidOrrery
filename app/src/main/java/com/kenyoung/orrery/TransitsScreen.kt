@@ -28,7 +28,9 @@ private const val MONTH_LABEL_TEXT_SIZE = 30f
 private const val LABEL_GRID_CELL_SIZE = 4f
 
 @Composable
-fun GraphicsWindow(lat: Double, lon: Double, now: Instant, cache: AstroCache, stdOffsetHours: Double) {
+fun GraphicsWindow(obs: ObserverState, cache: AstroCache) {
+    val lat = obs.lat; val lon = obs.lon; val now = obs.now
+    val stdOffsetHours = obs.stdOffsetHours
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             withDensityScaling { w, h ->

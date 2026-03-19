@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.Instant
 
 // --- UI CONSTANTS ---
 val LabelColor = Color(0xFFADD8E6) // Light Blue
@@ -67,6 +68,19 @@ fun OrientationControls(
     }
 }
 
+// --- OBSERVER STATE ---
+
+data class ObserverState(
+    val epochDay: Double,
+    val lat: Double,
+    val lon: Double,
+    val now: Instant,
+    val stdOffsetHours: Double,
+    val stdTimeLabel: String,
+    val useStandardTime: Boolean,
+    val useDst: Boolean
+)
+
 // --- DATA CLASSES ---
 
 data class PlanetElements(
@@ -80,6 +94,10 @@ data class PlanetElements(
 
 data class PlanetEvents(val rise: Double, val transit: Double, val set: Double)
 data class RaDec(val ra: Double, val dec: Double)
+data class EclipticCoords(val lon: Double, val lat: Double)
+data class AzAlt(val az: Double, val alt: Double)
+data class RiseSet(val rise: Double, val set: Double)
+data class TransitInfo(val transit: Double, val dec: Double)
 
 data class BodyState(
     // Vectors (AU)
@@ -124,14 +142,14 @@ class AstroCache(
         if (res >= 24.0) res -= 24.0
         return res
     }
-    fun getSunTimes(epochDay: Double, astro: Boolean): Pair<Double, Double> {
+    fun getSunTimes(epochDay: Double, astro: Boolean): RiseSet {
         val offset = epochDay - startEpochDay
         val idx = kotlin.math.floor(offset).toInt()
         val frac = offset - idx
-        if (idx < 0 || idx >= size - 1) return Pair(Double.NaN, Double.NaN)
+        if (idx < 0 || idx >= size - 1) return RiseSet(Double.NaN, Double.NaN)
         val riseArr = if (astro) astroRise else sunRise
         val setArr = if (astro) astroSet else sunSet
-        return Pair(interp(riseArr[idx], riseArr[idx+1], frac), interp(setArr[idx], setArr[idx+1], frac))
+        return RiseSet(interp(riseArr[idx], riseArr[idx+1], frac), interp(setArr[idx], setArr[idx+1], frac))
     }
     fun getPlanetEvents(epochDay: Double, name: String): PlanetEvents {
         val arrays = planetMap[name] ?: return PlanetEvents(Double.NaN, Double.NaN, Double.NaN)
