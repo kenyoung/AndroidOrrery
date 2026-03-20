@@ -305,11 +305,12 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     }
                 }
                 if (nextIndex == -1) {
+                    // Dawn events are chronologically earliest at index 4 (darkness ends
+                    // at -18°) through to latest at index 0 (golden hour ends at 6°).
+                    // Find the first future event scanning earliest to latest.
                     for (i in 4 downTo 0) {
                         if (!twilightData.dawn[i].isNaN() && dawnMidnightUt + twilightData.dawn[i] / 24.0 > currentUtEpochDay) {
-                            nextIsDusk = false; nextIndex = i
-                        } else if (!twilightData.dawn[i].isNaN()) {
-                            break
+                            nextIsDusk = false; nextIndex = i; break
                         }
                     }
                 }
