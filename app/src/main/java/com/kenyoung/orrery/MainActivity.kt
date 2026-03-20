@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
     SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, SCHEMATIC, SCALE,
     CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -227,14 +227,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 if (currentScreen == Screen.TIMES) {
                     delay(100L) // 10Hz
                 } else if (currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA || currentScreen == Screen.METEOR_SHOWERS) {
-                    // Update once per hour
-                    val currentMillis = now.toEpochMilli()
-                    val millisUntilNextHour = 3_600_000 - (currentMillis % 3_600_000)
+                    // Update once per hour — compute delay from wall clock to avoid drift
+                    val millisUntilNextHour = 3_600_000 - (System.currentTimeMillis() % 3_600_000)
                     delay(millisUntilNextHour)
                 } else {
-                    // Update once per minute
-                    val currentMillis = now.toEpochMilli()
-                    val millisUntilNextMinute = 60_000 - (currentMillis % 60_000)
+                    // Update once per minute — compute delay from wall clock to avoid drift
+                    val millisUntilNextMinute = 60_000 - (System.currentTimeMillis() % 60_000)
                     delay(millisUntilNextMinute)
                 }
             }
@@ -414,6 +412,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Elevations" to Screen.ELEVATIONS,
                             "Planet Compass" to Screen.COMPASS,
                             "Planet Phenomena" to Screen.PHENOMENA,
+                            "Sunlight Today" to Screen.SUNLIGHT_TODAY,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
                             "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
                             "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
@@ -482,6 +481,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.TRANSITS -> if (cache != null) GraphicsWindow(obs, cache!!) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(obs) { useStandardTime = it }
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(obs) { useStandardTime = it }
+                    Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)

@@ -203,3 +203,25 @@ fun computePlanetEventData(
         isCircumpolar = isCircumpolar
     )
 }
+
+// --- TWILIGHT DATA ---
+
+data class TwilightTimes(
+    val dusk: List<Double>,     // 5 SET times in local solar hours (golden, sunset, civil, nautical, astro)
+    val dawn: List<Double>,     // 5 RISE times in local solar hours (golden, sunrise, civil, nautical, astro)
+    val duskAnchor: Double,     // epoch day for dusk times
+    val dawnAnchor: Double      // epoch day for dawn times (duskAnchor + 1)
+)
+
+val TWILIGHT_ALTITUDES = doubleArrayOf(
+    GOLDEN_HOUR_ALT, HORIZON_REFRACTED, CIVIL_TWILIGHT, NAUTICAL_TWILIGHT, ASTRONOMICAL_TWILIGHT
+)
+val TWILIGHT_LABELS = arrayOf(
+    "\"Golden Hour\"", "Civil Twilight (C)", "Nautical Twilight (N)", "Astronomical Twilight (A)", "Darkness (D)"
+)
+
+fun computeTwilightTimes(eventEpochDay: Double, lat: Double, lon: Double, offset: Double): TwilightTimes {
+    val dusk = TWILIGHT_ALTITUDES.map { alt -> calculateSunTimes(eventEpochDay, lat, lon, offset, alt).set }
+    val dawn = TWILIGHT_ALTITUDES.map { alt -> calculateSunTimes(eventEpochDay + 1.0, lat, lon, offset, alt).rise }
+    return TwilightTimes(dusk, dawn, eventEpochDay, eventEpochDay + 1.0)
+}

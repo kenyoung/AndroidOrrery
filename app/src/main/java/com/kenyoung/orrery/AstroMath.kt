@@ -366,6 +366,18 @@ fun calculateAltitude(haHours: Double, latDeg: Double, decDeg: Double): Double {
     return Math.toDegrees(asin(sinAlt.coerceIn(-1.0, 1.0)))
 }
 
+// Computes the azimuth of a body at rise or set given latitude, declination, and horizon altitude.
+fun calculateAzAtRiseSet(lat: Double, dec: Double, isRise: Boolean, altitude: Double): Double {
+    val latRad = Math.toRadians(lat)
+    val decRad = Math.toRadians(dec)
+    val altRad = Math.toRadians(altitude)
+    val cosAz = (sin(decRad) - sin(latRad) * sin(altRad)) / (cos(latRad) * cos(altRad))
+    if (cosAz.isNaN() || cosAz < -1.0 || cosAz > 1.0) return Double.NaN
+    val azRad = acos(cosAz)
+    val azDeg = Math.toDegrees(azRad)
+    return if (isRise) azDeg else 360.0 - azDeg
+}
+
 // Saemundsson's formula: geometric (true) altitude -> apparent altitude
 // Adds atmospheric refraction so objects appear at their observed position
 fun applyRefraction(trueAltDeg: Double): Double {
