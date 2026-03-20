@@ -40,8 +40,11 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     val sunState = AstroEngine.getBodyState("Sun", currentJd)
     val (sunAppRa, sunAppDec) = j2000ToApparent(sunState.ra, sunState.dec, currentJd)
     val lst = calculateLSTHours(currentJd, lon)
-    val currentAlt = applyRefraction(calculateAltitude(lst - sunAppRa / 15.0, lat, sunAppDec))
+    val (currentAzRaw, currentAltRaw) = calculateAzAlt(lst, lat, sunAppRa / 15.0, sunAppDec)
+    val currentAlt = applyRefraction(currentAltRaw)
+    val currentAz = currentAzRaw
     val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
+    val currentDisplayTime = normalizeTime(currentLocalSolar - offset + displayOffsetHours)
 
     // Twilight data for the table (anchored to observing night)
     val eventEpochDay = if (!riseTime.isNaN() && currentLocalSolar < riseTime) floor(epochDay) - 1.0 else floor(epochDay)
@@ -125,15 +128,31 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 val nc = canvas.nativeCanvas
 
                 // --- Title ---
+                val timeStr = formatTimeMM(currentDisplayTime, false)
                 val titleText1 = "Sunlight Today  "
                 val titleText2 = dateStr
-                val titleText3 = "  ($timeLabel)"
+                val titleText3 = "  $timeStr"
+                val titleText4 = "  ($timeLabel)"
                 var tx = 20f
                 nc.drawText(titleText1, tx, titleY, titlePaintLabel)
                 tx += titlePaintLabel.measureText(titleText1)
                 nc.drawText(titleText2, tx, titleY, titlePaintWhite)
                 tx += titlePaintWhite.measureText(titleText2)
-                nc.drawText(titleText3, tx, titleY, titlePaintLabel)
+                nc.drawText(titleText3, tx, titleY, titlePaintWhite)
+                tx += titlePaintWhite.measureText(titleText3)
+                nc.drawText(titleText4, tx, titleY, titlePaintLabel)
+
+                // Length of day in upper right corner
+                if (!riseTime.isNaN() && !setTime.isNaN()) {
+                    val dayLengthHours = setTime - riseTime
+                    val dlH = floor(dayLengthHours).toInt()
+                    val dlM = floor((dayLengthHours - dlH) * 60.0).toInt()
+                    val dayLengthPaint = Paint().apply {
+                        color = android.graphics.Color.WHITE; textSize = 33f
+                        textAlign = Paint.Align.RIGHT; typeface = Typeface.MONOSPACE; isAntiAlias = true
+                    }
+                    nc.drawText("Length of Day %02d:%02d".format(dlH, dlM), chartRight, chartTop + dayLengthPaint.textSize, dayLengthPaint)
+                }
 
                 // --- Twilight bands below horizon ---
                 val civilY = altToY(CIVIL_TWILIGHT)
@@ -273,18 +292,18 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                             Offset(xNow + outerR * cos(rad).toFloat(), yNow + outerR * sin(rad).toFloat()),
                             strokeWidth = 2.5f)
                     }
-                    // Current time label: left of sun before transit, right after
-                    val currentDisplayTime = normalizeTime(currentLocalSolar - offset + displayOffsetHours)
-                    val timeStr = formatTimeMM(currentDisplayTime, false)
-                    val beforeTransit = currentLocalSolar < transitTime
-                    val sunTimePaint = Paint().apply {
+                    // Elevation label to the left, azimuth label to the right
+                    val sunLabelOffset = (33f + 8f) * 1.5f
+                    val sunLabelPaintLeft = Paint().apply {
                         color = android.graphics.Color.WHITE; textSize = 30f
-                        textAlign = if (beforeTransit) Paint.Align.RIGHT else Paint.Align.LEFT
-                        typeface = Typeface.MONOSPACE; isAntiAlias = true
+                        textAlign = Paint.Align.RIGHT; typeface = Typeface.MONOSPACE; isAntiAlias = true
                     }
-                    val timeOffset = 33f + 8f
-                    val timeX = if (beforeTransit) xNow - timeOffset else xNow + timeOffset
-                    nc.drawText(timeStr, timeX, yNow + sunTimePaint.textSize / 3f, sunTimePaint)
+                    val sunLabelPaintRight = Paint().apply {
+                        color = android.graphics.Color.WHITE; textSize = 30f
+                        textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true
+                    }
+                    nc.drawText("%.0f°".format(round(currentAlt)), xNow - sunLabelOffset, yNow + sunLabelPaintLeft.textSize / 3f, sunLabelPaintLeft)
+                    nc.drawText("%.0f°".format(round(currentAz)), xNow + sunLabelOffset, yNow + sunLabelPaintRight.textSize / 3f, sunLabelPaintRight)
                 }
 
                 // --- Twilight times table ---
