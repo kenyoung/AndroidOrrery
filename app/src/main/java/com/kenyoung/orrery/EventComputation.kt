@@ -217,7 +217,7 @@ val TWILIGHT_ALTITUDES = doubleArrayOf(
     GOLDEN_HOUR_ALT, HORIZON_REFRACTED, CIVIL_TWILIGHT, NAUTICAL_TWILIGHT, ASTRONOMICAL_TWILIGHT
 )
 val TWILIGHT_LABELS = arrayOf(
-    "\"Golden Hour\"", "Civil Twilight (C)", "Nautical Twilight (N)", "Astronomical Twilight (A)", "Darkness (D)"
+    "\"Golden Hour\"", "Civil Twilight", "Nautical Twilight", "Astronomical Twilight", "Darkness"
 )
 
 fun computeTwilightTimes(eventEpochDay: Double, lat: Double, lon: Double, offset: Double): TwilightTimes {
