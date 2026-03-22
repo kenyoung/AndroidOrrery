@@ -88,39 +88,37 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
             val nextLabelPaint = Paint().apply { color = LabelColor.toArgb(); textSize = tableLabelPaint.textSize; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
             val nextTimePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = tableLabelPaint.textSize; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
 
-            // Layout — three non-overlapping vertical bands computed from font metrics:
-            //   Band 1: chart (top of canvas to chartBottom)
-            //   Band 2: hour labels (chartBottom to hourBandBottom)
-            //   Band 3: Rise/Transit/Set labels (hourBandBottom to eventBandBottom)
-            //   Band 4: twilight table (eventBandBottom to bottom of canvas)
+            // Layout — four non-overlapping vertical bands, each sized from font metrics.
+            // The chart gets a fixed proportion of the canvas so its size never varies
+            // with the altitude range. Remaining space is allocated to labels and table.
             val titleY = 60f
             val chartLeft = 80f
             val chartRight = w - 20f
             val chartTop = titleY + 40f
             val rowHeight = 57f
 
-            // Band 4 height: twilight table (2-line header + 5 data rows + footnote + pad)
-            val tableHeight = rowHeight * 8 + tableHeaderPaint.textSize + 4f
+            // Chart gets a fixed 50% of canvas height
+            val chartH = (h * 0.50f).coerceAtLeast(100f)
+            val chartBottom = chartTop + chartH
+            val chartW = chartRight - chartLeft
 
-            // Band 2 height: hour labels + generous gap below
+            // Band 2: hour labels, positioned immediately below chart
             val bandGap = 20f
             val hourBandH = hourLabelPaint.textSize + bandGap
 
-            // Band 3 height: Rise/Transit/Set event labels + gap before table
+            // Band 3: Rise/Transit/Set event labels
             val eventLineSpacing = 8f
             val tableGap = 60f
             val eventBandH = eventLabelPaint.textSize + eventLineSpacing +
                              eventTimePaint.textSize + eventLineSpacing +
                              eventAzPaint.textSize + tableGap
 
-            val chartBottom = h - tableHeight - eventBandH - hourBandH
-            val chartW = chartRight - chartLeft
-            val chartH = chartBottom - chartTop
-
-            // Y-axis range: must encompass full nadir so the curve is never truncated
-            val nadirAlt = -(90.0 - abs(lat - transitDec))
-            val yMax = transitAlt + 5.0
-            val yMin = nadirAlt - 5.0
+            // Y-axis range: encompasses the full sun path and the horizon.
+            // Bottom is whichever is lower: the horizon (0°) or the sun's lowest altitude.
+            // Top always includes the horizon and the sun's peak.
+            val sunMinAlt = calculateAltitude(12.0, lat, transitDec) // anti-transit altitude
+            val yMax = max(transitAlt, 0.0) + 5.0
+            val yMin = min(sunMinAlt, 0.0) - 5.0
             val yRange = yMax - yMin
 
             fun altToY(alt: Double): Float = (chartTop + ((yMax - alt) / yRange * chartH)).toFloat()
@@ -173,16 +171,24 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     }
                 }
 
-                // --- Twilight bands below horizon ---
+                // --- Chart content (y-axis scaled to fit full nadir-to-peak range) ---
                 val civilY = altToY(CIVIL_TWILIGHT)
                 val nauticalY = altToY(NAUTICAL_TWILIGHT)
                 val astroY = altToY(ASTRONOMICAL_TWILIGHT)
 
-                // Civil twilight band (0 to -6)
+                // Compute elevation curve points
+                val numPoints = 240
+                val curvePoints = mutableListOf<Pair<Float, Float>>()
+                for (i in 0..numPoints) {
+                    val t = startHour + i * (24.0 / numPoints)
+                    val ha = t - transitTime
+                    val alt = calculateAltitude(ha, lat, transitDec)
+                    curvePoints.add(Pair(timeToX(t), altToY(alt)))
+                }
+
+                // Twilight bands below horizon
                 drawRect(Color(0xFF0E2499), Offset(chartLeft, horizonY), Size(chartW, civilY - horizonY))
-                // Nautical twilight band (-6 to -12)
                 drawRect(Color(0xFF09165A), Offset(chartLeft, civilY), Size(chartW, nauticalY - civilY))
-                // Astronomical twilight band (-12 to -18)
                 drawRect(Color(0xFF050C1A), Offset(chartLeft, nauticalY), Size(chartW, astroY - nauticalY))
 
                 // Band labels midway between Set and Transit vertical lines
@@ -195,17 +201,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     nc.drawText("Dark", midX, (astroY + darknessBottomY) / 2f + bandLabelPaint.textSize / 3f, bandLabelPaint)
                 }
 
-                // --- Compute elevation curve ---
-                val numPoints = 240
-                val curvePoints = mutableListOf<Pair<Float, Float>>()
-                for (i in 0..numPoints) {
-                    val t = startHour + i * (24.0 / numPoints)
-                    val ha = t - transitTime
-                    val alt = calculateAltitude(ha, lat, transitDec)
-                    curvePoints.add(Pair(timeToX(t), altToY(alt)))
-                }
-
-                // --- Fill above-horizon area ---
+                // Fill above-horizon area
                 val skyPath = Path()
                 var inSky = false
                 for ((px, py) in curvePoints) {
@@ -228,7 +224,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 skyPath.close()
                 drawPath(skyPath, Color(0xFF0000FF))
 
-                // --- Draw elevation curve ---
+                // Draw elevation curve
                 val curvePath = Path()
                 curvePath.moveTo(curvePoints[0].first, curvePoints[0].second)
                 for (i in 1..numPoints) {
@@ -236,12 +232,12 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 }
                 drawPath(curvePath, Color(0xFFFFAA00), style = Stroke(width = curveStrokeWidth))
 
-                // --- Horizon line ---
+                // Horizon line
                 drawLine(Color.White, Offset(chartLeft, horizonY), Offset(chartRight, horizonY), strokeWidth = 1.5f)
                 nc.drawText("0°", chartLeft - 10f, horizonY + 9f, axisLabelPaint)
                 drawLine(Color.White, Offset(chartLeft, horizonY), Offset(chartLeft + tickLen, horizonY), strokeWidth = 2f)
 
-                // --- Y-axis altitude labels ---
+                // Y-axis altitude labels
                 val altSteps = generateSequence(0) { it + 10 }.takeWhile { it <= yMax.toInt() }.drop(1).toList() +
                     listOf(-6, -12, -18).filter { it >= yMin.toInt() }
                 for (alt in altSteps) {
@@ -253,15 +249,43 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     }
                 }
 
-                // --- X-axis hour labels (display hours divisible by 3) ---
+                // Vertical grid lines and hour tick marks
                 for (displayHour in 0..23 step 3) {
-                    // Convert display hour back to local solar time for plotting
+                    val t = displayHour.toDouble() - displayOffsetHours + offset
+                    val x = timeToX(t)
+                    if (x > chartLeft + 15 && x < chartRight - 15) {
+                        drawLine(Color(0xFF333333), Offset(x, chartTop), Offset(x, chartBottom), strokeWidth = 0.5f)
+                        drawLine(Color.White, Offset(x, chartBottom - tickLen), Offset(x, chartBottom), strokeWidth = 2f)
+                    }
+                }
+
+                // Sun icon (within chart clip)
+                val xNow = timeToX(currentLocalSolar)
+                val yNow = altToY(currentAlt)
+                if (xNow >= chartLeft && xNow <= chartRight && yNow >= chartTop && yNow <= chartBottom) {
+                    val sunColor = Color.Yellow
+                    drawCircle(sunColor, radius = sunRadius, center = Offset(xNow, yNow))
+                    for (angle in 0 until 360 step 45) {
+                        val rad = Math.toRadians(angle.toDouble())
+                        drawLine(sunColor,
+                            Offset(xNow + sunRayInner * cos(rad).toFloat(), yNow + sunRayInner * sin(rad).toFloat()),
+                            Offset(xNow + sunRayOuter * cos(rad).toFloat(), yNow + sunRayOuter * sin(rad).toFloat()),
+                            strokeWidth = 2.5f)
+                    }
+                    // Elevation label to the left, azimuth label to the right
+                    val sunLabelOffset = (sunRayOuter + 8f) * 1.5f
+                    sunLabelPaint.textAlign = Paint.Align.RIGHT
+                    nc.drawText("%.0f°".format(round(currentAlt)), xNow - sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
+                    sunLabelPaint.textAlign = Paint.Align.LEFT
+                    nc.drawText("%.0f°".format(round(currentAzRaw)), xNow + sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
+                }
+
+                // --- Hour labels (Band 2: below chart) ---
+                for (displayHour in 0..23 step 3) {
                     val t = displayHour.toDouble() - displayOffsetHours + offset
                     val x = timeToX(t)
                     if (x > chartLeft + 15 && x < chartRight - 15) {
                         nc.drawText("%02d".format(displayHour), x, chartBottom + hourLabelPaint.textSize, hourLabelPaint)
-                        drawLine(Color(0xFF333333), Offset(x, chartTop), Offset(x, chartBottom), strokeWidth = 0.5f)
-                        drawLine(Color.White, Offset(x, chartBottom - tickLen), Offset(x, chartBottom), strokeWidth = 2f)
                     }
                 }
 
@@ -294,27 +318,6 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     nc.drawText("Sunset", xSet, labelBaseY, eventLabelPaint)
                     nc.drawText(formatTimeMM(setDisplay, false), xSet, timeLineY, eventTimePaint)
                     if (!setAz.isNaN()) nc.drawText("Az %.0f°".format(round(setAz)), xSet, azLineY, eventAzPaint)
-                }
-
-                // --- Sun icon at current position with time label ---
-                val xNow = timeToX(currentLocalSolar)
-                val yNow = altToY(currentAlt)
-                if (xNow >= chartLeft && xNow <= chartRight && yNow >= chartTop && yNow <= chartBottom) {
-                    val sunColor = Color.Yellow
-                    drawCircle(sunColor, radius = sunRadius, center = Offset(xNow, yNow))
-                    for (angle in 0 until 360 step 45) {
-                        val rad = Math.toRadians(angle.toDouble())
-                        drawLine(sunColor,
-                            Offset(xNow + sunRayInner * cos(rad).toFloat(), yNow + sunRayInner * sin(rad).toFloat()),
-                            Offset(xNow + sunRayOuter * cos(rad).toFloat(), yNow + sunRayOuter * sin(rad).toFloat()),
-                            strokeWidth = 2.5f)
-                    }
-                    // Elevation label to the left, azimuth label to the right
-                    val sunLabelOffset = (sunRayOuter + 8f) * 1.5f
-                    sunLabelPaint.textAlign = Paint.Align.RIGHT
-                    nc.drawText("%.0f°".format(round(currentAlt)), xNow - sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
-                    sunLabelPaint.textAlign = Paint.Align.LEFT
-                    nc.drawText("%.0f°".format(round(currentAzRaw)), xNow + sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
                 }
 
                 // --- Twilight times table ---
