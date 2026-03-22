@@ -12,7 +12,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -43,9 +42,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     val lst = calculateLSTHours(currentJd, lon)
     val (currentAzRaw, currentAltRaw) = calculateAzAlt(lst, lat, sunAppRa / 15.0, sunAppDec)
     val currentAlt = applyRefraction(currentAltRaw)
-    val currentAz = currentAzRaw
     val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
-    val currentDisplayTime = normalizeTime(currentLocalSolar - offset + displayOffsetHours)
 
     // Twilight data for the table (anchored to observing night)
     val eventEpochDay = if (!riseTime.isNaN() && currentLocalSolar < riseTime) floor(epochDay) - 1.0 else floor(epochDay)
@@ -61,12 +58,18 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     // Rise/set azimuths
     val riseAz = if (!riseTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, true, HORIZON_REFRACTED) else Double.NaN
     val setAz = if (!setTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, false, HORIZON_REFRACTED) else Double.NaN
-    // Transit azimuth: due south (180) if lat > dec, due north (0/360) if lat < dec
-    val transitAz = if (lat >= transitDec) 180.0 else 0.0
 
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Canvas(modifier = Modifier.fillMaxSize().weight(1f)) {
             withDensityScaling { w, h ->
+
+            // Paints
+            // Drawing constants
+            val tickLen = 30f
+            val sunRadius = 15f
+            val sunRayInner = 21f
+            val sunRayOuter = 33f
+            val curveStrokeWidth = 6f
 
             // Paints
             val titlePaintLabel = Paint().apply { color = LabelColor.toArgb(); textSize = 63f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
@@ -76,9 +79,14 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
             val eventLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 39f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val eventTimePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val eventAzPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 33f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val dayLengthPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 33f; textAlign = Paint.Align.RIGHT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
+            val bandLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 33f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+            val sunLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 30f; typeface = Typeface.MONOSPACE; isAntiAlias = true }
             val tableHeaderPaint = Paint().apply { color = LabelColor.toArgb(); textSize = 36f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE; isAntiAlias = true }
             val tableLabelPaint = Paint().apply { color = LabelColor.toArgb(); textSize = 44f; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
             val tableDataPaint = Paint().apply { textSize = 44f; textAlign = Paint.Align.CENTER; typeface = Typeface.MONOSPACE; isAntiAlias = true }
+            val nextLabelPaint = Paint().apply { color = LabelColor.toArgb(); textSize = tableLabelPaint.textSize; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
+            val nextTimePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = tableLabelPaint.textSize; textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true }
 
             // Layout — three non-overlapping vertical bands computed from font metrics:
             //   Band 1: chart (top of canvas to chartBottom)
@@ -149,10 +157,6 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     val dayLengthHours = setTime - riseTime
                     val dlH = floor(dayLengthHours).toInt()
                     val dlM = floor((dayLengthHours - dlH) * 60.0).toInt()
-                    val dayLengthPaint = Paint().apply {
-                        color = android.graphics.Color.WHITE; textSize = 33f
-                        textAlign = Paint.Align.RIGHT; typeface = Typeface.MONOSPACE; isAntiAlias = true
-                    }
                     val dayLengthY = chartTop + dayLengthPaint.textSize
                     nc.drawText("Length of Day %dh %dm".format(dlH, dlM), chartRight, dayLengthY, dayLengthPaint)
 
@@ -183,10 +187,6 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
 
                 // Band labels midway between Set and Transit vertical lines
                 if (!setTime.isNaN()) {
-                    val bandLabelPaint = Paint().apply {
-                        color = android.graphics.Color.WHITE; textSize = 33f
-                        textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true
-                    }
                     val midX = (timeToX(setTime) + timeToX(transitTime)) / 2f
                     nc.drawText("Civil", midX, (horizonY + civilY) / 2f + bandLabelPaint.textSize / 3f, bandLabelPaint)
                     nc.drawText("Nautical", midX, (civilY + nauticalY) / 2f + bandLabelPaint.textSize / 3f, bandLabelPaint)
@@ -234,12 +234,12 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 for (i in 1..numPoints) {
                     curvePath.lineTo(curvePoints[i].first, curvePoints[i].second)
                 }
-                drawPath(curvePath, Color(0xFFFFAA00), style = Stroke(width = 6f))
+                drawPath(curvePath, Color(0xFFFFAA00), style = Stroke(width = curveStrokeWidth))
 
                 // --- Horizon line ---
                 drawLine(Color.White, Offset(chartLeft, horizonY), Offset(chartRight, horizonY), strokeWidth = 1.5f)
                 nc.drawText("0°", chartLeft - 10f, horizonY + 9f, axisLabelPaint)
-                drawLine(Color.White, Offset(chartLeft, horizonY), Offset(chartLeft + 30f, horizonY), strokeWidth = 2f)
+                drawLine(Color.White, Offset(chartLeft, horizonY), Offset(chartLeft + tickLen, horizonY), strokeWidth = 2f)
 
                 // --- Y-axis altitude labels ---
                 val altSteps = generateSequence(0) { it + 10 }.takeWhile { it <= yMax.toInt() }.drop(1).toList() +
@@ -249,7 +249,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     if (y > chartTop && y < chartBottom) {
                         drawLine(Color(0xFF333333), Offset(chartLeft, y), Offset(chartRight, y), strokeWidth = 0.5f)
                         nc.drawText("${alt}°", chartLeft - 10f, y + 9f, axisLabelPaint)
-                        drawLine(Color.White, Offset(chartLeft, y), Offset(chartLeft + 30f, y), strokeWidth = 2f)
+                        drawLine(Color.White, Offset(chartLeft, y), Offset(chartLeft + tickLen, y), strokeWidth = 2f)
                     }
                 }
 
@@ -261,7 +261,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     if (x > chartLeft + 15 && x < chartRight - 15) {
                         nc.drawText("%02d".format(displayHour), x, chartBottom + hourLabelPaint.textSize, hourLabelPaint)
                         drawLine(Color(0xFF333333), Offset(x, chartTop), Offset(x, chartBottom), strokeWidth = 0.5f)
-                        drawLine(Color.White, Offset(x, chartBottom - 30f), Offset(x, chartBottom), strokeWidth = 2f)
+                        drawLine(Color.White, Offset(x, chartBottom - tickLen), Offset(x, chartBottom), strokeWidth = 2f)
                     }
                 }
 
@@ -301,27 +301,20 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 val yNow = altToY(currentAlt)
                 if (xNow >= chartLeft && xNow <= chartRight && yNow >= chartTop && yNow <= chartBottom) {
                     val sunColor = Color.Yellow
-                    drawCircle(sunColor, radius = 15f, center = Offset(xNow, yNow))
+                    drawCircle(sunColor, radius = sunRadius, center = Offset(xNow, yNow))
                     for (angle in 0 until 360 step 45) {
                         val rad = Math.toRadians(angle.toDouble())
-                        val innerR = 21f; val outerR = 33f
                         drawLine(sunColor,
-                            Offset(xNow + innerR * cos(rad).toFloat(), yNow + innerR * sin(rad).toFloat()),
-                            Offset(xNow + outerR * cos(rad).toFloat(), yNow + outerR * sin(rad).toFloat()),
+                            Offset(xNow + sunRayInner * cos(rad).toFloat(), yNow + sunRayInner * sin(rad).toFloat()),
+                            Offset(xNow + sunRayOuter * cos(rad).toFloat(), yNow + sunRayOuter * sin(rad).toFloat()),
                             strokeWidth = 2.5f)
                     }
                     // Elevation label to the left, azimuth label to the right
-                    val sunLabelOffset = (33f + 8f) * 1.5f
-                    val sunLabelPaintLeft = Paint().apply {
-                        color = android.graphics.Color.WHITE; textSize = 30f
-                        textAlign = Paint.Align.RIGHT; typeface = Typeface.MONOSPACE; isAntiAlias = true
-                    }
-                    val sunLabelPaintRight = Paint().apply {
-                        color = android.graphics.Color.WHITE; textSize = 30f
-                        textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true
-                    }
-                    nc.drawText("%.0f°".format(round(currentAlt)), xNow - sunLabelOffset, yNow + sunLabelPaintLeft.textSize / 3f, sunLabelPaintLeft)
-                    nc.drawText("%.0f°".format(round(currentAz)), xNow + sunLabelOffset, yNow + sunLabelPaintRight.textSize / 3f, sunLabelPaintRight)
+                    val sunLabelOffset = (sunRayOuter + 8f) * 1.5f
+                    sunLabelPaint.textAlign = Paint.Align.RIGHT
+                    nc.drawText("%.0f°".format(round(currentAlt)), xNow - sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
+                    sunLabelPaint.textAlign = Paint.Align.LEFT
+                    nc.drawText("%.0f°".format(round(currentAzRaw)), xNow + sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
                 }
 
                 // --- Twilight times table ---
@@ -411,14 +404,6 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     if (deltaHours > 0) {
                         val neH = floor(deltaHours).toInt()
                         val neM = floor((deltaHours - neH) * 60.0).toInt()
-                        val nextLabelPaint = Paint().apply {
-                            color = LabelColor.toArgb(); textSize = tableLabelPaint.textSize
-                            textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true
-                        }
-                        val nextTimePaint = Paint().apply {
-                            color = android.graphics.Color.WHITE; textSize = tableLabelPaint.textSize
-                            textAlign = Paint.Align.LEFT; typeface = Typeface.MONOSPACE; isAntiAlias = true
-                        }
                         val nextLabelStr = "Next transition in "
                         nc.drawText(nextLabelStr, 20f, currY, nextLabelPaint)
                         nc.drawText("%dh %dm".format(neH, neM), 20f + nextLabelPaint.measureText(nextLabelStr), currY, nextTimePaint)
@@ -436,20 +421,4 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
         }
         TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
     }
-}
-
-// Formats azimuth with 8-point compass direction
-private fun formatAzCompass(az: Double): String {
-    if (az.isNaN()) return "---"
-    val dir = when {
-        az < 22.5 || az >= 337.5 -> "N"
-        az < 67.5 -> "NE"
-        az < 112.5 -> "E"
-        az < 157.5 -> "SE"
-        az < 202.5 -> "S"
-        az < 247.5 -> "SW"
-        az < 292.5 -> "W"
-        else -> "NW"
-    }
-    return "%.0f°%s".format(round(az), dir)
 }
