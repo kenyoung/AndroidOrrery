@@ -136,12 +136,23 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
 
-                // --- Title ---
+                // --- Title (font size auto-scaled to fit screen width) ---
                 val titleText1 = "Sunlight Today  "
                 val titleText2 = dateStr
                 val titleText3 = "  $currentTimeStr"
                 val titleText4 = "  ($timeLabel)"
-                var tx = 20f
+                val titleMargin = 20f
+                val availableWidth = w - 2 * titleMargin
+                val fullWidth = titlePaintLabel.measureText(titleText1) +
+                    titlePaintWhite.measureText(titleText2) +
+                    titlePaintWhite.measureText(titleText3) +
+                    titlePaintLabel.measureText(titleText4)
+                if (fullWidth > availableWidth) {
+                    val scale = availableWidth / fullWidth
+                    titlePaintLabel.textSize *= scale
+                    titlePaintWhite.textSize *= scale
+                }
+                var tx = titleMargin
                 nc.drawText(titleText1, tx, titleY, titlePaintLabel)
                 tx += titlePaintLabel.measureText(titleText1)
                 nc.drawText(titleText2, tx, titleY, titlePaintWhite)
