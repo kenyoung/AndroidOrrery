@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 // Navigation Enum
 enum class Screen {
     TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
-    SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, SCHEMATIC, SCALE,
+    SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE, SCHEMATIC, SCALE,
     CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
 
@@ -420,6 +420,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Saturn" to Screen.SATURN,
                             "Uranus" to Screen.URANUS,
+                            "Neptune" to Screen.NEPTUNE,
                             "Analemma" to Screen.ANALEMMA,
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Schematic Orrery" to Screen.SCHEMATIC,
@@ -493,6 +494,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.JOVIAN_EVENTS -> JovianEventsScreen(obs) { useStandardTime = it }
                     Screen.SATURN -> SaturnScreen(obs, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
                     Screen.URANUS -> UranusScreen(obs, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
+                    Screen.NEPTUNE -> NeptuneScreen(obs, screenAnimResetTrigger, { screenAnimStopped = it }) { useStandardTime = it }
                     Screen.CONSTELLATIONS -> ConstellationsScreen(obs, screenAnimResetTrigger) { screenAnimStopped = it }
                     Screen.TIMES -> TimesScreen(currentInstant, effectiveLat, effectiveLon)
                     Screen.ANALEMMA -> AnalemmaScreen(currentInstant, effectiveLat, effectiveLon)
