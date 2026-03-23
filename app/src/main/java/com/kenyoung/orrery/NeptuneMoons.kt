@@ -31,7 +31,6 @@ object NeptuneMoonEngine {
     private const val NEPTUNE_RADIUS_KM = 24764.0
     private const val AU_KM = 149597870.7
     private const val C_LIGHT_KM_PER_SEC = 299792.458
-    private const val DAYS_PER_YEAR = 365.25
     private const val RAD_TO_ARCSEC = 180.0 / PI * 3600.0
 
     // --- Emelyanov (2015) Triton theory constants ---

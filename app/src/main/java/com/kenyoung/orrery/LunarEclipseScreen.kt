@@ -50,7 +50,7 @@ private const val M_2PI = 2.0 * Math.PI
 private const val DEGREES_TO_RADIANS = Math.PI / 180.0
 
 // Physical constants (CGS units)
-private const val AU_KM = 149597870.691
+private const val AU_KM = 149597870.7
 private const val SOLAR_RADIUS = 6.9599e10        // cm
 private const val EARTH_EQUATORIAL_RADIUS = 6.378164e8  // cm
 private const val EARTH_POLAR_RADIUS = 6.356779e8       // cm
