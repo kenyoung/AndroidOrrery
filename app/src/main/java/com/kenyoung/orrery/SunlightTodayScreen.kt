@@ -44,8 +44,12 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     val currentAlt = applyRefraction(currentAltRaw)
     val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
 
-    // Twilight data for the table (anchored to observing night)
-    val eventEpochDay = if (!riseTime.isNaN() && currentLocalSolar < riseTime) floor(epochDay) - 1.0 else floor(epochDay)
+    // Twilight data for the table (anchored to observing night).
+    // Use dawn Golden Hour end (sun at 6°) as the transition point, not sunrise,
+    // so the table shows this morning's dawn times during the Golden Hour period.
+    val goldenRiseTime = calculateSunTimes(floor(epochDay), lat, lon, offset, GOLDEN_HOUR_ALT).rise
+    val transitionTime = if (!goldenRiseTime.isNaN()) goldenRiseTime else riseTime
+    val eventEpochDay = if (!transitionTime.isNaN() && currentLocalSolar < transitionTime) floor(epochDay) - 1.0 else floor(epochDay)
     val twilightData = computeTwilightTimes(eventEpochDay, lat, lon, offset)
 
     // Date and time for title — round to nearest minute to avoid showing previous minute
@@ -338,20 +342,35 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 val currentDisplayDate = floor(now.epochSecond.toDouble() / SECONDS_PER_DAY + displayOffsetHours / 24.0).toLong()
                 var anyAsterisk = false
 
-                // Find the chronologically next twilight event
+                // Find the chronologically next twilight event.
+                // Special case: after sunrise but before today's dawn Golden Hour end,
+                // the next event is today's Golden Hour end — but the table's dawn column
+                // shows TOMORROW's dawn, so we must check today's dawn separately.
                 var nextIsDusk = true
                 var nextIndex = -1
                 val duskMidnightUt = floor(twilightData.duskAnchor) - offset / 24.0
                 val dawnMidnightUt = floor(twilightData.dawnAnchor) - offset / 24.0
-                for (i in 0..4) {
-                    if (!twilightData.dusk[i].isNaN() && duskMidnightUt + twilightData.dusk[i] / 24.0 > currentUtEpochDay) {
-                        nextIsDusk = true; nextIndex = i; break
+
+                // Check if we're still in today's dawn Golden Hour (between sunrise and sun at 6°)
+                val todayGoldenRise = calculateSunTimes(floor(epochDay), lat, lon, offset, GOLDEN_HOUR_ALT).rise
+                if (!todayGoldenRise.isNaN()) {
+                    val todayGoldenUtEpochDay = floor(floor(epochDay)) - offset / 24.0 + todayGoldenRise / 24.0
+                    if (todayGoldenUtEpochDay > currentUtEpochDay) {
+                        // Today's dawn Golden Hour end is the next event
+                        nextIsDusk = false; nextIndex = 0
+                    }
+                }
+
+                // If not in today's dawn Golden Hour, scan the table's dusk then dawn events
+                if (nextIndex == -1) {
+                    for (i in 0..4) {
+                        if (!twilightData.dusk[i].isNaN() && duskMidnightUt + twilightData.dusk[i] / 24.0 > currentUtEpochDay) {
+                            nextIsDusk = true; nextIndex = i; break
+                        }
                     }
                 }
                 if (nextIndex == -1) {
-                    // Dawn events are chronologically earliest at index 4 (darkness ends
-                    // at -18°) through to latest at index 0 (golden hour ends at 6°).
-                    // Find the first future event scanning earliest to latest.
+                    // Dawn events: chronologically earliest at index 4 through latest at index 0.
                     for (i in 4 downTo 0) {
                         if (!twilightData.dawn[i].isNaN() && dawnMidnightUt + twilightData.dawn[i] / 24.0 > currentUtEpochDay) {
                             nextIsDusk = false; nextIndex = i; break
