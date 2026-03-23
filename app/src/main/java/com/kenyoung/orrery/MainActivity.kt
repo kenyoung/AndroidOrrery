@@ -259,6 +259,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     val dateString = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(effectiveDate)
 
     var showMenu by remember { mutableStateOf(false) }
+    var outerPlanetsExpanded by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
     if (showFirstLaunchHint) {
@@ -405,9 +406,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; outerPlanetsExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
-                        val screens = listOf(
+                        val screensBeforeOuter = listOf(
                             "Planet Transits" to Screen.TRANSITS,
                             "Planet Elevations" to Screen.ELEVATIONS,
                             "Planet Compass" to Screen.COMPASS,
@@ -418,9 +419,13 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
                             "Jovian Moons" to Screen.JOVIAN_MOONS,
                             "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
+                        )
+                        val outerPlanetScreens = listOf(
                             "Saturn" to Screen.SATURN,
                             "Uranus" to Screen.URANUS,
                             "Neptune" to Screen.NEPTUNE,
+                        )
+                        val screensAfterOuter = listOf(
                             "Analemma" to Screen.ANALEMMA,
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Schematic Orrery" to Screen.SCHEMATIC,
@@ -428,8 +433,22 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Constellations" to Screen.CONSTELLATIONS,
                             "Astronomical Times" to Screen.TIMES
                         )
-                        screens.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false }, modifier = compactItem)
+                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; outerPlanetsExpanded = false }
+                        screensBeforeOuter.forEach { (title, screen) ->
+                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        }
+                        DropdownMenuItem(
+                            text = { Text("${if (outerPlanetsExpanded) "▼" else "▶"} Outer Planets") },
+                            onClick = { outerPlanetsExpanded = !outerPlanetsExpanded },
+                            modifier = compactItem
+                        )
+                        if (outerPlanetsExpanded) {
+                            outerPlanetScreens.forEach { (title, screen) ->
+                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            }
+                        }
+                        screensAfterOuter.forEach { (title, screen) ->
+                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true }, modifier = compactItem)
