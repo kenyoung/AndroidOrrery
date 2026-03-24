@@ -138,6 +138,9 @@ fun SaturnScreen(
     // fits if scale < min(22*cw/(minDim*rx), 22*ch/(minDim*ry)) over all moons.
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val zFactor = run {
+        // Must match the toScreen() transform: flip first, then rotate by PA.
+        val flipX = if (isEastRight) -1.0 else 1.0
+        val flipY = if (isNorthUp) -1.0 else 1.0
         val paRad = Math.toRadians(-saturnData.positionAngleP)
         val cosP = cos(paRad)
         val sinP = sin(paRad)
@@ -146,8 +149,10 @@ fun SaturnScreen(
         val minDim = min(cw, ch)
         var bestScale = Double.MAX_VALUE
         saturnData.moons.forEach { moon ->
-            val rx = abs(moon.x * cosP - moon.y * sinP)
-            val ry = abs(moon.x * sinP + moon.y * cosP)
+            val fx = moon.x * flipX
+            val fy = moon.y * flipY
+            val rx = abs(fx * cosP - fy * sinP)
+            val ry = abs(fx * sinP + fy * cosP)
             if (rx > 0.001) {
                 val s = 22.0 * cw / (minDim * rx * 1.05)
                 if (s < bestScale) bestScale = s
