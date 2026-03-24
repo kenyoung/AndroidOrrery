@@ -213,9 +213,8 @@ object UranusMoonEngine {
 
         // Light-time for Uranus
         val uranusLightTimeSec = distGeoAu * AU_KM / C_LIGHT_KM_PER_SEC
-        val uranusLightTimeDays = uranusLightTimeSec / SECONDS_PER_DAY
 
-        // Moon geocentric vectors with light-time iteration (port of Python)
+        // Moon geocentric vectors with light-time iteration
         val moonGeoVecs = mutableListOf<DoubleArray>()
         val moonBehindDisk = mutableListOf<Boolean>()
 
@@ -225,18 +224,15 @@ object UranusMoonEngine {
         for (elem in moonElements) {
             var lightTimeSec = uranusLightTimeSec
             var moonGeoVec = uranusGeoVec.copyOf()
+            var moonRelKm = doubleArrayOf(0.0, 0.0, 0.0)
 
             for (iter in 0..11) {
                 val jdEmit = jd - lightTimeSec / SECONDS_PER_DAY
-                // Uranus heliocentric at emission time (use Keplerian fallback for offset)
-                val uranusAtEmit = AstroEngine.getBodyState("Uranus", jdEmit)
-                val uranusHelioEmitEq = eclToEq(uranusAtEmit.helioPos)
-                val moonRelKm = moonRelativeVectorKm(jdEmit, elem)
-                val moonRelAu = doubleArrayOf(moonRelKm[0] / AU_KM, moonRelKm[1] / AU_KM, moonRelKm[2] / AU_KM)
+                moonRelKm = moonRelativeVectorKm(jdEmit, elem)
                 moonGeoVec = doubleArrayOf(
-                    uranusHelioEmitEq[0] + moonRelAu[0] - earthHelioEq[0],
-                    uranusHelioEmitEq[1] + moonRelAu[1] - earthHelioEq[1],
-                    uranusHelioEmitEq[2] + moonRelAu[2] - earthHelioEq[2]
+                    uranusGeoVec[0] + moonRelKm[0] / AU_KM,
+                    uranusGeoVec[1] + moonRelKm[1] / AU_KM,
+                    uranusGeoVec[2] + moonRelKm[2] / AU_KM
                 )
                 val newLightTimeSec = sqrt(moonGeoVec[0] * moonGeoVec[0] + moonGeoVec[1] * moonGeoVec[1] + moonGeoVec[2] * moonGeoVec[2]) * AU_KM / C_LIGHT_KM_PER_SEC
                 if (abs(newLightTimeSec - lightTimeSec) < 1.0e-10) {
@@ -248,12 +244,8 @@ object UranusMoonEngine {
             moonGeoVecs.add(moonGeoVec)
 
             // Check if moon is behind Uranus disk
-            // Moon relative vector at light-time corrected time
-            val jdEmit = jd - lightTimeSec / SECONDS_PER_DAY
-            val relKm = moonRelativeVectorKm(jdEmit, moonElements[moonGeoVecs.size - 1])
-            // Project relative vector onto line-of-sight direction
             val losUnit = doubleArrayOf(uranusGeoVec[0] / distGeoAu, uranusGeoVec[1] / distGeoAu, uranusGeoVec[2] / distGeoAu)
-            val relAu = doubleArrayOf(relKm[0] / AU_KM, relKm[1] / AU_KM, relKm[2] / AU_KM)
+            val relAu = doubleArrayOf(moonRelKm[0] / AU_KM, moonRelKm[1] / AU_KM, moonRelKm[2] / AU_KM)
             val depthAu = relAu[0] * losUnit[0] + relAu[1] * losUnit[1] + relAu[2] * losUnit[2]
             // Perpendicular offset
             val perpX = relAu[0] - depthAu * losUnit[0]
