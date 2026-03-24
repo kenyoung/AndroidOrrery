@@ -342,38 +342,24 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 val currentDisplayDate = floor(now.epochSecond.toDouble() / SECONDS_PER_DAY + displayOffsetHours / 24.0).toLong()
                 var anyAsterisk = false
 
-                // Find the chronologically next twilight event.
-                // Special case: after sunrise but before today's dawn Golden Hour end,
-                // the next event is today's Golden Hour end — but the table's dawn column
-                // shows TOMORROW's dawn, so we must check today's dawn separately.
+                // Find the next twilight event: closest future event to now.
                 var nextIsDusk = true
                 var nextIndex = -1
+                var nextEventUt = Double.MAX_VALUE
                 val duskMidnightUt = floor(twilightData.duskAnchor) - offset / 24.0
                 val dawnMidnightUt = floor(twilightData.dawnAnchor) - offset / 24.0
 
-                // Check if we're still in today's dawn Golden Hour (between sunrise and sun at 6°)
-                val todayGoldenRise = calculateSunTimes(floor(epochDay), lat, lon, offset, GOLDEN_HOUR_ALT).rise
-                if (!todayGoldenRise.isNaN()) {
-                    val todayGoldenUtEpochDay = floor(floor(epochDay)) - offset / 24.0 + todayGoldenRise / 24.0
-                    if (todayGoldenUtEpochDay > currentUtEpochDay) {
-                        // Today's dawn Golden Hour end is the next event
-                        nextIsDusk = false; nextIndex = 0
-                    }
-                }
-
-                // If not in today's dawn Golden Hour, scan the table's dusk then dawn events
-                if (nextIndex == -1) {
-                    for (i in 0..4) {
-                        if (!twilightData.dusk[i].isNaN() && duskMidnightUt + twilightData.dusk[i] / 24.0 > currentUtEpochDay) {
-                            nextIsDusk = true; nextIndex = i; break
+                for (i in 0..4) {
+                    if (!twilightData.dusk[i].isNaN()) {
+                        val eventUt = duskMidnightUt + twilightData.dusk[i] / 24.0
+                        if (eventUt > currentUtEpochDay && eventUt < nextEventUt) {
+                            nextEventUt = eventUt; nextIsDusk = true; nextIndex = i
                         }
                     }
-                }
-                if (nextIndex == -1) {
-                    // Dawn events: chronologically earliest at index 4 through latest at index 0.
-                    for (i in 4 downTo 0) {
-                        if (!twilightData.dawn[i].isNaN() && dawnMidnightUt + twilightData.dawn[i] / 24.0 > currentUtEpochDay) {
-                            nextIsDusk = false; nextIndex = i; break
+                    if (!twilightData.dawn[i].isNaN()) {
+                        val eventUt = dawnMidnightUt + twilightData.dawn[i] / 24.0
+                        if (eventUt > currentUtEpochDay && eventUt < nextEventUt) {
+                            nextEventUt = eventUt; nextIsDusk = false; nextIndex = i
                         }
                     }
                 }
@@ -429,11 +415,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
 
                 // "Next transition in HH:MM" countdown
                 if (nextIndex >= 0) {
-                    val nextEventUtEpochDay = if (nextIsDusk)
-                        duskMidnightUt + twilightData.dusk[nextIndex] / 24.0
-                    else
-                        dawnMidnightUt + twilightData.dawn[nextIndex] / 24.0
-                    val deltaHours = (nextEventUtEpochDay - currentUtEpochDay) * 24.0
+                    val deltaHours = (nextEventUt - currentUtEpochDay) * 24.0
                     if (deltaHours > 0) {
                         val neH = floor(deltaHours).toInt()
                         val neM = floor((deltaHours - neH) * 60.0).toInt()
