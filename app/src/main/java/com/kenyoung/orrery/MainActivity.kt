@@ -261,6 +261,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var showMenu by remember { mutableStateOf(false) }
     var eclipsesExpanded by remember { mutableStateOf(false) }
     var outerPlanetsExpanded by remember { mutableStateOf(false) }
+    var orreriesExpanded by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
     if (showFirstLaunchHint) {
@@ -407,7 +408,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false }) {
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
                         val screensBeforeOuter = listOf(
                             "Planet Transits" to Screen.TRANSITS,
@@ -428,15 +429,16 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Uranus" to Screen.URANUS,
                             "Neptune" to Screen.NEPTUNE,
                         )
+                        val orreryScreens = listOf(
+                            "Schematic Orrery" to Screen.SCHEMATIC,
+                            "To-scale Orrery" to Screen.SCALE,
+                        )
                         val screensAfterOuter = listOf(
                             "Analemma" to Screen.ANALEMMA,
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
-                            "Schematic Orrery" to Screen.SCHEMATIC,
-                            "To-scale Orrery" to Screen.SCALE,
                             "Constellations" to Screen.CONSTELLATIONS,
-                            "Astronomical Times" to Screen.TIMES
                         )
-                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false }
+                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }
                         screensBeforeOuter.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
@@ -461,6 +463,22 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             }
                         }
                         screensAfterOuter.forEach { (title, screen) ->
+                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        }
+                        DropdownMenuItem(
+                            text = { Text("${if (orreriesExpanded) "▼" else "▶"} Orreries") },
+                            onClick = { orreriesExpanded = !orreriesExpanded },
+                            modifier = compactItem
+                        )
+                        if (orreriesExpanded) {
+                            orreryScreens.forEach { (title, screen) ->
+                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            }
+                        }
+                        val screensAfterOrreries = listOf(
+                            "Astronomical Times" to Screen.TIMES,
+                        )
+                        screensAfterOrreries.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
                         HorizontalDivider()
