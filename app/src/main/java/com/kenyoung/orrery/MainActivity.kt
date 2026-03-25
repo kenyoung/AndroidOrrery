@@ -259,6 +259,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     val dateString = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(effectiveDate)
 
     var showMenu by remember { mutableStateOf(false) }
+    var eclipsesExpanded by remember { mutableStateOf(false) }
     var outerPlanetsExpanded by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
@@ -406,7 +407,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; outerPlanetsExpanded = false }) {
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
                         val screensBeforeOuter = listOf(
                             "Planet Transits" to Screen.TRANSITS,
@@ -415,12 +416,14 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
+                        )
+                        val eclipseScreens = listOf(
                             "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
                             "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
-                            "Jovian Moons" to Screen.JOVIAN_MOONS,
-                            "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                         )
                         val outerPlanetScreens = listOf(
+                            "Jovian Moons" to Screen.JOVIAN_MOONS,
+                            "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
                             "Saturn" to Screen.SATURN,
                             "Uranus" to Screen.URANUS,
                             "Neptune" to Screen.NEPTUNE,
@@ -433,9 +436,19 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Constellations" to Screen.CONSTELLATIONS,
                             "Astronomical Times" to Screen.TIMES
                         )
-                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; outerPlanetsExpanded = false }
+                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false }
                         screensBeforeOuter.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        }
+                        DropdownMenuItem(
+                            text = { Text("${if (eclipsesExpanded) "▼" else "▶"} Eclipses") },
+                            onClick = { eclipsesExpanded = !eclipsesExpanded },
+                            modifier = compactItem
+                        )
+                        if (eclipsesExpanded) {
+                            eclipseScreens.forEach { (title, screen) ->
+                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            }
                         }
                         DropdownMenuItem(
                             text = { Text("${if (outerPlanetsExpanded) "▼" else "▶"} Outer Planets") },
