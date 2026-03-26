@@ -100,9 +100,9 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, MOON_CALENDAR, LUNAR_ECLIPSES,
-    SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE, SCHEMATIC, SCALE,
-    CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON_CALENDAR,
+    LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
+    SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -414,6 +414,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Transits" to Screen.TRANSITS,
                             "Planet Elevations" to Screen.ELEVATIONS,
                             "Planet Compass" to Screen.COMPASS,
+                            "Object Visibility" to Screen.OBJECT_VISIBILITY,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
@@ -535,6 +536,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(obs) { useStandardTime = it }
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
+                    Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
@@ -614,12 +616,16 @@ data class CityEntry(
     val countryCode: String,
     val continent: String,
     val lat: Double,
-    val lon: Double
+    val lon: Double,
+    val population: Int = 0
 )
 
 object CityData {
     var cities: List<CityEntry>? = null
         private set
+
+    private const val NAME_SIZE = 48
+    private const val RECORD_SIZE = 64
 
     private val continentNames = mapOf(
         "AF" to "Africa", "AS" to "Asia", "EU" to "Europe",
@@ -633,40 +639,28 @@ object CityData {
 
     fun load(context: android.content.Context) {
         if (cities != null) return
-        cities = context.assets.open("cities_over_100k.csv").bufferedReader().useLines { lines ->
-            lines.drop(1).mapNotNull { line ->
-                val fields = parseCsvLine(line)
-                if (fields.size >= 5) {
-                    CityEntry(
-                        name = fields[0],
-                        countryCode = fields[1],
-                        continent = fields[2],
-                        lat = fields[3].toDoubleOrNull() ?: return@mapNotNull null,
-                        lon = fields[4].toDoubleOrNull() ?: return@mapNotNull null
-                    )
-                } else null
-            }.toList()
-        }
-    }
-
-    private fun parseCsvLine(line: String): List<String> {
-        val fields = mutableListOf<String>()
-        var i = 0
-        while (i < line.length) {
-            if (line[i] == '"') {
-                val closing = line.indexOf('"', i + 1)
-                if (closing == -1) { fields.add(line.substring(i + 1)); break }
-                fields.add(line.substring(i + 1, closing))
-                i = closing + 1
-                if (i < line.length && line[i] == ',') i++
-            } else {
-                val comma = line.indexOf(',', i)
-                if (comma == -1) { fields.add(line.substring(i)); break }
-                fields.add(line.substring(i, comma))
-                i = comma + 1
+        cities = context.assets.open("cities.bin").use { inputStream ->
+            val bytes = inputStream.readBytes()
+            val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val count = bytes.size / RECORD_SIZE
+            val list = ArrayList<CityEntry>(count)
+            val nameBytes = ByteArray(NAME_SIZE)
+            val ccBytes = ByteArray(2)
+            val contBytes = ByteArray(2)
+            for (i in 0 until count) {
+                buffer.get(nameBytes)
+                buffer.get(ccBytes)
+                buffer.get(contBytes)
+                val lat = buffer.float.toDouble()
+                val lon = buffer.float.toDouble()
+                val pop = buffer.int
+                val name = String(nameBytes, Charsets.UTF_8).trimEnd('\u0000')
+                val cc = String(ccBytes, Charsets.US_ASCII).trimEnd('\u0000')
+                val cont = String(contBytes, Charsets.US_ASCII).trimEnd('\u0000')
+                list.add(CityEntry(name, cc, cont, lat, lon, pop))
             }
+            list
         }
-        return fields
     }
 }
 

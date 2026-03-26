@@ -35,11 +35,11 @@ def generateCityList():
                         lat = parts[4]
                         lon = parts[5]
                         continent = countryToContinent.get(country, "Unknown")
-                        citiesData.append([name, country, continent, lat, lon])
+                        citiesData.append([name, country, continent, lat, lon, population])
 
-    with open('cities_over_250k.csv', 'w', newline='', encoding='utf-8') as f:
+    with open('cities_over_100k.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Name', 'Country', 'Continent', 'Latitude', 'Longitude'])
+        writer.writerow(['Name', 'Country', 'Continent', 'Latitude', 'Longitude', 'Population'])
         writer.writerows(citiesData)
 
 if __name__ == '__main__':
