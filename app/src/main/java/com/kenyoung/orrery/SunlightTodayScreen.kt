@@ -295,6 +295,34 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                     nc.drawText("%.0f°".format(round(currentAzRaw)), xNow + sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
                 }
 
+                // "Currently" label + sunlight state in upper-left of chart
+                val sunlightState = when {
+                    currentAltRaw >= GOLDEN_HOUR_ALT -> "Daylight"
+                    currentAltRaw >= HORIZON_REFRACTED -> "Golden Hour"
+                    currentAltRaw >= CIVIL_TWILIGHT -> "Civil Twilight"
+                    currentAltRaw >= NAUTICAL_TWILIGHT -> "Nautical Twilight"
+                    currentAltRaw >= ASTRONOMICAL_TWILIGHT -> "Astro. Twilight"
+                    else -> "Darkness"
+                }
+                val currentlyLabelPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = LabelColor.toArgb()
+                    textSize = 50f
+                    textAlign = Paint.Align.LEFT
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                val currentlyStatePaint = Paint().apply {
+                    isAntiAlias = true
+                    color = android.graphics.Color.WHITE
+                    textSize = 50f
+                    textAlign = Paint.Align.LEFT
+                    typeface = Typeface.DEFAULT
+                }
+                val currentlyX = chartLeft + tickLen + 10f
+                val currentlyY = chartTop + currentlyLabelPaint.textSize + 4f
+                nc.drawText("Currently", currentlyX, currentlyY, currentlyLabelPaint)
+                nc.drawText(sunlightState, currentlyX, currentlyY + 54f, currentlyStatePaint)
+
                 // --- Hour labels (Band 2: below chart) ---
                 for (displayHour in 0..23 step 3) {
                     val t = displayHour.toDouble() - displayOffsetHours + offset

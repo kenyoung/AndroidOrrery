@@ -55,6 +55,7 @@ private data class ShoreSegmentOV(
     val lon: ShortArray
 )
 
+@Volatile
 private var shorelineSegmentsOV: List<ShoreSegmentOV>? = null
 
 private suspend fun loadShorelineDataOV(context: Context): List<ShoreSegmentOV> {
@@ -99,35 +100,17 @@ private fun normLon(lon: Double): Double {
     return l
 }
 
-private fun computeVisibleLonRange(
-    bodyName: String,
-    latDeg: Double,
-    appRaDeg: Double,
-    appDecDeg: Double,
+/**
+ * Compute the longitude range where an object is above a given altitude threshold.
+ * Accepts pre-computed trig values so callers can evaluate multiple thresholds
+ * without redundant sin/cos on latitude and declination.
+ */
+private fun computeRangeFromTrig(
+    sinLat: Double, cosLat: Double,
+    sinDec: Double, cosDec: Double,
     sinH0: Double,
-    gmstHours: Double,
-    bodyState: BodyState,
-    jd: Double
+    subObjLon: Double
 ): VisibilityRange {
-    val latRad = Math.toRadians(latDeg)
-    val sinLat = sin(latRad)
-    val cosLat = cos(latRad)
-
-    var decDeg = appDecDeg
-
-    // Moon: apply topocentric parallax correction per latitude row
-    if (bodyName == "Moon") {
-        val subLon = normLon(appRaDeg - gmstHours * 15.0)
-        val refLst = calculateLSTHours(jd, subLon)
-        val topo = toTopocentric(appRaDeg, appDecDeg, bodyState.distGeo, latDeg, subLon, refLst)
-        decDeg = topo.dec
-    }
-
-    val decRad = Math.toRadians(decDeg)
-    val sinDec = sin(decRad)
-    val cosDec = cos(decRad)
-
-    // Handle poles and zero-declination edge cases
     if (abs(cosLat) < 1e-10 || abs(cosDec) < 1e-10) {
         val sinAlt = sinLat * sinDec
         return if (sinAlt > sinH0) VisibilityRange(0.0, 0.0, alwaysUp = true, neverUp = false)
@@ -140,12 +123,31 @@ private fun computeVisibleLonRange(
     if (cosHA >= 1.0) return VisibilityRange(0.0, 0.0, alwaysUp = false, neverUp = true)
 
     val haDeg = Math.toDegrees(acos(cosHA))
-    val raHours = appRaDeg / 15.0
+    return VisibilityRange(
+        normLon(subObjLon - haDeg),
+        normLon(subObjLon + haDeg),
+        alwaysUp = false, neverUp = false
+    )
+}
 
-    val lonWest = normLon((-haDeg + raHours * 15.0 - gmstHours * 15.0))
-    val lonEast = normLon((haDeg + raHours * 15.0 - gmstHours * 15.0))
-
-    return VisibilityRange(lonWest, lonEast, alwaysUp = false, neverUp = false)
+/**
+ * Prepare dec trig for a given latitude, applying Moon topocentric correction if needed.
+ * Returns (sinDec, cosDec).
+ */
+private fun getDecTrig(
+    bodyName: String, latDeg: Double,
+    appRaDeg: Double, appDecDeg: Double,
+    gmstHours: Double, bodyState: BodyState, jd: Double
+): Pair<Double, Double> {
+    var decDeg = appDecDeg
+    if (bodyName == "Moon") {
+        val subLon = normLon(appRaDeg - gmstHours * 15.0)
+        val refLst = calculateLSTHours(jd, subLon)
+        val topo = toTopocentric(appRaDeg, appDecDeg, bodyState.distGeo, latDeg, subLon, refLst)
+        decDeg = topo.dec
+    }
+    val decRad = Math.toRadians(decDeg)
+    return Pair(sin(decRad), cos(decRad))
 }
 
 // ============================================================================
@@ -198,7 +200,7 @@ private fun drawVisibilityMap(
     fun lonToX(lon: Double): Float = ((lon + 180.0) / 360.0 * mw + mLeft).toFloat()
     fun latToY(lat: Double): Float = ((90.0 - lat) / 180.0 * mh + mTop).toFloat()
 
-    // 1. Background: solid gray, then paint visible region white per row
+    // 1. Background: solid gray, then paint visible region white and draw contours in one pass
     val pixelHeight = mh.toInt()
     val shadeColor = Color(0xFF383838)
 
@@ -208,91 +210,94 @@ private fun drawVisibilityMap(
         size = Size(mw, mh)
     )
 
-    // 2. Paint above-horizon region white
-    for (py in 0 until pixelHeight) {
-        val lat = 90.0 - (py.toDouble() / mh) * 180.0
-        val screenY = mTop + py
+    // Pre-compute contour sin(threshold) values
+    val contourCount = elevationContours.size
+    val contourSinH = DoubleArray(contourCount) { sin(Math.toRadians(elevationContours[it].first)) }
+    val subObjLon = normLon(appRaDeg - gmstHours * 15.0)
 
-        val range = computeVisibleLonRange(
-            bodyName, lat, appRaDeg, appDecDeg, sinH0, gmstHours, bodyState, jd
-        )
-
-        if (range.neverUp) continue
-        if (range.alwaysUp) {
-            drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
-            continue
-        }
-
-        val x1 = lonToX(range.lon1)
-        val x2 = lonToX(range.lon2)
-
-        if (x1 <= x2) {
-            // Visible range doesn't wrap: white between x1 and x2
-            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
-        } else {
-            // Visible range wraps: white on left (mLeft to x2) and right (x1 to edge)
-            drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
-            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
-        }
-    }
-
-    // 3. Elevation contours (half-pixel steps for smoother curves)
+    // Per-contour tracking state for line drawing
     val maxLineLen = mw / 4f
+    val prevWestX = arrayOfNulls<Float>(contourCount)
+    val prevEastX = arrayOfNulls<Float>(contourCount)
+    val prevY = FloatArray(contourCount)
+    val firstWestX = arrayOfNulls<Float>(contourCount)
+    val firstEastX = arrayOfNulls<Float>(contourCount)
+    val firstY = FloatArray(contourCount)
+    val lastWestX = arrayOfNulls<Float>(contourCount)
+    val lastEastX = arrayOfNulls<Float>(contourCount)
+    val lastY = FloatArray(contourCount)
+
+    // 2. Single pass over latitude rows at half-pixel resolution
     val contourSteps = pixelHeight * 2
-    for ((elevDeg, contourColor) in elevationContours) {
-        val sinHC = sin(Math.toRadians(elevDeg))
-        var prevWestX: Float? = null
-        var prevEastX: Float? = null
-        var prevY = 0f
-        var firstWestX: Float? = null
-        var firstEastX: Float? = null
-        var firstY = 0f
-        var lastWestX: Float? = null
-        var lastEastX: Float? = null
-        var lastY = 0f
+    for (step in 0..contourSteps) {
+        val lat = 90.0 - (step.toDouble() / contourSteps) * 180.0
+        val screenY = mTop + step.toFloat() / contourSteps * mh
 
-        for (step in 0..contourSteps) {
-            val lat = 90.0 - (step.toDouble() / contourSteps) * 180.0
-            val screenY = mTop + step.toFloat() / contourSteps * mh
+        val latRad = Math.toRadians(lat)
+        val sinLat = sin(latRad)
+        val cosLat = cos(latRad)
+        val (sinDec, cosDec) = getDecTrig(bodyName, lat, appRaDeg, appDecDeg, gmstHours, bodyState, jd)
 
-            val range = computeVisibleLonRange(
-                bodyName, lat, appRaDeg, appDecDeg, sinHC, gmstHours, bodyState, jd
-            )
+        // Horizon shading (only on integer pixel rows)
+        if (step % 2 == 0) {
+            val horizRange = computeRangeFromTrig(sinLat, cosLat, sinDec, cosDec, sinH0, subObjLon)
+            if (!horizRange.neverUp) {
+                if (horizRange.alwaysUp) {
+                    drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
+                } else {
+                    val x1 = lonToX(horizRange.lon1)
+                    val x2 = lonToX(horizRange.lon2)
+                    if (x1 <= x2) {
+                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
+                    } else {
+                        drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
+                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
+                    }
+                }
+            }
+        }
+
+        // Elevation contours (all thresholds share the same lat/dec trig)
+        for (c in 0 until contourCount) {
+            val range = computeRangeFromTrig(sinLat, cosLat, sinDec, cosDec, contourSinH[c], subObjLon)
+            val contourColor = elevationContours[c].second
 
             if (range.alwaysUp || range.neverUp) {
-                prevWestX = null
-                prevEastX = null
-                prevY = screenY
+                prevWestX[c] = null
+                prevEastX[c] = null
+                prevY[c] = screenY
                 continue
             }
 
             val curWestX = lonToX(range.lon1)
             val curEastX = lonToX(range.lon2)
 
-            if (firstWestX == null) {
-                firstWestX = curWestX; firstEastX = curEastX; firstY = screenY
+            if (firstWestX[c] == null) {
+                firstWestX[c] = curWestX; firstEastX[c] = curEastX; firstY[c] = screenY
             }
-            lastWestX = curWestX; lastEastX = curEastX; lastY = screenY
+            lastWestX[c] = curWestX; lastEastX[c] = curEastX; lastY[c] = screenY
 
-            if (prevWestX != null && abs(curWestX - prevWestX!!) < maxLineLen) {
-                drawScope.drawLine(contourColor, Offset(prevWestX!!, prevY), Offset(curWestX, screenY), 3f)
+            if (prevWestX[c] != null && abs(curWestX - prevWestX[c]!!) < maxLineLen) {
+                drawScope.drawLine(contourColor, Offset(prevWestX[c]!!, prevY[c]), Offset(curWestX, screenY), 3f)
             }
-            if (prevEastX != null && abs(curEastX - prevEastX!!) < maxLineLen) {
-                drawScope.drawLine(contourColor, Offset(prevEastX!!, prevY), Offset(curEastX, screenY), 3f)
+            if (prevEastX[c] != null && abs(curEastX - prevEastX[c]!!) < maxLineLen) {
+                drawScope.drawLine(contourColor, Offset(prevEastX[c]!!, prevY[c]), Offset(curEastX, screenY), 3f)
             }
 
-            prevWestX = curWestX
-            prevEastX = curEastX
-            prevY = screenY
+            prevWestX[c] = curWestX
+            prevEastX[c] = curEastX
+            prevY[c] = screenY
         }
+    }
 
-        // Close top gap (horizontal line connecting first west and east points)
-        if (firstWestX != null && firstEastX != null && abs(firstWestX - firstEastX!!) < maxLineLen) {
-            drawScope.drawLine(contourColor, Offset(firstWestX, firstY), Offset(firstEastX!!, firstY), 3f)
+    // Close top and bottom gaps for each contour
+    for (c in 0 until contourCount) {
+        val contourColor = elevationContours[c].second
+        if (firstWestX[c] != null && firstEastX[c] != null && abs(firstWestX[c]!! - firstEastX[c]!!) < maxLineLen) {
+            drawScope.drawLine(contourColor, Offset(firstWestX[c]!!, firstY[c]), Offset(firstEastX[c]!!, firstY[c]), 3f)
         }
-        // Close bottom gap (horizontal line connecting last west and east points)
-        if (lastWestX != null && lastEastX != null && abs(lastWestX - lastEastX!!) < maxLineLen) {
-            drawScope.drawLine(contourColor, Offset(lastWestX, lastY), Offset(lastEastX!!, lastY), 3f)
+        if (lastWestX[c] != null && lastEastX[c] != null && abs(lastWestX[c]!! - lastEastX[c]!!) < maxLineLen) {
+            drawScope.drawLine(contourColor, Offset(lastWestX[c]!!, lastY[c]), Offset(lastEastX[c]!!, lastY[c]), 3f)
         }
     }
 
@@ -395,11 +400,12 @@ private fun drawVisibilityMap(
             typeface = Typeface.DEFAULT
         }
         val ky = keyTop + (keyHeight - swatchSize) / 2f
+        val swatchPaint = Paint().apply { style = Paint.Style.FILL }
         for (i in elevationContours.indices) {
             val (elevDeg, color) = elevationContours[i]
             val kx = keyMargin + i * entryWidth
-            canvas.nativeCanvas.drawRect(kx, ky, kx + swatchSize, ky + swatchSize,
-                Paint().apply { this.color = color.toArgb(); style = Paint.Style.FILL })
+            swatchPaint.color = color.toArgb()
+            canvas.nativeCanvas.drawRect(kx, ky, kx + swatchSize, ky + swatchSize, swatchPaint)
             canvas.nativeCanvas.drawText("${elevDeg.toInt()}\u00B0",
                 kx + swatchSize + 3f, ky + swatchSize - 1f, keyPaint)
         }
@@ -512,15 +518,17 @@ private fun computeTopCities(
     for (city in cities) {
         if (city.countryCode in countriesSeen) continue
 
-        var raDeg = appRaDeg
-        var decDeg = appDecDeg
-
         val lst = calculateLSTHours(jd, city.lon)
 
+        val raDeg: Double
+        val decDeg: Double
         if (bodyName == "Moon") {
             val topo = toTopocentric(appRaDeg, appDecDeg, bodyState.distGeo, city.lat, city.lon, lst)
             raDeg = topo.ra
             decDeg = topo.dec
+        } else {
+            raDeg = appRaDeg
+            decDeg = appDecDeg
         }
 
         val azAlt = calculateAzAlt(lst, city.lat, raDeg / 15.0, decDeg)
