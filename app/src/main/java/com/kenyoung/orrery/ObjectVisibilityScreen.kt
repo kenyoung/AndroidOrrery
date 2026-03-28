@@ -552,15 +552,18 @@ fun ObjectVisibilityScreen(obs: ObserverState) {
     var shoreline by remember { mutableStateOf<List<ShoreSegmentOV>?>(null) }
     var selectedBody by remember { mutableStateOf("Sun") }
 
+    var citiesLoaded by remember { mutableStateOf(CityData.cities != null) }
+
     LaunchedEffect(Unit) {
         shoreline = loadShorelineDataOV(context)
         CityData.load(context)
+        citiesLoaded = true
     }
 
     val bodyNames = listOf("Sun", "Moon", "Mercury", "Venus", "Mars",
         "Jupiter", "Saturn", "Uranus", "Neptune")
 
-    val topCities = remember(selectedBody, obs.now) {
+    val topCities = remember(selectedBody, obs.now, citiesLoaded) {
         val cities = CityData.cities
         if (cities != null) computeTopCities(selectedBody, obs, cities)
         else emptyList()
