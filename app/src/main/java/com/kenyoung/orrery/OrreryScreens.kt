@@ -345,8 +345,8 @@ fun ScaleOrrery(epochDay: Double) {
                 text = "Pinch to zoom",
                 color = Color.White,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 8.dp, top = 8.dp),
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
                 style = TextStyle(fontSize = 14.sp)
             )
         }
