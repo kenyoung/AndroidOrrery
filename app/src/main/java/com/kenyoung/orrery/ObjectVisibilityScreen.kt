@@ -189,7 +189,7 @@ private fun drawVisibilityMap(
     val tableRowHeight = 42f
     val tableHeaderHeight = 46f
     val tableGap = 30f
-    val tableHeight = if (topCities.isNotEmpty()) tableHeaderHeight + topCities.size * tableRowHeight + tableGap else 0f
+    val tableHeight = if (topCities.isNotEmpty()) tableHeaderHeight + (topCities.size + 1) * tableRowHeight + tableGap else 0f
     val availableW = w - 2 * margin
     val availableH = h - titleHeight - margin - keyLabelHeight - keyHeight - keyGap - tableHeight
     val mh = minOf(availableH, availableW / 2f)
@@ -453,9 +453,39 @@ private fun drawVisibilityMap(
             canvas.nativeCanvas.drawText("Elev", col4 - margin, headerY, headerRightPaint)
             canvas.nativeCanvas.drawText("Az", w - margin, headerY, headerRightPaint)
 
+            // Observer's own location as first row
+            val obsLst = calculateLSTHours(jd, obs.lon)
+            val obsRaDeg: Double
+            val obsDecDeg: Double
+            if (bodyName == "Moon") {
+                val topo = toTopocentric(appRaDeg, appDecDeg, bodyState.distGeo, obs.lat, obs.lon, obsLst)
+                obsRaDeg = topo.ra
+                obsDecDeg = topo.dec
+            } else {
+                obsRaDeg = appRaDeg
+                obsDecDeg = appDecDeg
+            }
+            val obsAzAlt = calculateAzAlt(obsLst, obs.lat, obsRaDeg / 15.0, obsDecDeg)
+            val obsUp = obsAzAlt.alt > 0.0
+            val obsColor = if (obsUp) android.graphics.Color.GREEN else android.graphics.Color.RED
+            cityPaint.color = obsColor
+            cityRightPaint.color = obsColor
+            val obsRowY = tableTop + tableHeaderHeight + tableRowHeight
+            canvas.nativeCanvas.drawText("Your Location", col1, obsRowY, cityPaint)
+            if (obsUp) {
+                val obsHa = normalizeHourAngle(obsLst - obsRaDeg / 15.0)
+                val obsArrow = if (obsHa < 0.0) "\u2191" else "\u2193"
+                canvas.nativeCanvas.drawText("%.0f\u00B0 %s".format(obsAzAlt.alt, obsArrow), col4 - margin, obsRowY, cityRightPaint)
+            } else {
+                canvas.nativeCanvas.drawText("%.0f\u00B0".format(obsAzAlt.alt), col4 - margin, obsRowY, cityRightPaint)
+            }
+            canvas.nativeCanvas.drawText("%.0f\u00B0".format(obsAzAlt.az), w - margin, obsRowY, cityRightPaint)
+            cityPaint.color = android.graphics.Color.WHITE
+            cityRightPaint.color = android.graphics.Color.WHITE
+
             for (i in topCities.indices) {
                 val city = topCities[i]
-                val rowY = tableTop + tableHeaderHeight + (i + 1) * tableRowHeight
+                val rowY = tableTop + tableHeaderHeight + (i + 2) * tableRowHeight
                 canvas.nativeCanvas.drawText(city.name, col1, rowY, cityPaint)
                 canvas.nativeCanvas.drawText(city.country, col2, rowY, cityPaint)
                 val arrow = if (city.isRising) "\u2191" else "\u2193"
