@@ -425,6 +425,13 @@ private fun drawVisibilityMap(
                 textAlign = Paint.Align.LEFT
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
+            val headerRightPaint = Paint().apply {
+                isAntiAlias = true
+                color = 0xFF88AAFF.toInt()
+                textSize = 42f
+                textAlign = Paint.Align.RIGHT
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
             val cityPaint = Paint().apply {
                 isAntiAlias = true
                 color = android.graphics.Color.WHITE
@@ -432,20 +439,28 @@ private fun drawVisibilityMap(
                 textAlign = Paint.Align.LEFT
                 typeface = Typeface.DEFAULT
             }
+            val cityRightPaint = Paint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.WHITE
+                textSize = 38f
+                textAlign = Paint.Align.RIGHT
+                typeface = Typeface.DEFAULT
+            }
 
             val headerY = tableTop + 22f
             canvas.nativeCanvas.drawText("City", col1, headerY, headerPaint)
             canvas.nativeCanvas.drawText("Country", col2, headerY, headerPaint)
-            canvas.nativeCanvas.drawText("Elev", col3, headerY, headerPaint)
-            canvas.nativeCanvas.drawText("Az", col4, headerY, headerPaint)
+            canvas.nativeCanvas.drawText("Elev", col4 - margin, headerY, headerRightPaint)
+            canvas.nativeCanvas.drawText("Az", w - margin, headerY, headerRightPaint)
 
             for (i in topCities.indices) {
                 val city = topCities[i]
                 val rowY = tableTop + tableHeaderHeight + (i + 1) * tableRowHeight
                 canvas.nativeCanvas.drawText(city.name, col1, rowY, cityPaint)
                 canvas.nativeCanvas.drawText(city.country, col2, rowY, cityPaint)
-                canvas.nativeCanvas.drawText("%.0f\u00B0".format(city.elevation), col3, rowY, cityPaint)
-                canvas.nativeCanvas.drawText("%.0f\u00B0".format(city.azimuth), col4, rowY, cityPaint)
+                val arrow = if (city.isRising) "\u2191" else "\u2193"
+                canvas.nativeCanvas.drawText("%.0f\u00B0 %s".format(city.elevation, arrow), col4 - margin, rowY, cityRightPaint)
+                canvas.nativeCanvas.drawText("%.0f\u00B0".format(city.azimuth), w - margin, rowY, cityRightPaint)
             }
         }
     }
@@ -498,7 +513,8 @@ private data class CityVisibility(
     val name: String,
     val country: String,
     val elevation: Double,
-    val azimuth: Double
+    val azimuth: Double,
+    val isRising: Boolean
 )
 
 private fun computeTopCities(
@@ -534,11 +550,13 @@ private fun computeTopCities(
         val azAlt = calculateAzAlt(lst, city.lat, raDeg / 15.0, decDeg)
 
         if (azAlt.alt > 0.0) {
+            val ha = normalizeHourAngle(lst - raDeg / 15.0)
             countriesSeen.add(city.countryCode)
             result.add(CityVisibility(
                 city.name,
                 CityData.countryName(city.countryCode),
-                azAlt.alt, azAlt.az
+                azAlt.alt, azAlt.az,
+                isRising = ha < 0.0
             ))
             if (result.size >= 15) break
         }
