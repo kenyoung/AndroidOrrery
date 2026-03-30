@@ -5,18 +5,16 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
@@ -25,7 +23,7 @@ private fun createPhasedMoonBitmap(
     original: android.graphics.Bitmap,
     phaseAngleDeg: Double,
     lat: Double
-): ImageBitmap {
+): android.graphics.Bitmap {
     val result = original.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
     val w = result.width
     val h = result.height
@@ -82,7 +80,7 @@ private fun createPhasedMoonBitmap(
     }
 
     result.setPixels(pixels, 0, w, 0, 0, w, h)
-    return result.asImageBitmap()
+    return result
 }
 
 // Moon age: days since last new moon.
@@ -97,7 +95,7 @@ private fun calculateMoonAgeDays(utEpochDay: Double): Double {
 private const val MOON_RADIUS_KM = 1737.4
 
 @Composable
-fun MoonScreen(obs: ObserverState) {
+fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val context = LocalContext.current
 
     // Ensure constellation boundaries are loaded
@@ -120,11 +118,8 @@ fun MoonScreen(obs: ObserverState) {
         calculateMoonPhaseAngle(obs.epochDay)
     }
 
-    val quantizedPhase = (phaseAngle * 2).roundToInt() / 2.0
-
-    val phasedBitmap = remember(quantizedPhase, obs.lat) {
-        if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, quantizedPhase, obs.lat)
-        else null
+    val phasedBitmap = remember(obs.now, obs.lat) {
+        if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, phaseAngle, obs.lat) else null
     }
 
     val illumination = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
@@ -153,6 +148,15 @@ fun MoonScreen(obs: ObserverState) {
     val currentAlt = applyRefraction(azAlt.alt)
     val currentAz = azAlt.az
     val isUp = currentAlt > HORIZON_REFRACTED
+
+    // Parallactic angle: rotation of celestial north relative to zenith direction
+    val haHours = lst - topo.ra / 15.0
+    val haRad = Math.toRadians(haHours * 15.0)
+    val latRad = Math.toRadians(obs.lat)
+    val decRad = Math.toRadians(topo.dec)
+    val parallacticAngleDeg = if (isUp) {
+        Math.toDegrees(atan2(sin(haRad), tan(latRad) * cos(decRad) - sin(decRad) * cos(haRad)))
+    } else 0.0
 
     // Moon rise/transit/set
     val offset = obs.lon / 15.0
@@ -202,16 +206,17 @@ fun MoonScreen(obs: ObserverState) {
     val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
     val timeLabel = if (obs.useStandardTime) obs.stdTimeLabel else "UT"
 
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
     Canvas(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
+            .fillMaxWidth()
+            .weight(1f)
     ) {
         if (phasedBitmap == null) return@Canvas
 
         withDensityScaling { w, h ->
-            val moonW = phasedBitmap.width
-            val moonH = phasedBitmap.height
+            val moonW = phasedBitmap.width.toFloat()
+            val moonH = phasedBitmap.height.toFloat()
 
             val infoTextSize = 52f
             val lineSpacing = 60f
@@ -229,13 +234,19 @@ fun MoonScreen(obs: ObserverState) {
             val dstY = (topMargin + (availH - dstH) / 2f).toInt()
             val textTop = topMargin + availH
 
-            drawImage(
-                phasedBitmap,
-                srcOffset = IntOffset.Zero,
-                srcSize = IntSize(moonW, moonH),
-                dstOffset = IntOffset(dstX, dstY),
-                dstSize = IntSize(dstW, dstH)
-            )
+            // Draw moon image with parallactic angle rotation
+            val imgCenterX = dstX + dstW / 2f
+            val imgCenterY = dstY + dstH / 2f
+            drawIntoCanvas { canvas ->
+                val nc = canvas.nativeCanvas
+                nc.save()
+                nc.rotate(parallacticAngleDeg.toFloat(), imgCenterX, imgCenterY)
+                val srcRect = android.graphics.Rect(0, 0, moonW.toInt(), moonH.toInt())
+                val dstRect = android.graphics.Rect(dstX, dstY, dstX + dstW, dstY + dstH)
+                val bitmapPaint = android.graphics.Paint().apply { isFilterBitmap = true }
+                nc.drawBitmap(phasedBitmap, srcRect, dstRect, bitmapPaint)
+                nc.restore()
+            }
 
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
@@ -389,5 +400,7 @@ fun MoonScreen(obs: ObserverState) {
                     "Next New Moon " to true, "%.1f days".format(daysToNewMoon) to false)
             }
         }
+    }
+    TimeDisplayToggle(obs.useStandardTime, obs.useDst, onTimeDisplayChange)
     }
 }

@@ -551,7 +551,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
-                    Screen.MOON -> MoonScreen(obs)
+                    Screen.MOON -> MoonScreen(obs) { useStandardTime = it }
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
