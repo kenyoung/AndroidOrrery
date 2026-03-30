@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON, MOON_CALENDAR,
     LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -259,6 +259,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     val dateString = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(effectiveDate)
 
     var showMenu by remember { mutableStateOf(false) }
+    var moonExpanded by remember { mutableStateOf(false) }
     var eclipsesExpanded by remember { mutableStateOf(false) }
     var outerPlanetsExpanded by remember { mutableStateOf(false) }
     var orreriesExpanded by remember { mutableStateOf(false) }
@@ -408,7 +409,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 },
                 actions = {
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }) {
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
                         val screensBeforeOuter = listOf(
                             "Planet Transits" to Screen.TRANSITS,
@@ -417,6 +418,9 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Object Visibility" to Screen.OBJECT_VISIBILITY,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
+                        )
+                        val moonScreens = listOf(
+                            "Moon Now" to Screen.MOON,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
                         )
                         val eclipseScreens = listOf(
@@ -439,9 +443,19 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Meteor Showers" to Screen.METEOR_SHOWERS,
                             "Constellations" to Screen.CONSTELLATIONS,
                         )
-                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }
+                        fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }
                         screensBeforeOuter.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        }
+                        DropdownMenuItem(
+                            text = { Text("${if (moonExpanded) "▼" else "▶"} Moon") },
+                            onClick = { moonExpanded = !moonExpanded },
+                            modifier = compactItem
+                        )
+                        if (moonExpanded) {
+                            moonScreens.forEach { (title, screen) ->
+                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            }
                         }
                         DropdownMenuItem(
                             text = { Text("${if (eclipsesExpanded) "▼" else "▶"} Eclipses") },
@@ -537,6 +551,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
+                    Screen.MOON -> MoonScreen(obs)
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
