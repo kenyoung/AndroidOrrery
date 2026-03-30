@@ -114,11 +114,9 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val jd = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
     val currentUtEpochDay = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY
 
-    val phaseAngle = remember(obs.now) {
-        calculateMoonPhaseAngle(obs.epochDay)
-    }
+    val phaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
 
-    val phasedBitmap = remember(obs.now, obs.lat) {
+    val phasedBitmap = remember(phaseAngle, obs.lat) {
         if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, phaseAngle, obs.lat) else null
     }
 
