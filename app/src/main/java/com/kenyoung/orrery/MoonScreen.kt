@@ -38,11 +38,11 @@ private fun createPhasedMoonBitmap(
     val cosPhase = cos(phaseRad)
     val isWaxing = phaseAngleDeg <= 180.0
     val flipH = lat < 0.0
+    val rSq = radius * radius
 
     for (py in 0 until h) {
         val dy = py - cy
         val dySq = dy * dy
-        val rSq = radius * radius
         if (dySq >= rSq) continue
 
         val rAtY = sqrt(rSq - dySq)
@@ -93,6 +93,44 @@ private fun calculateMoonAgeDays(utEpochDay: Double): Double {
 }
 
 private const val MOON_RADIUS_KM = 1737.4
+private const val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
+private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
+
+// Optical libration of the Moon (Meeus, chapter 53)
+// Returns Pair(libration in longitude, libration in latitude) in degrees
+private fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pair<Double, Double> {
+    val T = (jd - 2451545.0) / 36525.0
+
+    // Moon's ascending node longitude
+    val omega = (125.0445479 - 1934.1362891 * T) % 360.0
+
+    // Moon's argument of latitude F (mean distance from ascending node)
+    var F = (93.2720950 + 483202.0175233 * T) % 360.0
+    if (F < 0) F += 360.0
+
+    // Nutation in longitude
+    val nut = calculateNutation(T)
+    val deltaPsiDeg = nut.deltaPhi / 3600.0
+
+    val I = LUNAR_EQUATOR_INCLINATION
+    val iRad = Math.toRadians(I)
+
+    // W = apparent longitude - nutation - node
+    val W = Math.toRadians(eclipticLon - deltaPsiDeg - omega)
+    val betaRad = Math.toRadians(eclipticLat)
+
+    // Libration in latitude
+    val libLat = Math.toDegrees(asin(
+        -sin(W) * cos(betaRad) * sin(iRad) - sin(betaRad) * cos(iRad)
+    ))
+
+    // Libration in longitude
+    val A = sin(W) * cos(betaRad) * cos(iRad) - sin(betaRad) * sin(iRad)
+    val libLon = Math.toDegrees(atan2(A, cos(W) * cos(betaRad))) - F
+    val normalizedLibLon = ((libLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+
+    return Pair(normalizedLibLon, libLat)
+}
 
 @Composable
 fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
@@ -103,7 +141,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         ConstellationBoundary.ensureLoaded(context)
     }
 
-    val originalBitmap = remember(obs.lat) {
+    val originalBitmap = remember(obs.lat < 0.0) {
         val raw = context.assets.open("fullMoon.png").use { BitmapFactory.decodeStream(it) }
         if (raw != null && obs.lat < 0.0) {
             val matrix = android.graphics.Matrix().apply { postRotate(180f) }
@@ -111,14 +149,12 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         } else raw
     }
 
-    val jd = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
     val currentUtEpochDay = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY
+    val jd = currentUtEpochDay + UNIX_EPOCH_JD
 
     val phaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
 
-    val phasedBitmap = remember(phaseAngle, obs.lat) {
-        if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, phaseAngle, obs.lat) else null
-    }
+    val phasedBitmap = if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, phaseAngle, obs.lat) else null
 
     val illumination = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
 
@@ -133,11 +169,11 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         else -> "Waning Crescent"
     }
 
-    val moonAge = remember(obs.now) { calculateMoonAgeDays(currentUtEpochDay) }
+    val moonAge = calculateMoonAgeDays(currentUtEpochDay)
 
     // Moon state: position, distance, apparent coords
-    val moonState = remember(obs.now) { AstroEngine.getBodyState("Moon", jd) }
-    val apparent = remember(obs.now) { j2000ToApparent(moonState.ra, moonState.dec, jd) }
+    val moonState = AstroEngine.getBodyState("Moon", jd)
+    val apparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
     val lst = calculateLSTHours(jd, obs.lon)
     val topo = toTopocentric(apparent.ra, apparent.dec, moonState.distGeo, obs.lat, obs.lon, lst)
 
@@ -158,9 +194,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     // Moon rise/transit/set
     val offset = obs.lon / 15.0
-    val moonEvents = remember(obs.now, obs.lat, obs.lon) {
-        calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, offset)
-    }
+    val moonEvents = calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, offset)
 
     // Rise/set azimuths
     val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonState.distGeo * AU_METERS)))
@@ -184,8 +218,8 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val appDecDeg = apparent.dec
 
     // Elongation from Sun
-    val sunState = remember(obs.now) { AstroEngine.getBodyState("Sun", jd) }
-    val sunApparent = remember(obs.now) { j2000ToApparent(sunState.ra, sunState.dec, jd) }
+    val sunState = AstroEngine.getBodyState("Sun", jd)
+    val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
     val elongation = run {
         val moonRaRad = Math.toRadians(apparent.ra)
         val moonDecRad = Math.toRadians(apparent.dec)
@@ -199,6 +233,15 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     // Ecliptic latitude
     val eclipticLat = moonState.eclipticLat
+
+    // Libration
+    val (libLon, libLat) = calculateLibration(jd, moonState.eclipticLon, eclipticLat)
+
+    // Perigee/apogee: use Moon's mean anomaly to estimate days to next
+    val T = (jd - 2451545.0) / 36525.0
+    val meanAnomaly = ((134.9634 + 477198.8676 * T) % 360.0 + 360.0) % 360.0
+    val daysToPerigee = ((360.0 - meanAnomaly) % 360.0) / 360.0 * ANOMALISTIC_MONTH
+    val daysToApogee = ((180.0 - meanAnomaly + 360.0) % 360.0) / 360.0 * ANOMALISTIC_MONTH
 
     // Display time offset
     val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
@@ -220,7 +263,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             val lineSpacing = 60f
             val topMargin = 10f
             val bottomMargin = 10f
-            val numInfoLines = 11
+            val numInfoLines = 13
             val infoHeight = numInfoLines * lineSpacing + 10f
             val availH = h - infoHeight - topMargin - bottomMargin
             val availW = w
@@ -302,11 +345,18 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
                 // Line 3: Current altitude and azimuth
                 lineY += lineSpacing
-                val upDown = if (isUp) "Above horizon" else "Below horizon"
-                drawCenteredSegments(lineY,
-                    "Alt " to true, "%.1f\u00B0  ".format(currentAlt) to false,
-                    "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
-                    "($upDown)" to false)
+                if (isUp) {
+                    drawCenteredSegments(lineY,
+                        "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
+                        "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
+                        "PA " to true, "%.1f\u00B0  ".format(parallacticAngleDeg) to false,
+                        "(Above horizon)" to false)
+                } else {
+                    drawCenteredSegments(lineY,
+                        "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
+                        "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
+                        "(Below horizon)" to false)
+                }
 
                 // Lines 4-5: Rise / Transit / Set times, then Az/El below
                 lineY += lineSpacing
@@ -375,7 +425,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
                     "Constellation  " to true, "$constellation  " to false,
-                    "☉ Elong. " to true, "%.1f\u00B0".format(elongation) to false)
+                    "Sun Dist. " to true, "%.1f\u00B0".format(elongation) to false)
 
                 // Line 9: Ecliptic longitude and latitude
                 lineY += lineSpacing
@@ -385,17 +435,32 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                     "Lon " to true, "%.2f\u00B0  ".format(moonState.eclipticLon) to false,
                     "Lat " to true, "%s%.2f\u00B0".format(eclLatSign, eclipticLat) to false)
 
-                // Line 10: Days until next Full Moon and New Moon
+                // Line 10: Libration
+                lineY += lineSpacing
+                val libLonSign = if (libLon >= 0) "+" else ""
+                val libLatSign = if (libLat >= 0) "+" else ""
+                drawCenteredSegments(lineY,
+                    "Libration  " to true,
+                    "Lon " to true, "%s%.2f\u00B0  ".format(libLonSign, libLon) to false,
+                    "Lat " to true, "%s%.2f\u00B0".format(libLatSign, libLat) to false)
+
+                // Line 11: Perigee/Apogee
+                lineY += lineSpacing
+                drawCenteredSegments(lineY,
+                    "Next Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
+                    "Next Apogee in " to true, "%.1f days".format(daysToApogee) to false)
+
+                // Line 12: Days until next Full Moon and New Moon
                 lineY += lineSpacing
                 val halfSynodic = SYNODIC_MONTH / 2.0
                 val daysToFullMoon = if (moonAge < halfSynodic) halfSynodic - moonAge else SYNODIC_MONTH - moonAge + halfSynodic
                 val daysToNewMoon = SYNODIC_MONTH - moonAge
                 drawCenteredSegments(lineY,
-                    "Next Full Moon " to true, "%.1f days".format(daysToFullMoon) to false)
+                    "Next Full Moon in " to true, "%.1f days".format(daysToFullMoon) to false)
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "Next New Moon " to true, "%.1f days".format(daysToNewMoon) to false)
+                    "Next New Moon in " to true, "%.1f days".format(daysToNewMoon) to false)
             }
         }
     }
