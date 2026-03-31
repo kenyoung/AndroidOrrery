@@ -43,7 +43,7 @@ private fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blu
         }
         pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
     }
-    val result = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+    val result = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
     result.setPixels(pixels, 0, w, 0, 0, w, h)
     return result
 }
@@ -60,8 +60,9 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
         } else raw
     }
 
+    LaunchedEffect(Unit) { ConstellationBoundary.ensureLoaded(context) }
+
     var displayMonth by remember { mutableStateOf(currentDate.withDayOfMonth(1)) }
-    // Reset display month when currentDate changes externally (e.g., Date and Time dialog)
     LaunchedEffect(currentDate) { displayMonth = currentDate.withDayOfMonth(1) }
     var dragAccumulator by remember { mutableStateOf(0f) }
 
@@ -197,8 +198,17 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
 
-                // Bitmap drawing paint
+                // Paints shared across all day cells
                 val bitmapPaint = Paint().apply { isFilterBitmap = true }
+                val cellDataPaint = Paint().apply {
+                    isAntiAlias = true
+                    textSize = 28f
+                    typeface = Typeface.DEFAULT
+                }
+                val spaceWidth = dayNumPaint.measureText(" ")
+                val offset = lon / 15.0
+                val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
+                val textSize28 = 28f
 
                 // Draw each day
                 for (d in 1..daysInMonth) {
@@ -233,65 +243,56 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
 
                     // Illumination percentage in upper-right
                     val illum = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
-                    val illumPaint = Paint().apply {
-                        isAntiAlias = true
-                        color = cellTextColor
-                        textSize = 28f
-                        textAlign = Paint.Align.RIGHT
-                        typeface = Typeface.DEFAULT
-                    }
-                    nc.drawText("%.0f%%".format(illum), cellLeft + cellW - 4f, cellTop + illumPaint.textSize, illumPaint)
+                    cellDataPaint.color = cellTextColor
+                    cellDataPaint.textAlign = Paint.Align.RIGHT
+                    nc.drawText("%.0f%%".format(illum), cellLeft + cellW - 4f, cellTop + textSize28, cellDataPaint)
 
                     // Day number in upper-left
                     dayNumPaint.color = cellTextColor
-                    val spaceWidth = dayNumPaint.measureText(" ")
-                    nc.drawText(d.toString(), cellLeft + 4f + spaceWidth, cellTop + dayNumPaint.textSize, dayNumPaint)
+                    nc.drawText(d.toString(), cellLeft + 4f + spaceWidth, cellTop + textSize28, dayNumPaint)
                     dayNumPaint.color = greenColorInt
 
                     // Moon age: days since most recent New Moon
                     val dayEpoch = monthStart.withDayOfMonth(d).toEpochDay()
                     var moonAge = (dayEpoch - newMoonEpochDay).toInt()
                     if (moonAge < 0) moonAge += round(SYNODIC_MONTH_MTM).toInt()
-                    val agePaint = Paint().apply {
-                        isAntiAlias = true
-                        color = cellTextColor
-                        textSize = 28f
-                        textAlign = Paint.Align.CENTER
-                        typeface = Typeface.DEFAULT
-                    }
-                    nc.drawText("Age $moonAge", cellCenterX, cellTop + illumPaint.textSize + agePaint.textSize + 4f, agePaint)
+                    cellDataPaint.textAlign = Paint.Align.CENTER
+                    nc.drawText("Age $moonAge", cellCenterX, cellTop + textSize28 * 2 + 4f, cellDataPaint)
 
                     // Moon rise/set times
-                    val offset = lon / 15.0
-                    val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
-                    val epochDayForEvents = monthStart.withDayOfMonth(d).toEpochDay().toDouble()
-                    val dayMoonEvents = calculateMoonEvents(epochDayForEvents, lat, lon, offset)
-                    val timePaint = Paint().apply {
-                        isAntiAlias = true
-                        color = cellTextColor
-                        textSize = 28f
-                        textAlign = Paint.Align.CENTER
-                        typeface = Typeface.DEFAULT
-                    }
+                    val dayMoonEvents = calculateMoonEvents(dayEpoch.toDouble(), lat, lon, offset)
 
                     // Rise time below the age line
                     val riseStr = if (!dayMoonEvents.rise.isNaN())
                         "Rise " + formatTimeMM(normalizeTime(dayMoonEvents.rise - offset + displayOffsetHours), false)
                     else "Rise --:--"
-                    nc.drawText(riseStr, cellCenterX, cellTop + illumPaint.textSize + agePaint.textSize * 2 + 8f, timePaint)
+                    nc.drawText(riseStr, cellCenterX, cellTop + textSize28 * 3 + 8f, cellDataPaint)
 
-                    // Set time above the phase line at bottom
+                    // Three lines at bottom of cell: Set time, constellation, phase label
+                    val bottomLineY3 = cellTop + cellH - 4f
+                    val bottomLineY2 = bottomLineY3 - textSize28 - 2f
+                    val bottomLineY1 = bottomLineY2 - textSize28 - 2f
+
+                    // Set time
                     val setStr = if (!dayMoonEvents.set.isNaN())
                         "Set " + formatTimeMM(normalizeTime(dayMoonEvents.set - offset + displayOffsetHours), false)
                     else "Set --:--"
-                    nc.drawText(setStr, cellCenterX, cellTop + cellH - 4f - eventPaint.textSize - 2f, timePaint)
+                    nc.drawText(setStr, cellCenterX, bottomLineY1, cellDataPaint)
+
+                    // Constellation
+                    val transitJd = estimateMoonTransitEpochDay(dayEpoch.toDouble(), lon) + UNIX_EPOCH_JD
+                    val moonState = AstroEngine.getBodyState("Moon", transitJd)
+                    val b1875 = precessJ2000ToDate(moonState.ra, moonState.dec, B1875_JD)
+                    val b1875RaH = normalizeDegrees(b1875.ra) * DEGREES_TO_HOURS
+                    val constellation = ConstellationBoundary.findConstellation(b1875RaH, b1875.dec)
+                    nc.drawText(constellation, cellCenterX, bottomLineY2, cellDataPaint)
 
                     // Phase event label centered at bottom of cell
                     val eventLabel = events[d]
                     eventPaint.color = cellTextColor
                     eventPaint.textAlign = Paint.Align.CENTER
                     if (eventLabel != null) {
-                        nc.drawText(eventLabel, cellCenterX, cellTop + cellH - 4f, eventPaint)
+                        nc.drawText(eventLabel, cellCenterX, bottomLineY3, eventPaint)
                     }
                     eventPaint.color = greenColorInt
                 }
