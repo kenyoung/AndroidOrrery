@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON, MOON_THIS_MONTH, MOON_CALENDAR,
     LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -226,7 +226,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 currentInstant = now
                 if (currentScreen == Screen.TIMES) {
                     delay(100L) // 10Hz
-                } else if (currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA || currentScreen == Screen.METEOR_SHOWERS) {
+                } else if (currentScreen == Screen.MOON_THIS_MONTH || currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA || currentScreen == Screen.METEOR_SHOWERS) {
                     // Update once per hour — compute delay from wall clock to avoid drift
                     val millisUntilNextHour = 3_600_000 - (System.currentTimeMillis() % 3_600_000)
                     delay(millisUntilNextHour)
@@ -421,6 +421,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                         )
                         val moonScreens = listOf(
                             "Moon Now" to Screen.MOON,
+                            "Moon This Month" to Screen.MOON_THIS_MONTH,
                             "Lunar Calendar" to Screen.MOON_CALENDAR,
                         )
                         val eclipseScreens = listOf(
@@ -552,6 +553,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
                     Screen.MOON -> MoonScreen(obs) { useStandardTime = it }
+                    Screen.MOON_THIS_MONTH -> MoonThisMonthScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, obs = obs, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })
                     Screen.SCHEMATIC -> SchematicOrrery(displayEpoch)
                     Screen.SCALE -> ScaleOrrery(displayEpoch)
                     Screen.MOON_CALENDAR -> MoonCalendarScreen(currentDate = effectiveDate, lat = effectiveLat, lon = effectiveLon, onDateChange = { newDate -> usePhoneTime = false; manualEpochDay = newDate.toEpochDay().toDouble(); currentInstant = getInstantFromManual(manualEpochDay) })

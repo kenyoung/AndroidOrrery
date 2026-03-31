@@ -19,7 +19,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-private fun createPhasedMoonBitmap(
+internal fun createPhasedMoonBitmap(
     original: android.graphics.Bitmap,
     phaseAngleDeg: Double,
     lat: Double

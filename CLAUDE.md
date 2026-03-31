@@ -84,3 +84,5 @@ When adding a new feature, or fixing a bug, create a git branch first. Then work
 
 Don't compile, build or run the app. Builds and testing will be done in Android Studio/
 Ask questions before generating new code if a prompt is unclear or ambiguous
+
+When displaying a floating point number as an integer, always round the value rather than truncating it. Use `round(...).toInt()` not `.toInt()`.
