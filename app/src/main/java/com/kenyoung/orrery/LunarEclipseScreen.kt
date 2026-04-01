@@ -1294,7 +1294,7 @@ private fun EclipseDetailView(
 
     // Load Full Moon image once from assets; rotate 180° for southern hemisphere
     val moonBitmap = remember(latitude) {
-        val original = context.assets.open("SmallFullMoon.png").use { BitmapFactory.decodeStream(it) }
+        val original = context.assets.open("fullMoon.png").use { BitmapFactory.decodeStream(it) }
         if (latitude < 0.0) {
             val matrix = android.graphics.Matrix().apply { postRotate(180f) }
             android.graphics.Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true).asImageBitmap()
@@ -1646,15 +1646,16 @@ private fun renderEclipse(
         val curSpY = -sin(curSpDec) * curDistCM
         val (curPx, curPy) = cmToPixels(curSpX, curSpY)
         val r = moonRadiusPixels.toFloat()
+        val imgR = r * 1.25f
         if (curPx - r >= earthMapLeft && curPx + r <= earthMapLeft + earthMapWidth &&
             curPy - r >= umbraMapTop && curPy + r <= umbraMapTop + umbraMapHeight) {
-            val diameter = (2 * moonRadiusPixels).coerceAtLeast(1)
+            val imgDiameter = (2 * imgR).toInt().coerceAtLeast(1)
             drawScope.drawImage(
                 moonBitmap,
                 srcOffset = IntOffset.Zero,
                 srcSize = IntSize(moonBitmap.width, moonBitmap.height),
-                dstOffset = IntOffset((curPx - r).toInt(), (curPy - r).toInt()),
-                dstSize = IntSize(diameter, diameter)
+                dstOffset = IntOffset((curPx - imgR).toInt(), (curPy - imgR).toInt()),
+                dstSize = IntSize(imgDiameter, imgDiameter)
             )
         }
     }
