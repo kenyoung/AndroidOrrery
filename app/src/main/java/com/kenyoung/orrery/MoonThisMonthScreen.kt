@@ -88,9 +88,9 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
     for (d in 1..daysInMonth) {
         val phase = phaseData[d - 1]
         val nextPhase = phaseData[d]
-        if (phase > 300.0 && nextPhase < 60.0) { events[d] = "New"; newMoonDayInMonth = d }
+        if (phase > 300.0 && nextPhase < 60.0) { events[d] = "New Moon"; newMoonDayInMonth = d }
         if (phase < 90.0 && nextPhase >= 90.0) events[d] = "1st Qtr"
-        if (phase < 180.0 && nextPhase >= 180.0) { events[d] = "Full"; fullMoonDays.add(d) }
+        if (phase < 180.0 && nextPhase >= 180.0) { events[d] = "Full Moon"; fullMoonDays.add(d) }
         if (phase < 270.0 && nextPhase >= 270.0) events[d] = "Last Qtr"
     }
 
