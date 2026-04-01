@@ -83,14 +83,13 @@ internal fun createPhasedMoonBitmap(
     return result
 }
 
-
 private const val MOON_RADIUS_KM = 1737.4
-private const val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
 // Optical libration of the Moon (Meeus, chapter 53)
 // Returns Pair(libration in longitude, libration in latitude) in degrees
 private fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pair<Double, Double> {
+    val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
     val T = (jd - 2451545.0) / 36525.0
 
     // Moon's ascending node longitude

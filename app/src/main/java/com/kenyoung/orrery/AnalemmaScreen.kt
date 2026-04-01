@@ -20,12 +20,11 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-private const val PADDING_Y = 120f
-private const val PADDING_LEFT = 180f
-private const val PADDING_RIGHT = 100f
-
 @Composable
 fun AnalemmaScreen(instant: Instant, lat: Double, lon: Double) {
+    val PADDING_Y = 120f
+    val PADDING_LEFT = 180f
+    val PADDING_RIGHT = 100f
     // Determine the "observing date" based on longitude-derived local time.
     // Use the longitude-based offset rather than the phone's system timezone
     // so the display is consistent with the observation location.

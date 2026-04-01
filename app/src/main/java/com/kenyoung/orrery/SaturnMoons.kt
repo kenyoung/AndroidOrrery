@@ -30,7 +30,6 @@ data class SaturnSystemData(
 object SaturnMoonEngine {
 
     private const val D = Math.PI / 180.0      // degrees to radians
-    private const val B1950_JDE = 2433282.4235  // B1950.0 in JDE
 
     // Differential-refraction constants (index 0 unused, 1=Mimas..8=Iapetus)
     private val kConst = intArrayOf(0, 20947, 23715, 26382, 29876, 35313, 53800, 59222, 91820)
@@ -42,9 +41,6 @@ object SaturnMoonEngine {
     const val B_RING_OUTER = 1.95
     const val C_RING_INNER = 1.335
     const val C_RING_OUTER = 1.525  // coincides with B_RING_INNER
-
-    private const val SATURN_RADIUS_KM = 60268.0
-    private const val AU_KM = 149597870.7
 
     // --- Helper functions ---
 
@@ -394,6 +390,7 @@ object SaturnMoonEngine {
     // --- Main satellite position calculation (Meeus Ch. 46) ---
     // Returns list of 8 (x, y) tuples in Saturn radii. X+ = west, Y+ = north.
     private fun saturnMoonPositions(jde: Double): List<Triple<Double, Double, Double>> {
+        val B1950_JDE = 2433282.4235  // B1950.0 in JDE
         val (s, beta, bigR) = solarTrueVsop87(jde)
         val ss = sin(s); val cs = cos(s)
         val sb = sin(beta)
@@ -515,6 +512,8 @@ object SaturnMoonEngine {
     // --- Angular disk radius ---
     // Returns angular radius in radians
     fun calculateAngularRadius(distGeoAU: Double): Double {
+        val SATURN_RADIUS_KM = 60268.0
+        val AU_KM = 149597870.7
         return atan(SATURN_RADIUS_KM / (distGeoAU * AU_KM))
     }
 

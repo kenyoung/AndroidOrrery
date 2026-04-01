@@ -40,19 +40,9 @@ object NeptuneMoonEngine {
     private const val DELTA0_DEG = 42.930
 
     // Triton orbital theory
-    private const val TRITON_A_KM = 354696.76
-    private const val TRITON_I0_DEG = 157.268439
-    private const val TRITON_U0_DEG = 31.791760
-    private const val TRITON_U_DOT_DEG_PER_DAY = 61.25871809
     private const val TRITON_OMEGA0_DEG = 73.395781
     private const val TRITON_OMEGA_DOT_DEG_PER_DAY = 0.001452458
     private const val TRITON_T0_JD = 2378520.5  // ~1846 epoch
-
-    // Solar motion parameters
-    private const val SOLAR_OMEGA_PRIME_DEG = 200.788181
-    private const val SOLAR_U_PRIME0_DEG = 258.727508
-    private const val SOLAR_U_PRIME_DOT_DEG_PER_DAY = 0.00598084154
-    private const val SOLAR_T0_JD = 2451545.0  // J2000
 
     // Perturbation coefficients: kI, kU, kOmega, k1, k2
     // argument = k1 * uPrime + k2 * (omegaPrime - omegaBar)
@@ -83,6 +73,10 @@ object NeptuneMoonEngine {
 
     // Compute solar perturbation corrections to i, u, and Omega
     private fun tritonPerturbations(jd: Double): Triple<Double, Double, Double> {
+        val SOLAR_OMEGA_PRIME_DEG = 200.788181
+        val SOLAR_U_PRIME0_DEG = 258.727508
+        val SOLAR_U_PRIME_DOT_DEG_PER_DAY = 0.00598084154
+        val SOLAR_T0_JD = 2451545.0  // J2000
         val uPrimeDeg = SOLAR_U_PRIME0_DEG + SOLAR_U_PRIME_DOT_DEG_PER_DAY * (jd - SOLAR_T0_JD)
         val omegaBarDeg = TRITON_OMEGA0_DEG + TRITON_OMEGA_DOT_DEG_PER_DAY * (jd - TRITON_T0_JD)
 
@@ -103,6 +97,10 @@ object NeptuneMoonEngine {
 
     // Compute Triton's planetocentric vector in ICRF (km)
     private fun tritonPlanetocentricVectorKm(jd: Double): DoubleArray {
+        val TRITON_A_KM = 354696.76
+        val TRITON_I0_DEG = 157.268439
+        val TRITON_U0_DEG = 31.791760
+        val TRITON_U_DOT_DEG_PER_DAY = 61.25871809
         val (deltaIDeg, deltaUDeg, deltaOmegaDeg) = tritonPerturbations(jd)
 
         val dtDays = jd - TRITON_T0_JD

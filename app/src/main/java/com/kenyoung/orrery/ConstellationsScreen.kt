@@ -83,7 +83,6 @@ private data class ObjectRow(
 
 private const val DEC_MIN = -50.0
 private const val DEC_MAX = 50.0
-private const val DEC_RANGE = DEC_MAX - DEC_MIN
 
 private fun DrawScope.raToX(raHours: Double): Float {
     val chartRa = if (raHours > 12.0) raHours - 24.0 else raHours
@@ -91,6 +90,7 @@ private fun DrawScope.raToX(raHours: Double): Float {
 }
 
 private fun DrawScope.decToY(dec: Double): Float {
+    val DEC_RANGE = DEC_MAX - DEC_MIN
     return (size.height * (DEC_MAX - dec) / DEC_RANGE).toFloat()
 }
 
@@ -167,9 +167,6 @@ private val planetRadiiKm = mapOf(
     "Neptune" to 24764.0
 )
 
-private const val DISK_JUPITER_POLAR_RATIO = 0.93513  // 1 - 0.06487
-private const val DISK_SATURN_POLAR_RATIO = 0.902
-
 private val planetDiskColors = mapOf(
     "Mercury" to Color(0xFFB4B4B4),
     "Venus" to Color(0xFFFFFFFF),
@@ -192,10 +189,6 @@ private data class PlanetDiskInfo(
     val ringAngularRadiusRad: Double = 0.0,
     val subEarthLatDeg: Double = 0.0
 )
-
-// Mars north pole IAU orientation (J2000)
-private const val MARS_POLE_RA_DEG = 317.68
-private const val MARS_POLE_DEC_DEG = 52.89
 
 /**
  * Loads bright star positions and magnitudes from assets.
@@ -272,6 +265,10 @@ fun ConstellationsScreen(
     resetAnimTrigger: Int = 0,
     onAnimStoppedChange: (Boolean) -> Unit = {}
 ) {
+    val DISK_JUPITER_POLAR_RATIO = 0.93513  // 1 - 0.06487
+    val DISK_SATURN_POLAR_RATIO = 0.902
+    val MARS_POLE_RA_DEG = 317.68
+    val MARS_POLE_DEC_DEG = 52.89
     val displayEpoch = obs.epochDay; val currentInstant = obs.now
     val lat = obs.lat; val stdOffsetHours = obs.stdOffsetHours
     val stdTimeLabel = obs.stdTimeLabel; val useStandardTime = obs.useStandardTime
@@ -750,15 +747,13 @@ private fun DrawScope.drawStarMap(
 // Planet disk apparent size comparison drawing
 // ==========================================================================
 
-private const val RAD_TO_ARCSEC = 180.0 * 3600.0 / PI
 private const val RULER_ARCSEC = 100.0
 private const val RULER_TICK_ARCSEC = 20.0
 
-// Maximum angular radii for layout positioning (fixed, independent of time)
-private const val ROW1_MAX_RADIUS_ARCSEC = 32.5       // Venus at inferior conjunction (~0.26 AU)
-private const val SATURN_MAX_RING_RADIUS_ARCSEC = 24.0 // A ring outer at ~8.0 AU
-
 private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Boolean, marsBitmap: ImageBitmap) {
+    val RAD_TO_ARCSEC = 180.0 * 3600.0 / PI
+    val ROW1_MAX_RADIUS_ARCSEC = 32.5       // Venus at inferior conjunction (~0.26 AU)
+    val SATURN_MAX_RING_RADIUS_ARCSEC = 24.0 // A ring outer at ~8.0 AU
     val w = size.width
     val h = size.height
 

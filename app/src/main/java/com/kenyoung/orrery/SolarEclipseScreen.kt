@@ -42,7 +42,6 @@ import kotlin.math.*
 // CONSTANTS
 // ============================================================================
 
-private const val RECORD_SIZE = 110
 private const val PARTIAL_SOLAR_ECLIPSE = 0
 private const val ANNULAR_SOLAR_ECLIPSE = 1
 private const val TOTAL_SOLAR_ECLIPSE = 2
@@ -170,6 +169,7 @@ private var shorelineSegmentsSE: List<ShoreSegmentSE>? = null
 // ============================================================================
 
 private suspend fun loadSolarEclipseData(context: Context): List<SolarEclipse> {
+    val RECORD_SIZE = 110
     solarEclipses?.let { return it }
 
     return withContext(Dispatchers.IO) {

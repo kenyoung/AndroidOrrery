@@ -188,9 +188,9 @@ private val nutMults = arrayOf(
 // when T is within 1 day (1/36525 century). Eliminates >99% of 63-term
 // evaluations during the Transits cache build.
 @Volatile private var cachedNutation: Pair<Double, NutationResult>? = null
-private const val NUT_CACHE_TOL = 1.0 / DAYS_PER_JULIAN_CENTURY // ~1 day in Julian centuries
 
 fun calculateNutation(T: Double): NutationResult {
+    val NUT_CACHE_TOL = 1.0 / DAYS_PER_JULIAN_CENTURY // ~1 day in Julian centuries
     val cached = cachedNutation  // single atomic read
     if (cached != null && abs(T - cached.first) < NUT_CACHE_TOL) return cached.second
 

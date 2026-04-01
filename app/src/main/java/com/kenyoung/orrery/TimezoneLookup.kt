@@ -154,6 +154,10 @@ private fun decodeVarint(buf: ByteArray, startIdx: Int): Pair<Long, Int> {
 // ============================================================
 
 private fun latLngToCell(latDeg: Double, lonDeg: Double, res: Int): Long {
+    val H3_EPSILON = 1e-16
+    val M_SQRT7 = 2.6457513110645905905016157536392604257102
+    val M_AP7_ROT_RADS = 0.3334731722518321
+    val INV_RES0_U_GNOMONIC = 2.6180339887498948482
     val latRad = Math.toRadians(latDeg)
     val lonRad = Math.toRadians(lonDeg)
 
@@ -210,8 +214,6 @@ private fun cellToParent(h: Long, parentRes: Int): Long {
 // ============================================================
 // H3 bit manipulation
 // ============================================================
-
-private const val H3_INIT = 0x08001FFFFFFFFFFF
 
 private fun h3GetResolution(h: Long): Int = ((h ushr 52) and 0xFL).toInt()
 
@@ -291,6 +293,7 @@ private fun h3RotatePent60ccw(h: Long): Long {
 // ============================================================
 
 private fun faceIjkToH3(face: Int, ijk: Ijk, res: Int): Long {
+    val H3_INIT = 0x08001FFFFFFFFFFF
     var h = h3SetResolution(H3_INIT, res)
 
     if (res == 0) {
@@ -400,6 +403,7 @@ private fun downAp7r(ijk: Ijk) {
 }
 
 private fun hex2dToCoordIjk(x: Double, y: Double, h: Ijk) {
+    val M_RSIN60 = 1.1547005383792515
     h.k = 0
     val a1 = abs(x)
     val a2 = abs(y)
@@ -458,12 +462,7 @@ private fun hex2dToCoordIjk(x: Double, y: Double, h: Ijk) {
 // Geo operations
 // ============================================================
 
-private const val H3_EPSILON = 1e-16
 private const val M_2PI = 2.0 * Math.PI
-private const val M_SQRT7 = 2.6457513110645905905016157536392604257102
-private const val M_RSIN60 = 1.1547005383792515
-private const val M_AP7_ROT_RADS = 0.3334731722518321
-private const val INV_RES0_U_GNOMONIC = 2.6180339887498948482
 
 private fun posAngleRads(rads: Double): Double {
     val result = rads % M_2PI

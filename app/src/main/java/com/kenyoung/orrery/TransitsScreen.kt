@@ -23,12 +23,12 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-private const val MOON_STRIP_MARGIN = 50f
 private const val MONTH_LABEL_TEXT_SIZE = 30f
-private const val LABEL_GRID_CELL_SIZE = 4f
 
 @Composable
 fun GraphicsWindow(obs: ObserverState, cache: AstroCache) {
+    val MOON_STRIP_MARGIN = 50f
+    val LABEL_GRID_CELL_SIZE = 4f
     val lat = obs.lat; val lon = obs.lon; val now = obs.now
     val stdOffsetHours = obs.stdOffsetHours
     Box(modifier = Modifier.fillMaxSize()) {

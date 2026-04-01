@@ -643,9 +643,6 @@ object CityData {
     var cities: List<CityEntry>? = null
         private set
 
-    private const val NAME_SIZE = 48
-    private const val RECORD_SIZE = 64
-
     private val continentNames = mapOf(
         "AF" to "Africa", "AS" to "Asia", "EU" to "Europe",
         "NA" to "North America", "OC" to "Oceania", "SA" to "South America"
@@ -657,6 +654,8 @@ object CityData {
         java.util.Locale("", code).displayCountry
 
     fun load(context: android.content.Context) {
+        val NAME_SIZE = 48
+        val RECORD_SIZE = 64
         if (cities != null) return
         cities = context.assets.open("cities.bin").use { inputStream ->
             val bytes = inputStream.readBytes()
