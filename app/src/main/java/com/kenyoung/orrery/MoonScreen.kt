@@ -83,14 +83,6 @@ internal fun createPhasedMoonBitmap(
     return result
 }
 
-// Moon age: days since last new moon.
-private const val NEW_MOON_REF_EPOCH_DAY = 20531.0576 // Mar 19, 2026 01:23 UTC
-private const val SYNODIC_MONTH = 29.530588853
-
-private fun calculateMoonAgeDays(utEpochDay: Double): Double {
-    val elapsed = utEpochDay - NEW_MOON_REF_EPOCH_DAY
-    return elapsed - floor(elapsed / SYNODIC_MONTH) * SYNODIC_MONTH
-}
 
 private const val MOON_RADIUS_KM = 1737.4
 private const val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
@@ -169,7 +161,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         else -> "Waning Crescent"
     }
 
-    val moonAge = calculateMoonAgeDays(currentUtEpochDay)
+    val moonAge = calculateMoonAge(currentUtEpochDay, obs.lon)
 
     // Moon state: position, distance, apparent coords
     val moonState = AstroEngine.getBodyState("Moon", jd)

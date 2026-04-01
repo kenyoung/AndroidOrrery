@@ -226,6 +226,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 currentInstant = now
                 if (currentScreen == Screen.TIMES) {
                     delay(100L) // 10Hz
+                } else if (currentScreen == Screen.MOON) {
+                    delay(1000L) // 1Hz
                 } else if (currentScreen == Screen.MOON_THIS_MONTH || currentScreen == Screen.MOON_CALENDAR || currentScreen == Screen.ANALEMMA || currentScreen == Screen.METEOR_SHOWERS) {
                     // Update once per hour — compute delay from wall clock to avoid drift
                     val millisUntilNextHour = 3_600_000 - (System.currentTimeMillis() % 3_600_000)

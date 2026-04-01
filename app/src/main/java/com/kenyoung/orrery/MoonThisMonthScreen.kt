@@ -19,7 +19,6 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 private const val BRIGHTNESS_BOOST = 1.25f
-private const val SYNODIC_MONTH_MTM = 29.530588853
 
 private fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blueTint: Boolean): android.graphics.Bitmap {
     val w = bitmap.width
@@ -84,30 +83,13 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
     // Detect phase events
     val events = mutableMapOf<Int, String>()
     val fullMoonDays = mutableListOf<Int>()
-    var newMoonDayInMonth = -1
     for (d in 1..daysInMonth) {
         val phase = phaseData[d - 1]
         val nextPhase = phaseData[d]
-        if (phase > 300.0 && nextPhase < 60.0) { events[d] = "New Moon"; newMoonDayInMonth = d }
+        if (phase > 300.0 && nextPhase < 60.0) events[d] = "New Moon"
         if (phase < 90.0 && nextPhase >= 90.0) events[d] = "1st Qtr"
         if (phase < 180.0 && nextPhase >= 180.0) { events[d] = "Full Moon"; fullMoonDays.add(d) }
         if (phase < 270.0 && nextPhase >= 270.0) events[d] = "Last Qtr"
-    }
-
-    // Find the most recent New Moon epoch day for age calculation.
-    // If there's a New Moon in this month, use it. Otherwise scan backwards from month start.
-    val newMoonEpochDay = if (newMoonDayInMonth > 0) {
-        monthStart.withDayOfMonth(newMoonDayInMonth).toEpochDay()
-    } else {
-        val startEpoch = monthStart.toEpochDay().toDouble()
-        var nmEpoch = monthStart.toEpochDay()
-        for (offset in 1..30) {
-            val ed = startEpoch - offset
-            val p = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, lon))
-            val pNext = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed + 1.0, lon))
-            if (p > 300.0 && pNext < 60.0) { nmEpoch = ed.toLong(); break }
-        }
-        nmEpoch
     }
 
     val titleStr = monthStart.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
@@ -246,11 +228,10 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
 
                     // Moon age: days since most recent New Moon
                     val dayEpoch = monthStart.withDayOfMonth(d).toEpochDay()
-                    var moonAge = (dayEpoch - newMoonEpochDay).toInt()
-                    if (moonAge < 0) moonAge += round(SYNODIC_MONTH_MTM).toInt()
+                    val moonAge = calculateMoonAge(estimateMoonTransitEpochDay(dayEpoch.toDouble(), lon), lon)
                     cellDataPaint.textAlign = Paint.Align.CENTER
                     val ageLabel = "Age "
-                    val ageValue = "$moonAge"
+                    val ageValue = "%.0f".format(moonAge)
                     val ageY = cellTop + textSize28 * 2 + 4f
                     val ageTotalW = cellDataPaint.measureText(ageLabel + ageValue)
                     val ageX = cellCenterX - ageTotalW / 2f

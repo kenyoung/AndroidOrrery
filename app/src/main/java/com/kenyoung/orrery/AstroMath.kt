@@ -708,6 +708,31 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     return diff
 }
 
+/**
+ * Returns the Moon's age in fractional days since the most recent New Moon.
+ * Uses phase angle crossing detection at transit time for the given longitude,
+ * scanning backwards up to 30 days from the given epoch day.
+ */
+fun calculateMoonAge(epochDay: Double, lonDeg: Double): Double {
+    val baseEpoch = floor(epochDay)
+    // Start at daysBack=0 so that if today IS the New Moon day
+    // (phase > 300° today, < 60° tomorrow), it is detected.
+    for (daysBack in 0..30) {
+        val ed = baseEpoch - daysBack
+        val phase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, lonDeg))
+        val nextDayPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed + 1.0, lonDeg))
+        if (phase > 300.0 && nextDayPhase < 60.0) {
+            // Interpolate to find fractional crossing point
+            val adjustedPhase = phase - 360.0
+            val frac = (0.0 - adjustedPhase) / (nextDayPhase - adjustedPhase)
+            val newMoonEpoch = ed + frac
+            val age = epochDay - newMoonEpoch
+            return if (age < 0.0) 0.0 else age
+        }
+    }
+    return 0.0
+}
+
 fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false): PlanetEvents {
     // Use integer date — fractional epoch days from manual time entry shift the
     // scan start forward, causing events between now and now+|offset| to be missed.
