@@ -451,10 +451,32 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                     "Next Apogee in " to true, "%.1f days".format(daysToApogee) to false)
 
                 // Line 12: Days until next Full Moon and New Moon
+                // Scan forward using actual phase angle crossings, then interpolate
+                // within the crossing day for fractional precision.
+                var daysToFullMoon = -1.0
+                var daysToNewMoon = -1.0
+                val baseEpoch = floor(currentUtEpochDay)
+                val fractionalDay = currentUtEpochDay - baseEpoch
+                var prevPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(baseEpoch - 1, obs.lon))
+                for (dayOffset in 0..30) {
+                    val ed = baseEpoch + dayOffset
+                    val curPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, obs.lon))
+                    if (daysToFullMoon < 0.0 && prevPhase < 180.0 && curPhase >= 180.0) {
+                        val frac = (180.0 - prevPhase) / (curPhase - prevPhase)
+                        daysToFullMoon = (dayOffset - 1 + frac) - fractionalDay
+                        if (daysToFullMoon < 0.0) daysToFullMoon = 0.0
+                    }
+                    if (daysToNewMoon < 0.0 && prevPhase > 300.0 && curPhase < 60.0) {
+                        val adjustedPrev = prevPhase - 360.0
+                        val frac = (0.0 - adjustedPrev) / (curPhase - adjustedPrev)
+                        daysToNewMoon = (dayOffset - 1 + frac) - fractionalDay
+                        if (daysToNewMoon < 0.0) daysToNewMoon = 0.0
+                    }
+                    if (daysToFullMoon >= 0.0 && daysToNewMoon >= 0.0) break
+                    prevPhase = curPhase
+                }
+
                 lineY += lineSpacing
-                val halfSynodic = SYNODIC_MONTH / 2.0
-                val daysToFullMoon = if (moonAge < halfSynodic) halfSynodic - moonAge else SYNODIC_MONTH - moonAge + halfSynodic
-                val daysToNewMoon = SYNODIC_MONTH - moonAge
                 drawCenteredSegments(lineY,
                     "Next Full Moon in " to true, "%.1f days".format(daysToFullMoon) to false)
 
