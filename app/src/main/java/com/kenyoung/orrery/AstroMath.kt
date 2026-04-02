@@ -708,6 +708,43 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     return diff
 }
 
+// Optical libration of the Moon (Meeus, chapter 53)
+// Returns Pair(libration in longitude, libration in latitude) in degrees
+fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pair<Double, Double> {
+    val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
+    val T = (jd - 2451545.0) / 36525.0
+
+    // Moon's ascending node longitude
+    val omega = (125.0445479 - 1934.1362891 * T) % 360.0
+
+    // Moon's argument of latitude F (mean distance from ascending node)
+    var F = (93.2720950 + 483202.0175233 * T) % 360.0
+    if (F < 0) F += 360.0
+
+    // Nutation in longitude
+    val nut = calculateNutation(T)
+    val deltaPsiDeg = nut.deltaPhi / 3600.0
+
+    val I = LUNAR_EQUATOR_INCLINATION
+    val iRad = Math.toRadians(I)
+
+    // W = apparent longitude - nutation - node
+    val W = Math.toRadians(eclipticLon - deltaPsiDeg - omega)
+    val betaRad = Math.toRadians(eclipticLat)
+
+    // Libration in latitude
+    val libLat = Math.toDegrees(asin(
+        -sin(W) * cos(betaRad) * sin(iRad) - sin(betaRad) * cos(iRad)
+    ))
+
+    // Libration in longitude
+    val A = sin(W) * cos(betaRad) * cos(iRad) - sin(betaRad) * sin(iRad)
+    val libLon = Math.toDegrees(atan2(A, cos(W) * cos(betaRad))) - F
+    val normalizedLibLon = ((libLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+
+    return Pair(normalizedLibLon, libLat)
+}
+
 /**
  * Returns the Moon's age in fractional days since the most recent New Moon.
  * Uses phase angle crossing detection at transit time for the given longitude,

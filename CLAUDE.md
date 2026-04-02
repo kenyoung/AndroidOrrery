@@ -86,3 +86,14 @@ Don't compile, build or run the app. Builds and testing will be done in Android 
 Ask questions before generating new code if a prompt is unclear or ambiguous
 
 When displaying a floating point number as an integer, always round the value rather than truncating it. Use `round(...).toInt()` not `.toInt()`.
+
+## Code Review Checks (/simplify)
+
+- Move `private const val` declarations used in only one function to be local to that function
+- Check for `.toInt()` that should be `round(...).toInt()` for display values
+- Remove unused imports
+- Remove obsolete comments
+- Convert variables to constants if possible (`var` → `val`)
+- Assign meaningful names to magic numbers
+- Remove dead code
+- Remove unused functions, variables and constants

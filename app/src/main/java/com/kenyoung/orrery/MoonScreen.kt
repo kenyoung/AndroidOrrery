@@ -86,43 +86,6 @@ internal fun createPhasedMoonBitmap(
 private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
-// Optical libration of the Moon (Meeus, chapter 53)
-// Returns Pair(libration in longitude, libration in latitude) in degrees
-private fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pair<Double, Double> {
-    val LUNAR_EQUATOR_INCLINATION = 1.54242 // degrees, inclination of mean lunar equator to ecliptic
-    val T = (jd - 2451545.0) / 36525.0
-
-    // Moon's ascending node longitude
-    val omega = (125.0445479 - 1934.1362891 * T) % 360.0
-
-    // Moon's argument of latitude F (mean distance from ascending node)
-    var F = (93.2720950 + 483202.0175233 * T) % 360.0
-    if (F < 0) F += 360.0
-
-    // Nutation in longitude
-    val nut = calculateNutation(T)
-    val deltaPsiDeg = nut.deltaPhi / 3600.0
-
-    val I = LUNAR_EQUATOR_INCLINATION
-    val iRad = Math.toRadians(I)
-
-    // W = apparent longitude - nutation - node
-    val W = Math.toRadians(eclipticLon - deltaPsiDeg - omega)
-    val betaRad = Math.toRadians(eclipticLat)
-
-    // Libration in latitude
-    val libLat = Math.toDegrees(asin(
-        -sin(W) * cos(betaRad) * sin(iRad) - sin(betaRad) * cos(iRad)
-    ))
-
-    // Libration in longitude
-    val A = sin(W) * cos(betaRad) * cos(iRad) - sin(betaRad) * sin(iRad)
-    val libLon = Math.toDegrees(atan2(A, cos(W) * cos(betaRad))) - F
-    val normalizedLibLon = ((libLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
-
-    return Pair(normalizedLibLon, libLat)
-}
-
 @Composable
 fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val context = LocalContext.current
@@ -132,12 +95,16 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         ConstellationBoundary.ensureLoaded(context)
     }
 
-    val originalBitmap = remember(obs.lat < 0.0) {
-        val raw = context.assets.open("fullMoon.png").use { BitmapFactory.decodeStream(it) }
-        if (raw != null && obs.lat < 0.0) {
-            val matrix = android.graphics.Matrix().apply { postRotate(180f) }
-            android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
-        } else raw
+    // Load equirectangular lunar surface texture once
+    val textureData = remember {
+        val bmp = context.assets.open("lunarSurface.png").use { BitmapFactory.decodeStream(it) }
+        if (bmp != null) {
+            val w = bmp.width; val h = bmp.height
+            val pixels = IntArray(w * h)
+            bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+            bmp.recycle()
+            Triple(pixels, w, h)
+        } else null
     }
 
     val currentUtEpochDay = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY
@@ -145,7 +112,58 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     val phaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
 
-    val phasedBitmap = if (originalBitmap != null) createPhasedMoonBitmap(originalBitmap, phaseAngle, obs.lat) else null
+    // Compute moonState, position, and libration early — needed for texture-mapped bitmap
+    val moonState = AstroEngine.getBodyState("Moon", jd)
+    val eclipticLat = moonState.eclipticLat
+    val apparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
+    val lst = calculateLSTHours(jd, obs.lon)
+    val topo = toTopocentric(apparent.ra, apparent.dec, moonState.distGeo, obs.lat, obs.lon, lst)
+
+    val azAlt = calculateAzAlt(lst, obs.lat, topo.ra / 15.0, topo.dec)
+    val currentAlt = applyRefraction(azAlt.alt)
+    val currentAz = azAlt.az
+    val isUp = currentAlt > HORIZON_REFRACTED
+
+    val haHours = lst - topo.ra / 15.0
+    val haRad = Math.toRadians(haHours * 15.0)
+    val latRad = Math.toRadians(obs.lat)
+    val decRad = Math.toRadians(topo.dec)
+    val parallacticAngleDeg = if (isUp) {
+        Math.toDegrees(atan2(sin(haRad), tan(latRad) * cos(decRad) - sin(decRad) * cos(haRad)))
+    } else 0.0
+
+    // Optical libration (Meeus ch. 53)
+    val (optLibLon, optLibLat) = calculateLibration(jd, moonState.eclipticLon, eclipticLat)
+
+    // Diurnal libration — correction for observer's position on Earth's surface
+    // (Meeus ch. 53, section on diurnal libration)
+    val moonDistKm = moonState.distGeo * AU_METERS / 1000.0
+    val lunarParallax = asin(EARTH_RADIUS_EQ_METERS / (moonDistKm * 1000.0))
+    val earthFlattening = 1.0 / 298.257
+    val u = atan((1.0 - earthFlattening) * tan(latRad))
+    val rhoCosPhi = cos(u)         // observer's geocentric distance * cos(geocentric lat)
+    val rhoSinPhi = (1.0 - earthFlattening) * (1.0 - earthFlattening) * sin(u)
+    val optLibLatRad = Math.toRadians(optLibLat)
+    val diurnalLibLon = Math.toDegrees(
+        -lunarParallax * rhoCosPhi * sin(haRad) / cos(optLibLatRad)
+    )
+    val diurnalLibLat = Math.toDegrees(
+        -lunarParallax * (rhoSinPhi * cos(optLibLatRad) - rhoCosPhi * cos(haRad) * sin(optLibLatRad))
+    )
+
+    val libLon = optLibLon + diurnalLibLon
+    val libLat = optLibLat + diurnalLibLat
+
+    val phasedBitmap = if (textureData != null) {
+        createTexturedMoonBitmap(
+            textureData.first, textureData.second, textureData.third,
+            outputSize = 512,
+            phaseAngleDeg = phaseAngle,
+            libLonDeg = libLon,
+            libLatDeg = libLat,
+            southernHemisphere = obs.lat < 0.0
+        )
+    } else null
 
     val illumination = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
 
@@ -162,27 +180,6 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     val moonAge = calculateMoonAge(currentUtEpochDay, obs.lon)
 
-    // Moon state: position, distance, apparent coords
-    val moonState = AstroEngine.getBodyState("Moon", jd)
-    val apparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
-    val lst = calculateLSTHours(jd, obs.lon)
-    val topo = toTopocentric(apparent.ra, apparent.dec, moonState.distGeo, obs.lat, obs.lon, lst)
-
-    // Current altitude and azimuth
-    val azAlt = calculateAzAlt(lst, obs.lat, topo.ra / 15.0, topo.dec)
-    val currentAlt = applyRefraction(azAlt.alt)
-    val currentAz = azAlt.az
-    val isUp = currentAlt > HORIZON_REFRACTED
-
-    // Parallactic angle: rotation of celestial north relative to zenith direction
-    val haHours = lst - topo.ra / 15.0
-    val haRad = Math.toRadians(haHours * 15.0)
-    val latRad = Math.toRadians(obs.lat)
-    val decRad = Math.toRadians(topo.dec)
-    val parallacticAngleDeg = if (isUp) {
-        Math.toDegrees(atan2(sin(haRad), tan(latRad) * cos(decRad) - sin(decRad) * cos(haRad)))
-    } else 0.0
-
     // Moon rise/transit/set
     val offset = obs.lon / 15.0
     val moonEvents = calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, offset)
@@ -192,9 +189,6 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
     val riseAz = if (!moonEvents.rise.isNaN()) calculateAzAtRiseSet(obs.lat, topo.dec, true, moonTargetAlt) else Double.NaN
     val setAz = if (!moonEvents.set.isNaN()) calculateAzAtRiseSet(obs.lat, topo.dec, false, moonTargetAlt) else Double.NaN
-
-    // Distance
-    val moonDistKm = moonState.distGeo * AU_METERS / 1000.0
 
     // Angular diameter
     val angularDiamArcmin = Math.toDegrees(2.0 * asin(MOON_RADIUS_KM / moonDistKm)) * 60.0
@@ -221,12 +215,6 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 cos(sunDecRad) * cos(moonDecRad) * cos(moonRaRad - sunRaRad)).coerceIn(-1.0, 1.0)
         ))
     }
-
-    // Ecliptic latitude
-    val eclipticLat = moonState.eclipticLat
-
-    // Libration
-    val (libLon, libLat) = calculateLibration(jd, moonState.eclipticLon, eclipticLat)
 
     // Perigee/apogee: use Moon's mean anomaly to estimate days to next
     val T = (jd - 2451545.0) / 36525.0
@@ -408,9 +396,15 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 val decTotalMin = round(absDec * 60.0).toInt()
                 val decD = decTotalMin / 60
                 val decM = decTotalMin % 60
+                val haSign = if (haHours >= 0) "+" else "-"
+                val absHa = abs(haHours)
+                val haTotalMin = round(absHa * 60.0).toInt()
+                val haH = haTotalMin / 60
+                val haM = haTotalMin % 60
                 drawCenteredSegments(lineY,
                     "RA " to true, "%02dh %02dm  ".format(raH, raM) to false,
-                    "Dec " to true, "%s%02d\u00B0 %02d'".format(decSign, decD, decM) to false)
+                    "Dec " to true, "%s%02d\u00B0 %02d'  ".format(decSign, decD, decM) to false,
+                    "HA " to true, "%s%dh %02dm".format(haSign, haH, haM) to false)
 
                 // Line 8: Constellation and elongation
                 lineY += lineSpacing
