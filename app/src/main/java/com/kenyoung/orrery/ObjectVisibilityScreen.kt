@@ -170,6 +170,24 @@ private fun drawVisibilityMap(
     val appDecDeg = apparent.dec
     val gmstHours = calculateGMST(jd)
 
+    // For non-Sun objects, compute Sun position for daylight shading
+    val isSun = bodyName == "Sun"
+    val sunSinDec: Double
+    val sunCosDec: Double
+    val sunSinH0: Double
+    val sunSubLon: Double
+    if (!isSun) {
+        val sunState = AstroEngine.getBodyState("Sun", jd)
+        val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
+        val sunDecRad = Math.toRadians(sunApparent.dec)
+        sunSinDec = sin(sunDecRad)
+        sunCosDec = cos(sunDecRad)
+        sunSinH0 = sin(Math.toRadians(HORIZON_REFRACTED))
+        sunSubLon = normLon(sunApparent.ra - gmstHours * 15.0)
+    } else {
+        sunSinDec = 0.0; sunCosDec = 1.0; sunSinH0 = 0.0; sunSubLon = 0.0
+    }
+
     val horizonAlt = when (bodyName) {
         "Sun", "Moon" -> HORIZON_REFRACTED
         else -> PLANET_HORIZON_ALT
@@ -203,9 +221,10 @@ private fun drawVisibilityMap(
     // 1. Background: solid gray, then paint visible region white and draw contours in one pass
     val pixelHeight = mh.toInt()
     val shadeColor = Color(0xFF383838)
+    val lightShadeColor = Color(0xFF909090)
 
     drawScope.drawRect(
-        shadeColor,
+        if (isSun) shadeColor else Color.White,
         topLeft = Offset(mLeft, mTop),
         size = Size(mw, mh)
     )
@@ -241,17 +260,50 @@ private fun drawVisibilityMap(
         // Horizon shading (only on integer pixel rows)
         if (step % 2 == 0) {
             val horizRange = computeRangeFromTrig(sinLat, cosLat, sinDec, cosDec, sinH0, subObjLon)
-            if (!horizRange.neverUp) {
-                if (horizRange.alwaysUp) {
-                    drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
-                } else {
+            if (isSun) {
+                // Sun: white where above horizon on dark gray background
+                if (!horizRange.neverUp) {
+                    if (horizRange.alwaysUp) {
+                        drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
+                    } else {
+                        val x1 = lonToX(horizRange.lon1)
+                        val x2 = lonToX(horizRange.lon2)
+                        if (x1 <= x2) {
+                            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
+                        } else {
+                            drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
+                            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
+                        }
+                    }
+                }
+            } else {
+                // Non-Sun: light gray where Sun is up, then dark gray where object is down
+                val sunRange = computeRangeFromTrig(sinLat, cosLat, sunSinDec, sunCosDec, sunSinH0, sunSubLon)
+                if (!sunRange.neverUp) {
+                    if (sunRange.alwaysUp) {
+                        drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(mw, 2f))
+                    } else {
+                        val sx1 = lonToX(sunRange.lon1)
+                        val sx2 = lonToX(sunRange.lon2)
+                        if (sx1 <= sx2) {
+                            drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(sx2 - sx1, 2f))
+                        } else {
+                            drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(sx2 - mLeft, 2f))
+                            drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(mLeft + mw - sx1, 2f))
+                        }
+                    }
+                }
+                // Dark gray where object is below horizon (overwrites light gray in overlap)
+                if (horizRange.neverUp) {
+                    drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(mw, 2f))
+                } else if (!horizRange.alwaysUp) {
                     val x1 = lonToX(horizRange.lon1)
                     val x2 = lonToX(horizRange.lon2)
                     if (x1 <= x2) {
-                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
+                        drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(x1 - mLeft, 2f))
+                        drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(mLeft + mw - x2, 2f))
                     } else {
-                        drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
-                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
+                        drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(x1 - x2, 2f))
                     }
                 }
             }
@@ -485,6 +537,9 @@ private fun drawVisibilityMap(
 
             for (i in topCities.indices) {
                 val city = topCities[i]
+                val rowColor = if (city.sunIsUp) 0xFF909090.toInt() else android.graphics.Color.WHITE
+                cityPaint.color = rowColor
+                cityRightPaint.color = rowColor
                 val rowY = tableTop + tableHeaderHeight + (i + 2) * tableRowHeight
                 canvas.nativeCanvas.drawText(city.name, col1, rowY, cityPaint)
                 canvas.nativeCanvas.drawText(city.country, col2, rowY, cityPaint)
@@ -544,7 +599,8 @@ private data class CityVisibility(
     val country: String,
     val elevation: Double,
     val azimuth: Double,
-    val isRising: Boolean
+    val isRising: Boolean,
+    val sunIsUp: Boolean
 )
 
 private fun computeTopCities(
@@ -557,6 +613,18 @@ private fun computeTopCities(
     val apparent = j2000ToApparent(bodyState.ra, bodyState.dec, jd)
     val appRaDeg = apparent.ra
     val appDecDeg = apparent.dec
+
+    // Compute Sun position for daylight check (non-Sun objects only)
+    val sunRaHours: Double
+    val sunDecDeg: Double
+    if (bodyName != "Sun") {
+        val sunState = AstroEngine.getBodyState("Sun", jd)
+        val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
+        sunRaHours = sunApparent.ra / 15.0
+        sunDecDeg = sunApparent.dec
+    } else {
+        sunRaHours = 0.0; sunDecDeg = 0.0
+    }
 
     val result = mutableListOf<CityVisibility>()
     val countriesSeen = mutableSetOf<String>()
@@ -581,12 +649,17 @@ private fun computeTopCities(
 
         if (azAlt.alt > 0.0) {
             val ha = normalizeHourAngle(lst - raDeg / 15.0)
+            val sunUp = if (bodyName != "Sun") {
+                val sunAzAlt = calculateAzAlt(lst, city.lat, sunRaHours, sunDecDeg)
+                sunAzAlt.alt > 0.0
+            } else false
             countriesSeen.add(city.countryCode)
             result.add(CityVisibility(
                 city.name,
                 CityData.countryName(city.countryCode),
                 azAlt.alt, azAlt.az,
-                isRising = ha < 0.0
+                isRising = ha < 0.0,
+                sunIsUp = sunUp
             ))
             if (result.size >= 15) break
         }
