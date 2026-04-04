@@ -243,7 +243,8 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             val topMargin = 10f
             val bottomMargin = 10f
             val numInfoLines = 13
-            val infoHeight = numInfoLines * lineSpacing + 10f
+            val boxGap = lineSpacing * 0.5f
+            val infoHeight = numInfoLines * lineSpacing + 2 * boxGap + 10f
             val availH = h - infoHeight - topMargin - bottomMargin
             val availW = w
 
@@ -309,7 +310,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 // Line 1: Date and time
                 var lineY = textTop + infoTextSize
                 val displayZone = ZoneOffset.ofTotalSeconds((displayOffsetHours * 3600).toInt())
-                val dateTimeStr = DateTimeFormatter.ofPattern("dd MMM yyyy  HH:mm").withZone(displayZone).format(obs.now) + "  "
+                val dateTimeStr = DateTimeFormatter.ofPattern("dd MMM yyyy  HH:mm:ss").withZone(displayZone).format(obs.now) + "  "
                 drawCenteredSegments(lineY,
                     dateTimeStr to false,
                     timeLabel to true)
@@ -338,7 +339,7 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 }
 
                 // Lines 4-5: Rise / Transit / Set times, then Az/El below
-                lineY += lineSpacing
+                lineY += lineSpacing + boxGap
                 val riseDisplay = if (!moonEvents.rise.isNaN()) formatTimeMM(normalizeTime(moonEvents.rise - offset + displayOffsetHours), false) else "--:--"
                 val transitDisplay = if (!moonEvents.transit.isNaN()) formatTimeMM(normalizeTime(moonEvents.transit - offset + displayOffsetHours), false) else "--:--"
                 val setDisplay = if (!moonEvents.set.isNaN()) formatTimeMM(normalizeTime(moonEvents.set - offset + displayOffsetHours), false) else "--:--"
@@ -380,8 +381,26 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 if (!moonEvents.transit.isNaN()) drawSubValue(transitStartX, transitEndX, "El ", "%.0f\u00B0".format(transitEl))
                 if (!setAz.isNaN()) drawSubValue(setStartX, setEndX, "Az ", "%.0f\u00B0".format(setAz))
 
+                // Draw boxes around rise/transit/set groups
+                val boxPaint = Paint().apply {
+                    style = Paint.Style.STROKE
+                    color = android.graphics.Color.GRAY
+                    strokeWidth = 2f
+                    isAntiAlias = true
+                }
+                val ascent = dataPaint.ascent()
+                val descent = dataPaint.descent()
+                val boxTop = lineY - lineSpacing - (-ascent) - 4f
+                val boxBottom = lineY + descent + 4f
+                val boxPad = 6f
+                val transitBoxStartX = transitStartX + labelPaint.measureText("  ")
+                val setBoxStartX = setStartX + labelPaint.measureText("  ")
+                nc.drawRect(riseStartX - boxPad, boxTop, riseEndX + boxPad, boxBottom, boxPaint)
+                nc.drawRect(transitBoxStartX - boxPad, boxTop, transitEndX + boxPad, boxBottom, boxPaint)
+                nc.drawRect(setBoxStartX - boxPad, boxTop, setEndX + boxPad, boxBottom, boxPaint)
+
                 // Line 6: Distance and angular diameter
-                lineY += lineSpacing
+                lineY += lineSpacing + boxGap
                 drawCenteredSegments(lineY,
                     "Distance  " to true, "%,.0f km  ".format(moonDistKm) to false,
                     "Diameter " to true, "%.1f'".format(angularDiamArcmin) to false)
@@ -433,8 +452,8 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 // Line 11: Perigee/Apogee
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "Next Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
-                    "Next Apogee in " to true, "%.1f days".format(daysToApogee) to false)
+                    "Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
+                    "Apogee in " to true, "%.1f days".format(daysToApogee) to false)
 
                 // Line 12: Days until next Full Moon and New Moon
                 // Scan forward using actual phase angle crossings, then interpolate
@@ -464,11 +483,11 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "Next Full Moon in " to true, "%.1f days".format(daysToFullMoon) to false)
+                    "Full Moon in " to true, "%.1f days".format(daysToFullMoon) to false)
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "Next New Moon in " to true, "%.1f days".format(daysToNewMoon) to false)
+                    "New Moon in " to true, "%.1f days".format(daysToNewMoon) to false)
             }
         }
     }
