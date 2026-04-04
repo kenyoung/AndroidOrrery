@@ -70,13 +70,14 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
     // Pre-compute phase data and events
     val phaseData = remember(displayMonth.year, displayMonth.monthValue, lon) {
         val angles = DoubleArray(daysInMonth + 1)
+        val midnightOffset = -lon / 360.0 // local apparent midnight in UT
         for (d in 1..daysInMonth) {
             val epochDay = monthStart.withDayOfMonth(d).toEpochDay().toDouble()
-            angles[d - 1] = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(epochDay, lon))
+            angles[d - 1] = calculateMoonPhaseAngle(epochDay + midnightOffset)
         }
         // Next day after month end for last-day event detection
         val lastDayEpoch = monthStart.withDayOfMonth(daysInMonth).toEpochDay().toDouble() + 1.0
-        angles[daysInMonth] = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(lastDayEpoch, lon))
+        angles[daysInMonth] = calculateMoonPhaseAngle(lastDayEpoch + midnightOffset)
         angles
     }
 
@@ -226,12 +227,13 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     val cellLabelColor = if (isToday) android.graphics.Color.WHITE else labelColorInt
                     val cellPhaseColor = if (isToday) android.graphics.Color.WHITE else Color.Red.toArgb()
 
-                    // Moon age: days since most recent New Moon
+                    // Moon age: days since most recent New Moon, evaluated at local apparent noon
                     val dayEpoch = monthStart.withDayOfMonth(d).toEpochDay()
-                    val moonAge = calculateMoonAge(estimateMoonTransitEpochDay(dayEpoch.toDouble(), lon), lon)
+                    val localNoon = dayEpoch.toDouble() + 0.5 - lon / 360.0
+                    val moonAge = calculateMoonAge(localNoon, lon)
                     cellDataPaint.textAlign = Paint.Align.CENTER
                     val ageLabel = "Age "
-                    val ageValue = "%.0f".format(moonAge)
+                    val ageValue = "%.1f".format(moonAge)
                     val ageY = cellTop + textSize28 * 2 + 4f
                     val ageTotalW = cellDataPaint.measureText(ageLabel + ageValue)
                     val ageX = cellCenterX - ageTotalW / 2f

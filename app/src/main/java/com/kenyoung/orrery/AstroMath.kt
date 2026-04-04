@@ -751,13 +751,14 @@ fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pa
  * scanning backwards up to 30 days from the given epoch day.
  */
 fun calculateMoonAge(epochDay: Double, lonDeg: Double): Double {
+    val midnightOffset = -lonDeg / 360.0
     val baseEpoch = floor(epochDay)
     // Start at daysBack=0 so that if today IS the New Moon day
     // (phase > 300° today, < 60° tomorrow), it is detected.
     for (daysBack in 0..30) {
         val ed = baseEpoch - daysBack
-        val phase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, lonDeg))
-        val nextDayPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed + 1.0, lonDeg))
+        val phase = calculateMoonPhaseAngle(ed + midnightOffset)
+        val nextDayPhase = calculateMoonPhaseAngle(ed + 1.0 + midnightOffset)
         if (phase > 300.0 && nextDayPhase < 60.0) {
             // Interpolate to find fractional crossing point
             val adjustedPhase = phase - 360.0

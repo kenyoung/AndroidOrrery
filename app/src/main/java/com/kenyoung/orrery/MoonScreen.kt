@@ -396,8 +396,9 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 val decTotalMin = round(absDec * 60.0).toInt()
                 val decD = decTotalMin / 60
                 val decM = decTotalMin % 60
-                val haSign = if (haHours >= 0) "+" else "-"
-                val absHa = abs(haHours)
+                val haDisplay = normalizeHourAngle(haHours)
+                val haSign = if (haDisplay >= 0) "+" else "-"
+                val absHa = abs(haDisplay)
                 val haTotalMin = round(absHa * 60.0).toInt()
                 val haH = haTotalMin / 60
                 val haM = haTotalMin % 60
