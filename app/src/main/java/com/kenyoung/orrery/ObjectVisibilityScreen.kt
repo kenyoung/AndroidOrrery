@@ -246,8 +246,59 @@ private fun drawVisibilityMap(
     val lastEastX = arrayOfNulls<Float>(contourCount)
     val lastY = FloatArray(contourCount)
 
-    // 2. Single pass over latitude rows at half-pixel resolution
+    // 2. For non-Sun: two separate passes to avoid stripe artifacts from overlapping scanlines.
+    //    Pass 1: light gray where Sun is above horizon (on dark gray background).
+    //    Pass 2: dark gray where object is below horizon (overwrites light gray in overlap).
+    //    Separating passes ensures dark gray is always on top of light gray.
     val contourSteps = pixelHeight * 2
+    if (!isSun) {
+        // Pass 1: light gray where Sun is above horizon
+        for (step in 0..contourSteps step 2) {
+            val lat = 90.0 - (step.toDouble() / contourSteps) * 180.0
+            val screenY = mTop + step.toFloat() / contourSteps * mh
+            val latRad = Math.toRadians(lat)
+            val sinLat = sin(latRad)
+            val cosLat = cos(latRad)
+            val sunRange = computeRangeFromTrig(sinLat, cosLat, sunSinDec, sunCosDec, sunSinH0, sunSubLon)
+            if (!sunRange.neverUp) {
+                if (sunRange.alwaysUp) {
+                    drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(mw, 2f))
+                } else {
+                    val sx1 = lonToX(sunRange.lon1)
+                    val sx2 = lonToX(sunRange.lon2)
+                    if (sx1 <= sx2) {
+                        drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(sx2 - sx1, 2f))
+                    } else {
+                        drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(sx2 - mLeft, 2f))
+                        drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(mLeft + mw - sx1, 2f))
+                    }
+                }
+            }
+        }
+        // Pass 2: dark gray where object is below horizon
+        for (step in 0..contourSteps step 2) {
+            val lat = 90.0 - (step.toDouble() / contourSteps) * 180.0
+            val screenY = mTop + step.toFloat() / contourSteps * mh
+            val latRad = Math.toRadians(lat)
+            val sinLat = sin(latRad)
+            val cosLat = cos(latRad)
+            val (sinDec, cosDec) = getDecTrig(bodyName, lat, appRaDeg, appDecDeg, gmstHours, bodyState, jd)
+            val horizRange = computeRangeFromTrig(sinLat, cosLat, sinDec, cosDec, sinH0, subObjLon)
+            if (horizRange.neverUp) {
+                drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(mw, 2f))
+            } else if (!horizRange.alwaysUp) {
+                val x1 = lonToX(horizRange.lon1)
+                val x2 = lonToX(horizRange.lon2)
+                if (x1 <= x2) {
+                    drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(x1 - mLeft, 2f))
+                    drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(mLeft + mw - x2, 2f))
+                } else {
+                    drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(x1 - x2, 2f))
+                }
+            }
+        }
+    }
+
     for (step in 0..contourSteps) {
         val lat = 90.0 - (step.toDouble() / contourSteps) * 180.0
         val screenY = mTop + step.toFloat() / contourSteps * mh
@@ -257,53 +308,20 @@ private fun drawVisibilityMap(
         val cosLat = cos(latRad)
         val (sinDec, cosDec) = getDecTrig(bodyName, lat, appRaDeg, appDecDeg, gmstHours, bodyState, jd)
 
-        // Horizon shading (only on integer pixel rows)
-        if (step % 2 == 0) {
+        // Horizon shading (only on integer pixel rows) — Sun only; non-Sun handled above
+        if (isSun && step % 2 == 0) {
             val horizRange = computeRangeFromTrig(sinLat, cosLat, sinDec, cosDec, sinH0, subObjLon)
-            if (isSun) {
-                // Sun: white where above horizon on dark gray background
-                if (!horizRange.neverUp) {
-                    if (horizRange.alwaysUp) {
-                        drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
-                    } else {
-                        val x1 = lonToX(horizRange.lon1)
-                        val x2 = lonToX(horizRange.lon2)
-                        if (x1 <= x2) {
-                            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
-                        } else {
-                            drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
-                            drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
-                        }
-                    }
-                }
-            } else {
-                // Non-Sun: light gray where Sun is up, then dark gray where object is down
-                val sunRange = computeRangeFromTrig(sinLat, cosLat, sunSinDec, sunCosDec, sunSinH0, sunSubLon)
-                if (!sunRange.neverUp) {
-                    if (sunRange.alwaysUp) {
-                        drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(mw, 2f))
-                    } else {
-                        val sx1 = lonToX(sunRange.lon1)
-                        val sx2 = lonToX(sunRange.lon2)
-                        if (sx1 <= sx2) {
-                            drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(sx2 - sx1, 2f))
-                        } else {
-                            drawScope.drawRect(lightShadeColor, Offset(mLeft, screenY), Size(sx2 - mLeft, 2f))
-                            drawScope.drawRect(lightShadeColor, Offset(sx1, screenY), Size(mLeft + mw - sx1, 2f))
-                        }
-                    }
-                }
-                // Dark gray where object is below horizon (overwrites light gray in overlap)
-                if (horizRange.neverUp) {
-                    drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(mw, 2f))
-                } else if (!horizRange.alwaysUp) {
+            if (!horizRange.neverUp) {
+                if (horizRange.alwaysUp) {
+                    drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(mw, 2f))
+                } else {
                     val x1 = lonToX(horizRange.lon1)
                     val x2 = lonToX(horizRange.lon2)
                     if (x1 <= x2) {
-                        drawScope.drawRect(shadeColor, Offset(mLeft, screenY), Size(x1 - mLeft, 2f))
-                        drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(mLeft + mw - x2, 2f))
+                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(x2 - x1, 2f))
                     } else {
-                        drawScope.drawRect(shadeColor, Offset(x2, screenY), Size(x1 - x2, 2f))
+                        drawScope.drawRect(Color.White, Offset(mLeft, screenY), Size(x2 - mLeft, 2f))
+                        drawScope.drawRect(Color.White, Offset(x1, screenY), Size(mLeft + mw - x1, 2f))
                     }
                 }
             }
