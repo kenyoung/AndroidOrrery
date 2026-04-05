@@ -218,7 +218,7 @@ private fun drawVisibilityMap(
     fun lonToX(lon: Double): Float = ((lon + 180.0) / 360.0 * mw + mLeft).toFloat()
     fun latToY(lat: Double): Float = ((90.0 - lat) / 180.0 * mh + mTop).toFloat()
 
-    // 1. Background: solid gray, then paint visible region white and draw contours in one pass
+    // 1. Background fill
     val pixelHeight = mh.toInt()
     val shadeColor = Color(0xFF383838)
     val lightShadeColor = Color(0xFF909090)
@@ -555,7 +555,7 @@ private fun drawVisibilityMap(
 
             for (i in topCities.indices) {
                 val city = topCities[i]
-                val rowColor = if (city.sunIsUp) 0xFF909090.toInt() else android.graphics.Color.WHITE
+                val rowColor = if (city.sunIsUp) lightShadeColor.toArgb() else android.graphics.Color.WHITE
                 cityPaint.color = rowColor
                 cityRightPaint.color = rowColor
                 val rowY = tableTop + tableHeaderHeight + (i + 2) * tableRowHeight
