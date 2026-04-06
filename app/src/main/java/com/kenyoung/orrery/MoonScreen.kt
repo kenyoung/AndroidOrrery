@@ -86,6 +86,11 @@ internal fun createPhasedMoonBitmap(
 private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
+// Per-composition holder for the Moon's current-track event cache. The same track's
+// rise/transit/set values are reused across frames until the cached set time passes,
+// after which the next call recomputes the next track.
+private class MoonTrackHolder { var value: EventCache? = null }
+
 @Composable
 fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val context = LocalContext.current
@@ -180,9 +185,18 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     val moonAge = calculateMoonAge(currentUtEpochDay, obs.lon)
 
-    // Moon rise/transit/set
     val offset = obs.lon / 15.0
-    val moonEvents = calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, offset)
+    val trackHolder = remember(obs.lat, obs.lon) { MoonTrackHolder() }
+    val cached = trackHolder.value
+    val moonEventData = if (cached != null &&
+        (cached.events.set.isNaN() || cached.setUtEpochDay(offset) >= currentUtEpochDay)) {
+        cached
+    } else {
+        computeMoonTrack(obs.lat, obs.lon, offset, currentUtEpochDay, topo.dec).also {
+            trackHolder.value = it
+        }
+    }
+    val moonEvents = moonEventData.events
 
     // Rise/set azimuths
     val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonState.distGeo * AU_METERS)))
@@ -222,10 +236,6 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val daysToPerigee = ((360.0 - meanAnomaly) % 360.0) / 360.0 * ANOMALISTIC_MONTH
     val daysToApogee = ((180.0 - meanAnomaly + 360.0) % 360.0) / 360.0 * ANOMALISTIC_MONTH
 
-    // Display time offset
-    val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
-    val timeLabel = if (obs.useStandardTime) obs.stdTimeLabel else "UT"
-
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
     Canvas(
         modifier = Modifier
@@ -235,6 +245,19 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
         if (phasedBitmap == null) return@Canvas
 
         withDensityScaling { w, h ->
+            val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
+            val timeLabel = if (obs.useStandardTime) obs.stdTimeLabel else "UT"
+
+            // "*" flags: event falls on a later calendar day in the display timezone.
+            // (Distinct from moonEventData.setTomorrow, which is a local-solar wrap flag.)
+            val currentDisplayDate = floor(currentUtEpochDay + displayOffsetHours / 24.0).toLong()
+            val riseRaw = moonEvents.rise - offset + displayOffsetHours
+            val transitRaw = (moonEvents.transit + if (moonEventData.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
+            val setRaw = (moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
+            val riseIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, riseRaw, currentDisplayDate)
+            val transitIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, transitRaw, currentDisplayDate)
+            val setIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, setRaw, currentDisplayDate)
+
             val moonW = phasedBitmap.width.toFloat()
             val moonH = phasedBitmap.height.toFloat()
 
@@ -242,9 +265,10 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             val lineSpacing = 60f
             val topMargin = 10f
             val bottomMargin = 10f
-            val numInfoLines = 13
+            val hasNextDayFootnote = riseIsTomorrow || transitIsTomorrow || setIsTomorrow
+            val numInfoLines = if (hasNextDayFootnote) 14 else 13
             val boxGap = lineSpacing * 0.5f
-            val infoHeight = numInfoLines * lineSpacing + 2 * boxGap + 10f
+            val infoHeight = numInfoLines * lineSpacing + 2 * boxGap + (if (hasNextDayFootnote) boxGap / 4f else 0f) + 10f
             val availH = h - infoHeight - topMargin - bottomMargin
             val availW = w
 
@@ -323,26 +347,46 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                     "Age " to true,
                     "%.1f days".format(moonAge) to false)
 
-                // Line 3: Current altitude and azimuth
+                // Line 3: Current altitude and azimuth, countdown to next rise/set
                 lineY += lineSpacing
+                val countdownHasTarget = if (isUp) !moonEvents.set.isNaN() else !moonEvents.rise.isNaN()
+                val countdownText = if (countdownHasTarget) {
+                    val targetHoursFromAnchor = if (isUp) {
+                        moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0
+                    } else {
+                        moonEvents.rise
+                    }
+                    val anchorMidnightUT = floor(moonEventData.anchorEpochDay) - offset / 24.0
+                    var eventUtEpochDay = anchorMidnightUT + targetHoursFromAnchor / 24.0
+                    // Safety: ensure positive countdown if altitude/event-time edges disagree
+                    if (eventUtEpochDay < currentUtEpochDay) eventUtEpochDay += 1.0
+                    val secondsUntil = ((eventUtEpochDay - currentUtEpochDay) * SECONDS_PER_DAY).toLong()
+                        .coerceAtLeast(0L)
+                    val h = secondsUntil / 3600
+                    val m = (secondsUntil % 3600) / 60
+                    if (isUp) "Setting in %dh %02dm".format(h, m)
+                    else "Rising in %dh %02dm".format(h, m)
+                } else {
+                    if (isUp) "(Circumpolar)" else "(Never rises)"
+                }
                 if (isUp) {
                     drawCenteredSegments(lineY,
                         "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
                         "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
                         "PA " to true, "%.1f\u00B0  ".format(parallacticAngleDeg) to false,
-                        "(Above horizon)" to false)
+                        countdownText to false)
                 } else {
                     drawCenteredSegments(lineY,
                         "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
                         "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
-                        "(Below horizon)" to false)
+                        countdownText to false)
                 }
 
                 // Lines 4-5: Rise / Transit / Set times, then Az/El below
                 lineY += lineSpacing + boxGap
-                val riseDisplay = if (!moonEvents.rise.isNaN()) formatTimeMM(normalizeTime(moonEvents.rise - offset + displayOffsetHours), false) else "--:--"
-                val transitDisplay = if (!moonEvents.transit.isNaN()) formatTimeMM(normalizeTime(moonEvents.transit - offset + displayOffsetHours), false) else "--:--"
-                val setDisplay = if (!moonEvents.set.isNaN()) formatTimeMM(normalizeTime(moonEvents.set - offset + displayOffsetHours), false) else "--:--"
+                val riseDisplay = if (!moonEvents.rise.isNaN()) formatTimeMM(normalizeTime(riseRaw), false) + (if (riseIsTomorrow) "*" else "") else "--:--"
+                val transitDisplay = if (!moonEvents.transit.isNaN()) formatTimeMM(normalizeTime(transitRaw), false) + (if (transitIsTomorrow) "*" else "") else "--:--"
+                val setDisplay = if (!moonEvents.set.isNaN()) formatTimeMM(normalizeTime(setRaw), false) + (if (setIsTomorrow) "*" else "") else "--:--"
 
                 val rLabel = "Rise "
                 val tLabel = "  Transit "
@@ -399,8 +443,13 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                 nc.drawRect(transitBoxStartX - boxPad, boxTop, transitEndX + boxPad, boxBottom, boxPaint)
                 nc.drawRect(setBoxStartX - boxPad, boxTop, setEndX + boxPad, boxBottom, boxPaint)
 
+                if (hasNextDayFootnote) {
+                    lineY += lineSpacing
+                    nc.drawText("* Tomorrow", w / 2f, lineY, centerPaint)
+                }
+
                 // Line 6: Distance and angular diameter
-                lineY += lineSpacing + boxGap
+                lineY += lineSpacing + (if (hasNextDayFootnote) boxGap / 4f else boxGap)
                 drawCenteredSegments(lineY,
                     "Distance  " to true, "%,.0f km  ".format(moonDistKm) to false,
                     "Diameter " to true, "%.1f'".format(angularDiamArcmin) to false)

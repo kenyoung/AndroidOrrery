@@ -193,7 +193,9 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     typeface = Typeface.DEFAULT
                 }
                 val spaceWidth = dayNumPaint.measureText(" ")
-                val offset = lon / 15.0
+                // Day window: midnight-to-midnight in display TZ (or UT if useStandardTime is off).
+                // Rise/set are reported in [0, 24) hours of that same day; events outside the window
+                // come back as NaN and render as "(none)".
                 val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
                 val textSize28 = 28f
 
@@ -243,14 +245,14 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     cellDataPaint.color = cellTextColor
                     nc.drawText(ageValue, ageX + cellDataPaint.measureText(ageLabel), ageY, cellDataPaint)
 
-                    // Moon rise/set times
-                    val dayMoonEvents = calculateMoonEvents(dayEpoch.toDouble(), lat, lon, offset)
+                    // Moon rise/set times: scan only this day's window (midnight to midnight).
+                    val dayMoonEvents = calculateMoonEvents(dayEpoch.toDouble(), lat, lon, displayOffsetHours, scanDays = 1.0)
 
                     // Rise time below the age line
                     val riseLabel = "Rise "
                     val riseValue = if (!dayMoonEvents.rise.isNaN())
-                        formatTimeMM(normalizeTime(dayMoonEvents.rise - offset + displayOffsetHours), false)
-                    else "--:--"
+                        formatTimeMM(dayMoonEvents.rise, false)
+                    else "(none)"
                     val riseY = cellTop + textSize28 * 3 + 8f
                     val riseTotalW = cellDataPaint.measureText(riseLabel + riseValue)
                     val riseX = cellCenterX - riseTotalW / 2f
@@ -284,8 +286,8 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     // Set time
                     val setLabel = "Set "
                     val setValue = if (!dayMoonEvents.set.isNaN())
-                        formatTimeMM(normalizeTime(dayMoonEvents.set - offset + displayOffsetHours), false)
-                    else "--:--"
+                        formatTimeMM(dayMoonEvents.set, false)
+                    else "(none)"
                     val setTotalW = cellDataPaint.measureText(setLabel + setValue)
                     val setX = cellCenterX - setTotalW / 2f
                     cellDataPaint.color = cellLabelColor

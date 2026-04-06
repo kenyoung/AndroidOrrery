@@ -62,36 +62,32 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     // --- EVENT CALCULATION FUNCTIONS ---
     // Extracted so the main loop and the set-watcher can both call them.
 
+    // Recompute when the cache is absent, stale (safety net), or the cached set has passed.
+    fun cacheNeedsCalc(cache: EventCache?, jdStart: Double, currentUtEpochDay: Double,
+                      offset: Double, staleMaxHours: Double): Boolean {
+        if (cache == null) return true
+        if ((jdStart - cache.calcJd) > staleMaxHours / 24.0) return true
+        return cache.setUtEpochDay(offset) < currentUtEpochDay
+    }
+
     fun computeSunEvents(
         epochDay: Double, lat: Double, lon: Double, offset: Double,
         jdStart: Double, currentUtEpochDay: Double,
         cache: EventCache?, staleMaxHours: Double = 25.0
     ): EventCache {
-        val needCalc = run {
-            if (cache == null) return@run true
-            if ((jdStart - cache.calcJd) > staleMaxHours / 24.0) return@run true
-            val baseMidnightUT = floor(cache.anchorEpochDay) - offset / 24.0
-            baseMidnightUT + cache.events.set / 24.0 < currentUtEpochDay
-        }
-        if (!needCalc) return cache!!
+        if (!cacheNeedsCalc(cache, jdStart, currentUtEpochDay, offset, staleMaxHours)) return cache!!
         return computeSunEventData(epochDay, lat, lon, offset, currentUtEpochDay).copy(calcJd = jdStart)
     }
 
+    // Moon events lock in for an entire track (rise→set) — the cached set drives recompute.
     fun computeMoonEvents(
-        eventEpochDay: Double, lat: Double, lon: Double, offset: Double,
+        lat: Double, lon: Double, offset: Double,
         jdStart: Double, currentUtEpochDay: Double,
         fallbackDec: Double,
         cache: EventCache?, staleMaxHours: Double = 30.0
     ): EventCache {
-        val needCalc = run {
-            if (cache == null) return@run true
-            if ((jdStart - cache.calcJd) > staleMaxHours / 24.0) return@run true
-            val setHours = cache.events.set + if (cache.setTomorrow) 24.0 else 0.0
-            val baseMidnightUT = floor(cache.anchorEpochDay) - offset / 24.0
-            baseMidnightUT + setHours / 24.0 < currentUtEpochDay
-        }
-        if (!needCalc) return cache!!
-        return computeMoonEventData(eventEpochDay, lat, lon, offset, currentUtEpochDay, fallbackDec).copy(calcJd = jdStart)
+        if (!cacheNeedsCalc(cache, jdStart, currentUtEpochDay, offset, staleMaxHours)) return cache!!
+        return computeMoonTrack(lat, lon, offset, currentUtEpochDay, fallbackDec).copy(calcJd = jdStart)
     }
 
     fun computePlanetEventsCache(
@@ -100,14 +96,7 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
         p: PlanetElements, fallbackDec: Double,
         cache: EventCache?, staleMaxHours: Double = 25.0
     ): EventCache {
-        val needCalc = run {
-            if (cache == null) return@run true
-            if ((jdStart - cache.calcJd) > staleMaxHours / 24.0) return@run true
-            val setHours = cache.events.set + if (cache.setTomorrow) 24.0 else 0.0
-            val baseMidnightUT = floor(cache.anchorEpochDay) - offset / 24.0
-            baseMidnightUT + setHours / 24.0 < currentUtEpochDay
-        }
-        if (!needCalc) return cache!!
+        if (!cacheNeedsCalc(cache, jdStart, currentUtEpochDay, offset, staleMaxHours)) return cache!!
         return computePlanetEventData(eventEpochDay, lat, lon, offset, currentUtEpochDay, p, fallbackDec).copy(calcJd = jdStart)
     }
 
@@ -141,7 +130,7 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
         val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
         val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
 
-        val moonEventData = computeMoonEvents(eventEpochDay, lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])
+        val moonEventData = computeMoonEvents(lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])
         eventCaches["Moon"] = moonEventData
 
         newList.add(PlotObject("Moon", "☾", redColorInt, topoMoon.ra, topoMoon.dec,

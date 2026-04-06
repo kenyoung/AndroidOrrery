@@ -771,7 +771,7 @@ fun calculateMoonAge(epochDay: Double, lonDeg: Double): Double {
     return 0.0
 }
 
-fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false): PlanetEvents {
+fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffset: Double, pairedRiseSet: Boolean = false, scanDays: Double = 2.0): PlanetEvents {
     // Use integer date — fractional epoch days from manual time entry shift the
     // scan start forward, causing events between now and now+|offset| to be missed.
     val epochDayInt = floor(epochDay)
@@ -839,14 +839,14 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
 
     if (pairedRiseSet) {
         // Find first rise, then the next set and transit after that rise
-        rise = findNext(dayStartUT, 2.0, "rise")
+        rise = findNext(dayStartUT, scanDays, "rise")
         set = if (!rise.isNaN()) findNext(rise, 1.5, "set") else Double.NaN
         transit = if (!rise.isNaN() && !set.isNaN()) findNext(rise, set - rise, "transit") else Double.NaN
     } else {
-        // Find each event independently within today, falling back to tomorrow
-        rise = findNext(dayStartUT, 2.0, "rise")
-        set = findNext(dayStartUT, 2.0, "set")
-        transit = findNext(dayStartUT, 2.0, "transit")
+        // Find each event independently within the scan window
+        rise = findNext(dayStartUT, scanDays, "rise")
+        set = findNext(dayStartUT, scanDays, "set")
+        transit = findNext(dayStartUT, scanDays, "transit")
     }
 
     return PlanetEvents(jdFracToLocalHours(rise, timezoneOffset), jdFracToLocalHours(transit, timezoneOffset), jdFracToLocalHours(set, timezoneOffset))

@@ -16,6 +16,13 @@ data class EventCache(
     val calcJd: Double = Double.NaN      // used by Compass caching layer only
 )
 
+// UT epoch day at which the cached set occurs (NaN if circumpolar / never rises).
+// Used by cache-validity checks and by the Compass set-watcher.
+fun EventCache.setUtEpochDay(offset: Double): Double {
+    val setHAbs = events.set + if (setTomorrow) 24.0 else 0.0
+    return floor(anchorEpochDay) - offset / 24.0 + setHAbs / 24.0
+}
+
 // --- SHARED EVENT COMPUTATION FUNCTIONS ---
 
 // Computes Sun rise/transit/set for the observing night, advancing to the next day if
@@ -143,6 +150,25 @@ fun computeMoonEventData(
         setDec = setDec,
         isCircumpolar = isCircumpolar
     )
+}
+
+// Computes the Moon's current track (if above horizon) or next track (if below).
+// A "track" is the span of a single rise→transit→set cycle. Once computed, the rise,
+// transit, and set times stay constant until the Moon sets; at that point the next
+// call (after the cached set time has passed) returns the next track.
+//
+// We anchor to (todayLocal - 1.0) so that computeMoonEventData's auto-advance handles
+// every case uniformly:
+//   • Track started yesterday evening, now in progress     → no advance, returns current
+//   • Track starts/started today after sunrise             → auto-advance, returns current
+//   • Current track already ended, now waiting for next    → auto-advance, returns next
+fun computeMoonTrack(
+    lat: Double, lon: Double, offset: Double,
+    currentUtEpochDay: Double,
+    fallbackDec: Double
+): EventCache {
+    val todayLocal = floor(currentUtEpochDay + offset / 24.0)
+    return computeMoonEventData(todayLocal - 1.0, lat, lon, offset, currentUtEpochDay, fallbackDec)
 }
 
 // Computes planet rise/transit/set for the observing night, advancing to the next day if
