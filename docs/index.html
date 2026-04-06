@@ -140,6 +140,8 @@
                 <li><a href="#object-visibility">Object Visibility</a></li>
                 <li><a href="#planet-phenomena">Planet Phenomena</a></li>
                 <li><a href="#sunlight-today">Sunlight Today</a></li>
+                <li><a href="#moon-now">Moon Now</a></li>
+                <li><a href="#moon-this-month">Moon This Month</a></li>
                 <li><a href="#lunar-calendar">Lunar Calendar</a></li>
                 <li><a href="#lunar-eclipses">Lunar Eclipses</a></li>
                 <li><a href="#solar-eclipses">Solar Eclipses</a></li>
@@ -165,7 +167,7 @@
         <div class="card">
             <p>
                 This app displays information about the positions of the Sun and planets, both in the sky and relative
-                to each other. The app can produce fifteen pages, which can be selected using the three-dot menu in
+                to each other. The app can produce 22 pages, which can be selected using the three-dot menu in
                 the upper right corner.
             </p>
         </div>
@@ -225,12 +227,12 @@
         <hr>
         <h2 id="object-visibility">Object Visibility</h2>
 	<a href="ObjectVisibility.png" target="_blank" rel="noopener">
-	  <img src="ObjectVisibility.png" alt="The Oject Visibility page for Jupiter" style="width: 15.0%; height: auto;"></a>
+	  <img src="ObjectVisibility.png" alt="The Oject Visibility page for Mars" style="width: 15.0%; height: auto;"></a>
         <p>
-	  The Object Visibility page shows which regions of the globe can see the Sun, Moon and each planet. At the top, a map of the Earth is drawn. The region where the object is below the horizon is shaded gray, and in the region where the object is visible, curves of constant elevation are drawn.
+	  The Object Visibility page shows which regions of the globe can see the Sun, Moon and each planet. At the top, a map of the Earth is drawn. The region where the object is below the horizon is shaded dark gray. For objects other than the Sun the region where both the object and the Sun are above the horizon is shaded in light gray. For the Sun, the white region shows where the Sun is above the horizon, and for all other ojects the white region shows where the object is above the horizon and the Sun is below the horizon.  Curves of constant elevation are also drawn.
 	</p>
 	<p>
-	  Below the map there is a table showing the 15 most populous cities for which the object is visible (subject to the constraint that only one city is shown for any nation) listed in descending order of population, along with the elevation (followed by an arrow indicating rising or setting) and azimuth of the object for that city.
+	  Below the map there is a table showing the 15 most populous cities for which the object is visible (subject to the constraint that only one city is shown for any nation) listed in descending order of population, along with the elevation (followed by an arrow indicating rising or setting) and azimuth of the object for that city. For objects other than the Sun, the city is listed in gray if the Sun is above the horizon.
 	</p>
         <hr>
         <h2 id="planet-phenomena">Planet Phenomena</h2>
@@ -251,6 +253,20 @@
 	  <img src="SunlightToday.png" alt="The Sunlight Today page" style="width: 15.0%; height: auto;"></a>
         <p>
 	  The Sunlight Today page shows when the various levels of diurnal illumination will occur, including full daylight, the "Golden Hour" often used for outdoor photography, and the various levels of twilight. The left "Dusk" column lists the times when the various stages of daylight begin as the Sun goes down, and the right "Dawn" column lists when the stages end as the Sun rises. A yellow marker shows the Sun's current position along its daily track, with its elevation on the marker's left and the azimuth on its right. The total length of daylight (excluding twilight) is printed on the upper right of the figure, and the change of the day length since yesterday is printed below that.
+	</p>
+        <hr>
+        <h2 id="moon-now">Moon Now</h2>
+	<a href="MoonNow.png" target="_blank" rel="noopener">
+	  <img src="MoonNow.png" alt="The Moon Now page" style="width: 15.0%; height: auto;"></a>
+        <p>
+	  The Moon Now page shows information about the Moon, updated at 1 Hz. An image of the Moon is drawn at the top of the page, with the current phase. If the Moon is above the horizon, the image is rotated to match its current appearance. If it is below the horizon, it is drawn with north at the top. The Moon image is generated from a map of the entire surface of the Moon, so that the effects of libration can be shown correctly.
+	</p>
+        <hr>
+        <h2 id="moon-this-month">Moon This Month</h2>
+	<a href="MoonThisMonth.png" target="_blank" rel="noopener">
+	  <img src="MoonThisMonth.png" alt="The Moon This Month page" style="width: 15.0%; height: auto;"></a>
+        <p>
+	  The Moon This Month page shows the phase, rising and setting times for the Moon for every day of the month. You can swipe left or right to pass backwards or forwards in time.
 	</p>
         <hr>
         <h2 id="lunar-calendar">Lunar Calendar</h2>
