@@ -180,15 +180,28 @@ fun MoonThisMonthScreen(
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
 
-                // Title
+                // Title (month/year) plus a hint inviting the user to tap a date.
                 val titlePaint = Paint().apply {
                     isAntiAlias = true
                     color = android.graphics.Color.WHITE
                     textSize = 48f
-                    textAlign = Paint.Align.CENTER
+                    textAlign = Paint.Align.LEFT
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                nc.drawText(titleStr, w / 2f, TITLE_HEIGHT - 10f, titlePaint)
+                val hintPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = labelColorInt
+                    textSize = 48f
+                    textAlign = Paint.Align.LEFT
+                    typeface = Typeface.DEFAULT
+                }
+                val hintStr = "  Tap any date for more info"
+                val titleY = TITLE_HEIGHT - 10f
+                val titleW = titlePaint.measureText(titleStr)
+                val hintW = hintPaint.measureText(hintStr)
+                val titleX = (w - titleW - hintW) / 2f
+                nc.drawText(titleStr, titleX, titleY, titlePaint)
+                nc.drawText(hintStr, titleX + titleW, titleY, hintPaint)
 
                 // Day-of-week headers
                 val headerPaint = Paint().apply {
