@@ -86,11 +86,6 @@ internal fun createPhasedMoonBitmap(
 private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
-// Per-composition holder for the Moon's current-track event cache. The same track's
-// rise/transit/set values are reused across frames until the cached set time passes,
-// after which the next call recomputes the next track.
-private class MoonTrackHolder { var value: EventCache? = null }
-
 @Composable
 fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val context = LocalContext.current
@@ -185,16 +180,13 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     val moonAge = calculateMoonAge(currentUtEpochDay, obs.lon)
 
+    // Moon track: rise/transit/set times. Recomputed once per wall-clock minute,
+    // so when the moon sets the new track's times appear within 60 seconds without
+    // any cache-invalidation logic that could silently fail.
     val offset = obs.lon / 15.0
-    val trackHolder = remember(obs.lat, obs.lon) { MoonTrackHolder() }
-    val cached = trackHolder.value
-    val moonEventData = if (cached != null &&
-        (cached.events.set.isNaN() || cached.setUtEpochDay(offset) >= currentUtEpochDay)) {
-        cached
-    } else {
-        computeMoonTrack(obs.lat, obs.lon, offset, currentUtEpochDay, topo.dec).also {
-            trackHolder.value = it
-        }
+    val currentMinute = obs.now.epochSecond / 60
+    val moonEventData = remember(obs.lat, obs.lon, currentMinute) {
+        computeMoonTrack(obs.lat, obs.lon, offset, currentUtEpochDay, topo.dec)
     }
     val moonEvents = moonEventData.events
 
@@ -285,7 +277,8 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
                 nc.save()
-                nc.rotate(parallacticAngleDeg.toFloat(), imgCenterX, imgCenterY)
+                val rotationDeg = parallacticAngleDeg + if (obs.lat < 0.0) 180.0 else 0.0
+                nc.rotate(rotationDeg.toFloat(), imgCenterX, imgCenterY)
                 val srcRect = android.graphics.Rect(0, 0, moonW.toInt(), moonH.toInt())
                 val dstRect = android.graphics.Rect(dstX, dstY, dstX + dstW, dstY + dstH)
                 val bitmapPaint = android.graphics.Paint().apply { isFilterBitmap = true }

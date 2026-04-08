@@ -23,6 +23,11 @@ fun EventCache.setUtEpochDay(offset: Double): Double {
     return floor(anchorEpochDay) - offset / 24.0 + setHAbs / 24.0
 }
 
+// Safety bound for the auto-advance loop in computeMoonEventData. In practice 1
+// or 2 advances suffice (the lunar cycle guarantees a rise every ~24h50m); this
+// just prevents runaway scans at extreme latitudes.
+private const val MAX_MOON_ANCHOR_ADVANCES = 5
+
 // --- SHARED EVENT COMPUTATION FUNCTIONS ---
 
 // Computes Sun rise/transit/set for the observing night, advancing to the next day if
@@ -86,22 +91,29 @@ fun computeMoonEventData(
         moonTransitTomorrow = false
         moonSetTomorrow = false
     } else {
-        // Two-day fetch with explicit rise→transit→set ordering
+        // Auto-advance the anchor day until the resulting track's set is in the
+        // future. Multiple advances are needed at extreme latitudes when a
+        // calendar day has no moonrise (the previous rose just before midnight
+        // and the next rises just after) — a single advance leaves the cache
+        // anchored to the previous track's already-past set.
         var evBase = calculateMoonEvents(eventEpochDay, lat, lon, offset)
         var evNext = calculateMoonEvents(eventEpochDay + 1.0, lat, lon, offset)
         var anchor = eventEpochDay
-
-        val baseMidnightUT = floor(eventEpochDay) - offset / 24.0
-        val checkTransAbs = if (evBase.transit >= evBase.rise) evBase.transit else evNext.transit + 24.0
-        val checkSetAbs = if (evBase.set >= checkTransAbs) evBase.set else evNext.set + 24.0
-        if (baseMidnightUT + checkSetAbs / 24.0 < currentUtEpochDay) {
+        var transAbs = 0.0
+        var setAbs = 0.0
+        var advances = 0
+        while (true) {
+            transAbs = if (evBase.transit >= evBase.rise) evBase.transit else evNext.transit + 24.0
+            setAbs = if (evBase.set >= transAbs) evBase.set else evNext.set + 24.0
+            val baseMidnightUT = floor(anchor) - offset / 24.0
+            if (baseMidnightUT + setAbs / 24.0 >= currentUtEpochDay) break
+            if (advances == MAX_MOON_ANCHOR_ADVANCES) break
             evBase = evNext
-            evNext = calculateMoonEvents(eventEpochDay + 2.0, lat, lon, offset)
-            anchor = eventEpochDay + 1.0
+            anchor += 1.0
+            evNext = calculateMoonEvents(anchor + 1.0, lat, lon, offset)
+            advances++
         }
 
-        val transAbs = if (evBase.transit >= evBase.rise) evBase.transit else evNext.transit + 24.0
-        val setAbs = if (evBase.set >= transAbs) evBase.set else evNext.set + 24.0
         val transTomorrow = transAbs >= 24.0
         val setTom = setAbs >= 24.0
 
