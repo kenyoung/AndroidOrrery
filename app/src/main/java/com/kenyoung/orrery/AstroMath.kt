@@ -708,6 +708,40 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     return diff
 }
 
+// Named lunar phase events (the four "principal phases").
+enum class MoonPhaseEvent(val longName: String, val shortName: String) {
+    NEW_MOON("New Moon", "New Moon"),
+    FIRST_QUARTER("First Quarter", "1st Qtr"),
+    FULL_MOON("Full Moon", "Full Moon"),
+    LAST_QUARTER("Last Quarter", "Last Qtr")
+}
+
+data class MoonPhaseCrossing(val event: MoonPhaseEvent, val utEpochDay: Double)
+
+// If a named lunar phase (New / 1st Qtr / Full / Last Qtr) occurs between
+// dayStartUt and dayEndUt, return it with the linearly-interpolated crossing
+// time. Phase angle is monotonic 0..360 except at the New Moon wrap, which
+// is detected as phase > 300 at start AND phase < 60 at end.
+fun findMoonPhaseCrossing(
+    dayStartUt: Double, dayEndUt: Double,
+    phaseStart: Double = calculateMoonPhaseAngle(dayStartUt),
+    phaseEnd: Double = calculateMoonPhaseAngle(dayEndUt)
+): MoonPhaseCrossing? {
+    fun crossing(target: Double, endAngle: Double): Double =
+        dayStartUt + (target - phaseStart) / (endAngle - phaseStart) * (dayEndUt - dayStartUt)
+    return when {
+        phaseStart < 90.0 && phaseEnd >= 90.0 ->
+            MoonPhaseCrossing(MoonPhaseEvent.FIRST_QUARTER, crossing(90.0, phaseEnd))
+        phaseStart < 180.0 && phaseEnd >= 180.0 ->
+            MoonPhaseCrossing(MoonPhaseEvent.FULL_MOON, crossing(180.0, phaseEnd))
+        phaseStart < 270.0 && phaseEnd >= 270.0 ->
+            MoonPhaseCrossing(MoonPhaseEvent.LAST_QUARTER, crossing(270.0, phaseEnd))
+        phaseStart > 300.0 && phaseEnd < 60.0 ->
+            MoonPhaseCrossing(MoonPhaseEvent.NEW_MOON, crossing(360.0, phaseEnd + 360.0))
+        else -> null
+    }
+}
+
 // Optical libration of the Moon (Meeus, chapter 53)
 // Returns Pair(libration in longitude, libration in latitude) in degrees
 fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pair<Double, Double> {

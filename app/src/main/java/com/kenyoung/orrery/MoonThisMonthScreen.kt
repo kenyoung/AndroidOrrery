@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,6 +20,9 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 private const val BRIGHTNESS_BOOST = 1.25f
+private const val TITLE_HEIGHT = 55f
+private const val HEADER_HEIGHT = 40f
+private const val GRID_TOP = TITLE_HEIGHT + HEADER_HEIGHT
 
 private fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blueTint: Boolean): android.graphics.Bitmap {
     val w = bitmap.width
@@ -48,7 +52,14 @@ private fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blu
 }
 
 @Composable
-fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: ObserverState, onDateChange: (LocalDate) -> Unit) {
+fun MoonThisMonthScreen(
+    currentDate: LocalDate,
+    lat: Double,
+    lon: Double,
+    obs: ObserverState,
+    onDateChange: (LocalDate) -> Unit,
+    onDayTap: (LocalDate) -> Unit
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val originalBitmap = remember(lat < 0.0) {
@@ -81,16 +92,19 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
         angles
     }
 
-    // Detect phase events
+    // Detect phase events using the shared helper. The pre-computed phaseData
+    // values are passed in to avoid re-evaluating calculateMoonPhaseAngle.
     val events = mutableMapOf<Int, String>()
     val fullMoonDays = mutableListOf<Int>()
     for (d in 1..daysInMonth) {
-        val phase = phaseData[d - 1]
-        val nextPhase = phaseData[d]
-        if (phase > 300.0 && nextPhase < 60.0) events[d] = "New Moon"
-        if (phase < 90.0 && nextPhase >= 90.0) events[d] = "1st Qtr"
-        if (phase < 180.0 && nextPhase >= 180.0) { events[d] = "Full Moon"; fullMoonDays.add(d) }
-        if (phase < 270.0 && nextPhase >= 270.0) events[d] = "Last Qtr"
+        val crossing = findMoonPhaseCrossing(
+            dayStartUt = 0.0, dayEndUt = 1.0,
+            phaseStart = phaseData[d - 1], phaseEnd = phaseData[d]
+        )
+        if (crossing != null) {
+            events[d] = crossing.event.shortName
+            if (crossing.event == MoonPhaseEvent.FULL_MOON) fullMoonDays.add(d)
+        }
     }
 
     val titleStr = monthStart.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
@@ -99,6 +113,31 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .pointerInput(displayMonth) {
+                // Tap a day cell to drill down to the Moon On Day page. Pointer
+                // offsets are in raw pixels; the cell layout below is in reference
+                // units (post-density-scaling), so divide by dScale.
+                detectTapGestures { offset ->
+                    val dScale = density / REFERENCE_DENSITY
+                    val w = size.width / dScale
+                    val h = size.height / dScale
+                    val numRows = ceil((startCol + daysInMonth) / 7.0).toInt()
+                    val cellW = w / 7f
+                    val cellH = (h - GRID_TOP) / numRows
+                    val refX = offset.x / dScale
+                    val refY = offset.y / dScale
+                    if (refY >= GRID_TOP) {
+                        val tapCol = (refX / cellW).toInt().coerceIn(0, 6)
+                        val tapRow = ((refY - GRID_TOP) / cellH).toInt()
+                        if (tapRow in 0 until numRows) {
+                            val day = tapRow * 7 + tapCol - startCol + 1
+                            if (day in 1..daysInMonth) {
+                                onDayTap(monthStart.withDayOfMonth(day))
+                            }
+                        }
+                    }
+                }
+            }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { dragAccumulator = 0f },
@@ -119,12 +158,9 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
         if (originalBitmap == null) return@Canvas
 
         withDensityScaling { w, h ->
-            val titleHeight = 55f
-            val headerHeight = 40f
-            val gridTop = titleHeight + headerHeight
             val numRows = ceil((startCol + daysInMonth) / 7.0).toInt()
             val cellW = w / 7f
-            val cellH = (h - gridTop) / numRows
+            val cellH = (h - GRID_TOP) / numRows
             // Text occupies 3 lines above image (day#/%, age, rise) and 2 below (set, phase)
             // with spacing. Constrain image to fit the remaining vertical space.
             val cellTextSize = 28f
@@ -152,7 +188,7 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                nc.drawText(titleStr, w / 2f, titleHeight - 10f, titlePaint)
+                nc.drawText(titleStr, w / 2f, TITLE_HEIGHT - 10f, titlePaint)
 
                 // Day-of-week headers
                 val headerPaint = Paint().apply {
@@ -164,7 +200,7 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                 }
                 val dayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
                 for (col in 0..6) {
-                    nc.drawText(dayNames[col], col * cellW + cellW / 2f, gridTop - 10f, headerPaint)
+                    nc.drawText(dayNames[col], col * cellW + cellW / 2f, GRID_TOP - 10f, headerPaint)
                 }
 
                 // Day number paint
@@ -205,7 +241,7 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                     val col = cellIndex % 7
                     val row = cellIndex / 7
                     val cellLeft = col * cellW
-                    val cellTop = gridTop + row * cellH
+                    val cellTop = GRID_TOP + row * cellH
                     val cellCenterX = cellLeft + cellW / 2f
                     val cellCenterY = cellTop + cellH / 2f
 
@@ -313,13 +349,13 @@ fun MoonThisMonthScreen(currentDate: LocalDate, lat: Double, lon: Double, obs: O
                 }
                 // Horizontal lines
                 for (row in 0..numRows) {
-                    val y = gridTop + row * cellH
+                    val y = GRID_TOP + row * cellH
                     nc.drawLine(0f, y, w, y, gridPaint)
                 }
                 // Vertical lines
                 for (col in 0..7) {
                     val x = col * cellW
-                    nc.drawLine(x, gridTop, x, gridTop + numRows * cellH, gridPaint)
+                    nc.drawLine(x, GRID_TOP, x, GRID_TOP + numRows * cellH, gridPaint)
                 }
             }
         }

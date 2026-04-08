@@ -5,9 +5,14 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -15,6 +20,8 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
@@ -87,7 +94,12 @@ private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
 @Composable
-fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
+fun MoonScreen(
+    obs: ObserverState,
+    onTimeDisplayChange: (Boolean) -> Unit,
+    dayMode: Boolean = false,
+    onBack: (() -> Unit)? = null
+) {
     val context = LocalContext.current
 
     // Ensure constellation boundaries are loaded
@@ -180,15 +192,46 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
 
     val moonAge = calculateMoonAge(currentUtEpochDay, obs.lon)
 
-    // Moon track: rise/transit/set times. Recomputed once per wall-clock minute,
-    // so when the moon sets the new track's times appear within 60 seconds without
-    // any cache-invalidation logic that could silently fail.
+    // Moon track: rise/transit/set times. Live mode fetches the next track via
+    // computeMoonTrack, refreshed once per wall-clock minute. dayMode runs a single
+    // per-day scan (midnight-to-midnight in display tz), matching Moon This Month —
+    // values are already in display hours and "(none)" shows on days with no rise/set.
     val offset = obs.lon / 15.0
-    val currentMinute = obs.now.epochSecond / 60
-    val moonEventData = remember(obs.lat, obs.lon, currentMinute) {
-        computeMoonTrack(obs.lat, obs.lon, offset, currentUtEpochDay, topo.dec)
+    val cacheKey = if (dayMode) obs.epochDay.toLong() else obs.now.epochSecond / 60
+    val moonEventData = remember(dayMode, obs.lat, obs.lon, cacheKey) {
+        if (dayMode) {
+            val displayOffsetForScan = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
+            val ev = calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, displayOffsetForScan, scanDays = 1.0)
+            EventCache(
+                events = ev,
+                anchorEpochDay = obs.epochDay,
+                transitTomorrow = false,
+                setTomorrow = false,
+                riseDec = topo.dec,
+                transitDec = topo.dec,
+                setDec = topo.dec,
+                isCircumpolar = ev.rise.isNaN() && ev.set.isNaN()
+            )
+        } else {
+            computeMoonTrack(obs.lat, obs.lon, offset, currentUtEpochDay, topo.dec)
+        }
     }
     val moonEvents = moonEventData.events
+
+    // Named-phase event label, only in dayMode: format the principal-phase
+    // crossing (if any) within the selected day's window as "<Name> at HH:mm <TZ>".
+    val phaseEventText: String? = if (dayMode) {
+        val displayOffsetForPhase = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
+        val dayStartUt = obs.epochDay - displayOffsetForPhase / 24.0
+        val crossing = findMoonPhaseCrossing(dayStartUt, dayStartUt + 1.0)
+        crossing?.let {
+            val zone = ZoneOffset.ofTotalSeconds((displayOffsetForPhase * 3600).toInt())
+            val tzLabel = if (obs.useStandardTime) obs.stdTimeLabel else "UT"
+            val eventInstant = Instant.ofEpochSecond((it.utEpochDay * SECONDS_PER_DAY).toLong())
+            val timeStr = DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(eventInstant)
+            "${it.event.longName} at $timeStr $tzLabel"
+        }
+    } else null
 
     // Rise/set azimuths
     val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonState.distGeo * AU_METERS)))
@@ -240,15 +283,19 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
             val timeLabel = if (obs.useStandardTime) obs.stdTimeLabel else "UT"
 
-            // "*" flags: event falls on a later calendar day in the display timezone.
-            // (Distinct from moonEventData.setTomorrow, which is a local-solar wrap flag.)
+            // In live mode the per-track events are in solar local hours and might fall
+            // on a later display-tz day; convert and flag with "*". In dayMode the per-day
+            // scan returned events already in display hours, all on the anchor day.
             val currentDisplayDate = floor(currentUtEpochDay + displayOffsetHours / 24.0).toLong()
-            val riseRaw = moonEvents.rise - offset + displayOffsetHours
-            val transitRaw = (moonEvents.transit + if (moonEventData.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
-            val setRaw = (moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
-            val riseIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, riseRaw, currentDisplayDate)
-            val transitIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, transitRaw, currentDisplayDate)
-            val setIsTomorrow = isEventTomorrow(moonEventData.anchorEpochDay, setRaw, currentDisplayDate)
+            val riseRaw = if (dayMode) moonEvents.rise
+                else moonEvents.rise - offset + displayOffsetHours
+            val transitRaw = if (dayMode) moonEvents.transit
+                else (moonEvents.transit + if (moonEventData.transitTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
+            val setRaw = if (dayMode) moonEvents.set
+                else (moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0) - offset + displayOffsetHours
+            val riseIsTomorrow = !dayMode && isEventTomorrow(moonEventData.anchorEpochDay, riseRaw, currentDisplayDate)
+            val transitIsTomorrow = !dayMode && isEventTomorrow(moonEventData.anchorEpochDay, transitRaw, currentDisplayDate)
+            val setIsTomorrow = !dayMode && isEventTomorrow(moonEventData.anchorEpochDay, setRaw, currentDisplayDate)
 
             val moonW = phasedBitmap.width.toFloat()
             val moonH = phasedBitmap.height.toFloat()
@@ -258,7 +305,8 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             val topMargin = 10f
             val bottomMargin = 10f
             val hasNextDayFootnote = riseIsTomorrow || transitIsTomorrow || setIsTomorrow
-            val numInfoLines = if (hasNextDayFootnote) 14 else 13
+            // dayMode omits Line 3 (current El/Az/PA + countdown), so one fewer line.
+            val numInfoLines = (if (hasNextDayFootnote) 14 else 13) - if (dayMode) 1 else 0
             val boxGap = lineSpacing * 0.5f
             val infoHeight = numInfoLines * lineSpacing + 2 * boxGap + (if (hasNextDayFootnote) boxGap / 4f else 0f) + 10f
             val availH = h - infoHeight - topMargin - bottomMargin
@@ -277,13 +325,29 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
                 nc.save()
-                val rotationDeg = parallacticAngleDeg + if (obs.lat < 0.0) 180.0 else 0.0
+                // Live mode: rotate by the parallactic angle so the image matches what
+                // the user sees in the sky. dayMode represents a static day, not a
+                // sky orientation, so skip the parallactic rotation. The 180° flip for
+                // southern observers stays in both modes.
+                val rotationDeg = (if (dayMode) 0.0 else parallacticAngleDeg) +
+                    if (obs.lat < 0.0) 180.0 else 0.0
                 nc.rotate(rotationDeg.toFloat(), imgCenterX, imgCenterY)
                 val srcRect = android.graphics.Rect(0, 0, moonW.toInt(), moonH.toInt())
                 val dstRect = android.graphics.Rect(dstX, dstY, dstX + dstW, dstY + dstH)
                 val bitmapPaint = android.graphics.Paint().apply { isFilterBitmap = true }
                 nc.drawBitmap(phasedBitmap, srcRect, dstRect, bitmapPaint)
                 nc.restore()
+
+                if (phaseEventText != null) {
+                    val phasePaint = Paint().apply {
+                        isAntiAlias = true
+                        color = android.graphics.Color.WHITE
+                        textSize = infoTextSize
+                        textAlign = Paint.Align.CENTER
+                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    }
+                    nc.drawText(phaseEventText, w / 2f, dstY - 10f - infoTextSize, phasePaint)
+                }
             }
 
             drawIntoCanvas { canvas ->
@@ -324,10 +388,12 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                     }
                 }
 
-                // Line 1: Date and time
+                // Line 1: Date and time. dayMode shows the noon instant for which
+                // RA/Dec etc. were computed, so HH:mm is enough; live mode needs HH:mm:ss.
                 var lineY = textTop + infoTextSize
                 val displayZone = ZoneOffset.ofTotalSeconds((displayOffsetHours * 3600).toInt())
-                val dateTimeStr = DateTimeFormatter.ofPattern("dd MMM yyyy  HH:mm:ss").withZone(displayZone).format(obs.now) + "  "
+                val datePattern = if (dayMode) "dd MMM yyyy  HH:mm" else "dd MMM yyyy  HH:mm:ss"
+                val dateTimeStr = DateTimeFormatter.ofPattern(datePattern).withZone(displayZone).format(obs.now) + "  "
                 drawCenteredSegments(lineY,
                     dateTimeStr to false,
                     timeLabel to true)
@@ -341,38 +407,42 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
                     "%.1f days".format(moonAge) to false)
 
                 // Line 3: Current altitude and azimuth, countdown to next rise/set
-                lineY += lineSpacing
-                val countdownHasTarget = if (isUp) !moonEvents.set.isNaN() else !moonEvents.rise.isNaN()
-                val countdownText = if (countdownHasTarget) {
-                    val targetHoursFromAnchor = if (isUp) {
-                        moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0
+                // Skipped in dayMode (the page represents a static moment with no
+                // "current time" to count down from).
+                if (!dayMode) {
+                    lineY += lineSpacing
+                    val countdownHasTarget = if (isUp) !moonEvents.set.isNaN() else !moonEvents.rise.isNaN()
+                    val countdownText = if (countdownHasTarget) {
+                        val targetHoursFromAnchor = if (isUp) {
+                            moonEvents.set + if (moonEventData.setTomorrow) 24.0 else 0.0
+                        } else {
+                            moonEvents.rise
+                        }
+                        val anchorMidnightUT = floor(moonEventData.anchorEpochDay) - offset / 24.0
+                        var eventUtEpochDay = anchorMidnightUT + targetHoursFromAnchor / 24.0
+                        // Safety: ensure positive countdown if altitude/event-time edges disagree
+                        if (eventUtEpochDay < currentUtEpochDay) eventUtEpochDay += 1.0
+                        val secondsUntil = ((eventUtEpochDay - currentUtEpochDay) * SECONDS_PER_DAY).toLong()
+                            .coerceAtLeast(0L)
+                        val h = secondsUntil / 3600
+                        val m = (secondsUntil % 3600) / 60
+                        if (isUp) "Setting in %dh %02dm".format(h, m)
+                        else "Rising in %dh %02dm".format(h, m)
                     } else {
-                        moonEvents.rise
+                        if (isUp) "(Circumpolar)" else "(Never rises)"
                     }
-                    val anchorMidnightUT = floor(moonEventData.anchorEpochDay) - offset / 24.0
-                    var eventUtEpochDay = anchorMidnightUT + targetHoursFromAnchor / 24.0
-                    // Safety: ensure positive countdown if altitude/event-time edges disagree
-                    if (eventUtEpochDay < currentUtEpochDay) eventUtEpochDay += 1.0
-                    val secondsUntil = ((eventUtEpochDay - currentUtEpochDay) * SECONDS_PER_DAY).toLong()
-                        .coerceAtLeast(0L)
-                    val h = secondsUntil / 3600
-                    val m = (secondsUntil % 3600) / 60
-                    if (isUp) "Setting in %dh %02dm".format(h, m)
-                    else "Rising in %dh %02dm".format(h, m)
-                } else {
-                    if (isUp) "(Circumpolar)" else "(Never rises)"
-                }
-                if (isUp) {
-                    drawCenteredSegments(lineY,
-                        "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
-                        "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
-                        "PA " to true, "%.1f\u00B0  ".format(parallacticAngleDeg) to false,
-                        countdownText to false)
-                } else {
-                    drawCenteredSegments(lineY,
-                        "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
-                        "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
-                        countdownText to false)
+                    if (isUp) {
+                        drawCenteredSegments(lineY,
+                            "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
+                            "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
+                            "PA " to true, "%.1f\u00B0  ".format(parallacticAngleDeg) to false,
+                            countdownText to false)
+                    } else {
+                        drawCenteredSegments(lineY,
+                            "El " to true, "%.1f\u00B0  ".format(currentAlt) to false,
+                            "Az " to true, "%.1f\u00B0  ".format(currentAz) to false,
+                            countdownText to false)
+                    }
                 }
 
                 // Lines 4-5: Rise / Transit / Set times, then Az/El below
@@ -533,6 +603,17 @@ fun MoonScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
             }
         }
     }
-    TimeDisplayToggle(obs.useStandardTime, obs.useDst, onTimeDisplayChange)
+    if (onBack != null) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            TextButton(
+                onClick = onBack,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00))
+            ) {
+                Text("\u25C0 Back", fontWeight = FontWeight.Bold)
+            }
+        }
+    } else {
+        TimeDisplayToggle(obs.useStandardTime, obs.useDst, onTimeDisplayChange)
+    }
     }
 }
