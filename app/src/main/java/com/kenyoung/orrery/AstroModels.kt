@@ -16,7 +16,7 @@ val LabelColor = Color(0xFFADD8E6) // Light Blue
 
 // --- EARTHSHINE ---
 private const val EARTH_SHINE_START = 15.0     // illumination % below which earthshine appears
-private const val EARTH_SHINE_MAXIMUM = 0.10   // maximum earthshine brightness (fraction of full)
+private const val EARTH_SHINE_MAXIMUM = 0.2    // maximum earthshine brightness (fraction of full)
 
 fun earthshineBrightness(illuminationPercent: Double): Double {
     if (illuminationPercent >= EARTH_SHINE_START) return 0.0

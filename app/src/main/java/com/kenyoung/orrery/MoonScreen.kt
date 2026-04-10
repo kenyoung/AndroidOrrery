@@ -101,7 +101,8 @@ fun MoonScreen(
     obs: ObserverState,
     onTimeDisplayChange: (Boolean) -> Unit,
     dayMode: Boolean = false,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    refreshKey: Int = 0
 ) {
     val context = LocalContext.current
 
@@ -201,7 +202,7 @@ fun MoonScreen(
     // values are already in display hours and "(none)" shows on days with no rise/set.
     val offset = obs.lon / 15.0
     val cacheKey = if (dayMode) obs.epochDay.toLong() else obs.now.epochSecond / 60
-    val moonEventData = remember(dayMode, obs.lat, obs.lon, cacheKey) {
+    val moonEventData = remember(dayMode, obs.lat, obs.lon, cacheKey, refreshKey) {
         if (dayMode) {
             val displayOffsetForScan = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
             val ev = calculateMoonEvents(obs.epochDay, obs.lat, obs.lon, displayOffsetForScan, scanDays = 1.0)

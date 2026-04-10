@@ -268,6 +268,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var orreriesExpanded by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
+    var moonRefreshKey by remember { mutableStateOf(0) }
     if (showFirstLaunchHint) {
         Dialog(onDismissRequest = {
             showFirstLaunchHint = false
@@ -358,7 +359,10 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             onDstChange = { useDst = it },
             stdOffsetHours = stdOffsetHours,
             stdTimeLabel = stdTimeLabel,
-            onDismiss = { showDateDialog = false },
+            onDismiss = {
+                moonRefreshKey++
+                showDateDialog = false
+            },
             onConfirm = { usePhone, utEpochDay, inputStrings ->
                 usePhoneTime = usePhone
                 if (!usePhone && utEpochDay != null) {
@@ -367,6 +371,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     manualEpochDay = getManualFromInstant(currentInstant)
                     savedDateInput = inputStrings
                 }
+                moonRefreshKey++
                 showDateDialog = false
             }
         )
@@ -555,7 +560,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
-                    Screen.MOON -> MoonScreen(obs, onTimeDisplayChange = { useStandardTime = it })
+                    Screen.MOON -> MoonScreen(obs, onTimeDisplayChange = { useStandardTime = it }, refreshKey = moonRefreshKey)
                     Screen.MOON_ON_DAY -> {
                         val day = selectedMoonDay ?: effectiveDate
                         val noonOffsetHours = if (useStandardTime) stdOffsetHours else 0.0
