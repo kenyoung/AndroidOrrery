@@ -162,7 +162,6 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 if (phaseAngle < 180 && nextPhaseAngle >= 180) {
                     fullMoonDays.add(d)
                 }
-
             }
 
             if (fullMoonDays.size >= 2) {
@@ -208,7 +207,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 val isBlueMoon = blueMoonMap[dayDate] == true
                 val illuminationColor = if (isBlueMoon) cyanColor else Color.White
 
-                val illum = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
+                val illum = illuminationFromPhaseAngle(phaseAngle)
                 val esFraction = earthshineBrightness(illum).toFloat()
                 val bgFillColor = Color(esFraction, esFraction, esFraction)
 

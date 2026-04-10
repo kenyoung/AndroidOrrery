@@ -532,7 +532,7 @@ fun PlanetElevationsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) ->
         val moonCircumpolar = moonEventData.isCircumpolar
         val moonIsUp = moonAboveHorizon
         val moonPhaseAngle = calculateMoonPhaseAngle(currentUtEpochDay)
-        val moonIllumination = (1.0 - cos(Math.toRadians(moonPhaseAngle))) / 2.0 * 100.0
+        val moonIllumination = illuminationFromPhaseAngle(moonPhaseAngle)
         val moonLabelColor = if (moonIsUp && (isNightNow || moonIllumination > 25.0)) labelGreen else labelRed
         val moonAsterisk = isRiseTomorrow(moonEv, moonEpochBase)
         if (moonAsterisk) anyAsterisk = true

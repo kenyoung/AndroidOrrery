@@ -264,7 +264,7 @@ fun MoonThisMonthScreen(
                     val cellTextColor = if (isToday) android.graphics.Color.WHITE else greenColorInt
 
                     // Illumination percentage in upper-right
-                    val illum = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
+                    val illum = illuminationFromPhaseAngle(phaseAngle)
                     cellDataPaint.color = cellTextColor
                     cellDataPaint.textAlign = Paint.Align.RIGHT
                     nc.drawText("%.0f%%".format(illum), cellLeft + cellW - 4f, cellTop + textSize28, cellDataPaint)

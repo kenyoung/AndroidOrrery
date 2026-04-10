@@ -42,7 +42,7 @@ internal fun createTexturedMoonBitmap(
     val phaseRad = Math.toRadians(phaseAngleDeg)
     val cosPhase = cos(phaseRad)
     val isWaxing = phaseAngleDeg <= 180.0
-    val illumination = (1.0 - cosPhase) / 2.0 * 100.0
+    val illumination = illuminationFromPhaseAngle(phaseAngleDeg)
     val esFloor = earthshineBrightness(illumination)
 
     for (py in 0 until outputSize) {

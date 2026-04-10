@@ -387,7 +387,7 @@ fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
     val moonAlt = getAltitude(moonState.ra, moonState.dec, epochDay, lat, lon)
     var phaseAngle = (moonState.eclipticLon - sunState.eclipticLon) % 360.0
     if (phaseAngle < 0) phaseAngle += 360.0
-    val illumPercent = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
+    val illumPercent = illuminationFromPhaseAngle(phaseAngle)
     if (moonAlt >= moonDarkThreshold(illumPercent)) return false
 
     return true

@@ -708,6 +708,9 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
     return diff
 }
 
+fun illuminationFromPhaseAngle(phaseAngleDeg: Double): Double =
+    (1.0 - cos(Math.toRadians(phaseAngleDeg))) / 2.0 * 100.0
+
 // Named lunar phase events (the four "principal phases").
 enum class MoonPhaseEvent(val longName: String, val shortName: String) {
     NEW_MOON("New Moon", "New Moon"),
