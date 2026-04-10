@@ -46,6 +46,8 @@ internal fun createPhasedMoonBitmap(
     val isWaxing = phaseAngleDeg <= 180.0
     val flipH = lat < 0.0
     val rSq = radius * radius
+    val illumination = (1.0 - cosPhase) / 2.0 * 100.0
+    val esFloor = earthshineBrightness(illumination)
 
     for (py in 0 until h) {
         val dy = py - cy
@@ -79,10 +81,11 @@ internal fun createPhasedMoonBitmap(
             val g = ((origPixel shr 8) and 0xFF)
             val b = (origPixel and 0xFF)
 
+            val shadow = shadowFactor.coerceAtLeast(esFloor)
             pixels[idx] = (origAlpha shl 24) or
-                ((r * shadowFactor).toInt() shl 16) or
-                ((g * shadowFactor).toInt() shl 8) or
-                (b * shadowFactor).toInt()
+                ((r * shadow).toInt() shl 16) or
+                ((g * shadow).toInt() shl 8) or
+                (b * shadow).toInt()
         }
     }
 
@@ -218,9 +221,9 @@ fun MoonScreen(
     }
     val moonEvents = moonEventData.events
 
-    // Named-phase event label, only in dayMode: format the principal-phase
-    // crossing (if any) within the selected day's window as "<Name> at HH:mm <TZ>".
-    val phaseEventText: String? = if (dayMode) {
+    // If a named principal phase (New / 1st Qtr / Full / Last Qtr) falls within
+    // the current display-tz day, show it above the moon image on both pages.
+    val phaseEventText: String? = run {
         val displayOffsetForPhase = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
         val dayStartUt = obs.epochDay - displayOffsetForPhase / 24.0
         val crossing = findMoonPhaseCrossing(dayStartUt, dayStartUt + 1.0)
@@ -231,7 +234,7 @@ fun MoonScreen(
             val timeStr = DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(eventInstant)
             "${it.event.longName} at $timeStr $tzLabel"
         }
-    } else null
+    }
 
     // Rise/set azimuths
     val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonState.distGeo * AU_METERS)))

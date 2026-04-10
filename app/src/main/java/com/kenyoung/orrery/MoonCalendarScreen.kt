@@ -37,9 +37,6 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
     val lightBlueColorInt = Color(0xFFADD8E6).toArgb()
     val cyanColor = Color.Cyan
 
-    // Color definitions for Earthshine shading
-    val grayColor = Color.Gray          // For +-3 days
-    val darkGrayColor = Color.DarkGray  // For exact New Moon
     val fullMoonRingColor = Color.Red
 
     // Get the actual system date for the "Today" highlight.
@@ -152,7 +149,6 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
 
         // --- PRE-CALCULATE EVENTS ---
         val blueMoonMap = mutableMapOf<LocalDate, Boolean>()
-        val newMoonDates = mutableSetOf<LocalDate>()
 
         for (mDate in months) {
             val daysInMonth = mDate.lengthOfMonth()
@@ -167,11 +163,6 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                     fullMoonDays.add(d)
                 }
 
-                // New Moon Check: Crossing 360/0 (High to Low)
-                // e.g., 350 -> 5
-                if (phaseAngle > 300.0 && nextPhaseAngle < 60.0) {
-                    newMoonDates.add(mDate.withDayOfMonth(d))
-                }
             }
 
             if (fullMoonDays.size >= 2) {
@@ -217,17 +208,9 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 val isBlueMoon = blueMoonMap[dayDate] == true
                 val illuminationColor = if (isBlueMoon) cyanColor else Color.White
 
-                // Determine Background Color by Date Offset from New Moon (Expanded to 3 days)
-                val bgFillColor = when {
-                    newMoonDates.contains(dayDate) -> darkGrayColor // Exact New Moon
-                    newMoonDates.contains(dayDate.minusDays(1)) -> grayColor // NM + 1
-                    newMoonDates.contains(dayDate.minusDays(2)) -> grayColor // NM + 2
-                    newMoonDates.contains(dayDate.minusDays(3)) -> grayColor // NM + 3
-                    newMoonDates.contains(dayDate.plusDays(1)) -> grayColor  // NM - 1
-                    newMoonDates.contains(dayDate.plusDays(2)) -> grayColor  // NM - 2
-                    newMoonDates.contains(dayDate.plusDays(3)) -> grayColor  // NM - 3
-                    else -> Color.Black
-                }
+                val illum = (1.0 - cos(Math.toRadians(phaseAngle))) / 2.0 * 100.0
+                val esFraction = earthshineBrightness(illum).toFloat()
+                val bgFillColor = Color(esFraction, esFraction, esFraction)
 
                 drawMoonPhase(
                     center = Offset(xCenter, yCenter),

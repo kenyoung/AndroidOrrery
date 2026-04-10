@@ -42,6 +42,8 @@ internal fun createTexturedMoonBitmap(
     val phaseRad = Math.toRadians(phaseAngleDeg)
     val cosPhase = cos(phaseRad)
     val isWaxing = phaseAngleDeg <= 180.0
+    val illumination = (1.0 - cosPhase) / 2.0 * 100.0
+    val esFloor = earthshineBrightness(illumination)
 
     for (py in 0 until outputSize) {
         val dy = py - cy
@@ -131,9 +133,10 @@ internal fun createTexturedMoonBitmap(
                 (0.5 + 0.5 * tanh(signedDist / transitionWidth)).coerceIn(0.0, 1.0)
             }
 
-            val finalR = (r * shadowFactor).toInt().coerceIn(0, 255)
-            val finalG = (g * shadowFactor).toInt().coerceIn(0, 255)
-            val finalB = (b * shadowFactor).toInt().coerceIn(0, 255)
+            val shadow = shadowFactor.coerceAtLeast(esFloor)
+            val finalR = (r * shadow).toInt().coerceIn(0, 255)
+            val finalG = (g * shadow).toInt().coerceIn(0, 255)
+            val finalB = (b * shadow).toInt().coerceIn(0, 255)
 
             pixels[py * outputSize + px] = (0xFF shl 24) or (finalR shl 16) or (finalG shl 8) or finalB
         }
