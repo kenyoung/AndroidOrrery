@@ -11,6 +11,8 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 /.idea/.name
+/.idea/deviceManager.xml
+/.idea/inspectionProfiles
 .DS_Store
 /build
 /captures
@@ -20,3 +22,9 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+__pycache__/
+app/release/
+scripts/.solar_eclipse_cache/
+timezone_test_cache.csv
+gifNotes
+github-pages-instructions.txt
