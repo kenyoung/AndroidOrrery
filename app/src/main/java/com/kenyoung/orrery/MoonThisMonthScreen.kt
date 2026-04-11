@@ -19,12 +19,12 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-private const val BRIGHTNESS_BOOST = 1.25f
+internal const val BRIGHTNESS_BOOST = 1.25f
 private const val TITLE_HEIGHT = 55f
 private const val HEADER_HEIGHT = 40f
 private const val GRID_TOP = TITLE_HEIGHT + HEADER_HEIGHT
 
-private fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blueTint: Boolean): android.graphics.Bitmap {
+internal fun adjustBrightness(bitmap: android.graphics.Bitmap, factor: Float, blueTint: Boolean): android.graphics.Bitmap {
     val w = bitmap.width
     val h = bitmap.height
     val pixels = IntArray(w * h)

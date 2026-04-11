@@ -1,5 +1,6 @@
 package com.kenyoung.orrery
 
+import android.graphics.BitmapFactory
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -9,11 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -31,13 +29,21 @@ private fun phaseAnglePair(epochDay: Double, lon: Double): Pair<Double, Double> 
 
 @Composable
 fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateChange: (LocalDate) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val bgColor = Color.Black
     val yearColorInt = Color.Green.toArgb()
     val yellowColorInt = Color.Yellow.toArgb()
     val lightBlueColorInt = Color(0xFFADD8E6).toArgb()
-    val cyanColor = Color.Cyan
 
     val fullMoonRingColor = Color.Red
+
+    val originalBitmap = remember(lat < 0.0) {
+        val raw = context.assets.open("fullMoon.png").use { BitmapFactory.decodeStream(it) }
+        if (raw != null && lat < 0.0) {
+            val matrix = android.graphics.Matrix().apply { postRotate(180f) }
+            android.graphics.Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+        } else raw
+    }
 
     // Get the actual system date for the "Today" highlight.
     // Don't use remember {} here - we want this to update if the app
@@ -105,6 +111,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 )
             }
     ) {
+        if (originalBitmap == null) return@Canvas
         withDensityScaling { w, h ->
 
         val topMargin = 80f // For Year
@@ -118,6 +125,12 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
 
         val colWidth = gridW / 21f
         val rowHeight = gridH / 31f
+
+        // Moon thumbnail: same size for every cell, so scale once up front.
+        val moonRadius = min(colWidth, rowHeight) * 0.4f
+        val thumbSize = (moonRadius * 2f).toInt().coerceAtLeast(16)
+        val thumbnail = android.graphics.Bitmap.createScaledBitmap(originalBitmap, thumbSize, thumbSize, true)
+        val bitmapPaint = Paint().apply { isFilterBitmap = true }
 
         // --- DRAW YEARS ---
         val monthsByYear = months.withIndex().groupBy { it.value.year }
@@ -195,7 +208,6 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
 
             // Draw Moons
             val daysInMonth = mDate.lengthOfMonth()
-            val moonRadius = min(colWidth, rowHeight) * 0.4f
 
             for (d in 1..daysInMonth) {
                 val dayDate = mDate.withDayOfMonth(d)
@@ -205,20 +217,20 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 val yCenter = topMargin + headerHeight + ((d - 1) * rowHeight) + (rowHeight / 2)
 
                 val isBlueMoon = blueMoonMap[dayDate] == true
-                val illuminationColor = if (isBlueMoon) cyanColor else Color.White
+                var dayBitmap = createPhasedMoonBitmap(thumbnail, phaseAngle, lat)
+                if (isBlueMoon) {
+                    dayBitmap = adjustBrightness(dayBitmap, BRIGHTNESS_BOOST, blueTint = true)
+                }
 
-                val illum = illuminationFromPhaseAngle(phaseAngle)
-                val esFraction = earthshineBrightness(illum).toFloat()
-                val bgFillColor = Color(esFraction, esFraction, esFraction)
-
-                drawMoonPhase(
-                    center = Offset(xCenter, yCenter),
-                    radius = moonRadius,
-                    phaseAngle = phaseAngle,
-                    lat = lat,
-                    illuminatedColor = illuminationColor,
-                    bgColor = bgFillColor
-                )
+                val imgLeft = (xCenter - thumbSize / 2f).toInt()
+                val imgTop = (yCenter - thumbSize / 2f).toInt()
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawBitmap(
+                        dayBitmap, null,
+                        android.graphics.Rect(imgLeft, imgTop, imgLeft + thumbSize, imgTop + thumbSize),
+                        bitmapPaint
+                    )
+                }
 
                 // Draw Red Ring if this is the exact Full Moon day
                 if (phaseAngle < 180 && nextPhaseAngle >= 180) {
@@ -244,69 +256,4 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
         }
         }
     }
-}
-
-fun DrawScope.drawMoonPhase(
-    center: Offset,
-    radius: Float,
-    phaseAngle: Double, // 0..360
-    lat: Double,
-    illuminatedColor: Color,
-    bgColor: Color
-) {
-    // 1. Draw Background
-    drawCircle(color = bgColor, radius = radius, center = center)
-
-    // 2. Geometry Setup
-    val isNorth = lat >= 0
-    val isWaxing = phaseAngle in 0.0..180.0
-    val pRad = Math.toRadians(phaseAngle)
-
-    // Terminator width geometry
-    val semiMinorAxis = (radius * cos(pRad)).toFloat()
-    val bulgeRect = Rect(center.x - abs(semiMinorAxis), center.y - radius, center.x + abs(semiMinorAxis), center.y + radius)
-
-    val moonPath = Path()
-
-    if (isNorth) {
-        if (isWaxing) {
-            // Waxing North: Right side illuminated
-            moonPath.arcTo(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), -90f, 180f, true)
-            if (phaseAngle < 90) { // Crescent
-                moonPath.arcTo(bulgeRect, 90f, -180f, false)
-            } else { // Gibbous
-                moonPath.arcTo(bulgeRect, 90f, 180f, false)
-            }
-        } else {
-            // Waning North: Left side illuminated
-            moonPath.arcTo(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), 90f, 180f, true)
-            if (phaseAngle < 270) { // Gibbous
-                moonPath.arcTo(bulgeRect, -90f, 180f, false)
-            } else { // Crescent
-                moonPath.arcTo(bulgeRect, -90f, -180f, false)
-            }
-        }
-    } else {
-        // Southern Hemisphere
-        if (isWaxing) {
-            // Waxing South: Left side illuminated
-            moonPath.arcTo(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), 90f, 180f, true)
-            if (phaseAngle < 90) { // Crescent
-                moonPath.arcTo(bulgeRect, -90f, -180f, false)
-            } else { // Gibbous
-                moonPath.arcTo(bulgeRect, -90f, 180f, false)
-            }
-        } else {
-            // Waning South: Right side illuminated
-            moonPath.arcTo(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), -90f, 180f, true)
-            if (phaseAngle < 270) { // Gibbous
-                moonPath.arcTo(bulgeRect, 90f, 180f, false)
-            } else { // Crescent
-                moonPath.arcTo(bulgeRect, 90f, -180f, false)
-            }
-        }
-    }
-
-    moonPath.close()
-    drawPath(path = moonPath, color = illuminatedColor)
 }
