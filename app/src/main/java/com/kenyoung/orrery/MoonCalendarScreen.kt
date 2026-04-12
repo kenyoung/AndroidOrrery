@@ -221,6 +221,7 @@ fun MoonCalendarScreen(currentDate: LocalDate, lat: Double, lon: Double, onDateC
                 if (isBlueMoon) {
                     dayBitmap = adjustBrightness(dayBitmap, BRIGHTNESS_BOOST, blueTint = true)
                 }
+                dayBitmap = adjustBrightness(dayBitmap, 1.5f, blueTint = false)
 
                 val imgLeft = (xCenter - thumbSize / 2f).toInt()
                 val imgTop = (yCenter - thumbSize / 2f).toInt()
