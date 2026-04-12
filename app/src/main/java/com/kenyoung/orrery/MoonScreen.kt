@@ -93,6 +93,7 @@ internal fun createPhasedMoonBitmap(
     return result
 }
 
+private const val KM_TO_MILES = 0.621371
 private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
@@ -430,8 +431,8 @@ fun MoonScreen(
                             .coerceAtLeast(0L)
                         val h = secondsUntil / 3600
                         val m = (secondsUntil % 3600) / 60
-                        if (isUp) "Setting in %dh %02dm".format(h, m)
-                        else "Rising in %dh %02dm".format(h, m)
+                        if (isUp) "Sets in %dh %02dm".format(h, m)
+                        else "Rises in %dh %02dm".format(h, m)
                     } else {
                         if (isUp) "(Circumpolar)" else "(Never rises)"
                     }
@@ -518,35 +519,38 @@ fun MoonScreen(
                 // Line 6: Distance and angular diameter
                 lineY += lineSpacing + (if (hasNextDayFootnote) boxGap / 4f else boxGap)
                 drawCenteredSegments(lineY,
-                    "Distance  " to true, "%,.0f km  ".format(moonDistKm) to false,
-                    "Diameter " to true, "%.1f'".format(angularDiamArcmin) to false)
+                    "Dist. " to true, "%,.0f km (%,.0f mi)  ".format(moonDistKm, moonDistKm * KM_TO_MILES) to false,
+                    "Diam. " to true, "%.1f'".format(angularDiamArcmin) to false)
 
                 // Line 7: Apparent RA/Dec
                 lineY += lineSpacing
-                val raTotalMin = round(appRaHours * 60.0).toInt()
-                val raH = raTotalMin / 60
-                val raM = raTotalMin % 60
+                val raTotalSec = round(appRaHours * 3600.0).toInt()
+                val raH = raTotalSec / 3600
+                val raM = (raTotalSec % 3600) / 60
+                val raS = raTotalSec % 60
                 val decSign = if (appDecDeg >= 0) "+" else "-"
                 val absDec = abs(appDecDeg)
-                val decTotalMin = round(absDec * 60.0).toInt()
-                val decD = decTotalMin / 60
-                val decM = decTotalMin % 60
+                val decTotalSec = round(absDec * 3600.0).toInt()
+                val decD = decTotalSec / 3600
+                val decM = (decTotalSec % 3600) / 60
+                val decS = decTotalSec % 60
                 val haDisplay = normalizeHourAngle(haHours)
                 val haSign = if (haDisplay >= 0) "+" else "-"
                 val absHa = abs(haDisplay)
-                val haTotalMin = round(absHa * 60.0).toInt()
-                val haH = haTotalMin / 60
-                val haM = haTotalMin % 60
+                val haTotalSec = round(absHa * 3600.0).toInt()
+                val haH = haTotalSec / 3600
+                val haM = (haTotalSec % 3600) / 60
+                val haS = haTotalSec % 60
                 drawCenteredSegments(lineY,
-                    "RA " to true, "%02dh %02dm  ".format(raH, raM) to false,
-                    "Dec " to true, "%s%02d\u00B0 %02d'  ".format(decSign, decD, decM) to false,
-                    "HA " to true, "%s%dh %02dm".format(haSign, haH, haM) to false)
+                    "RA " to true, "%02d:%02d:%02d  ".format(raH, raM, raS) to false,
+                    "Dec " to true, "%s%02d:%02d:%02d  ".format(decSign, decD, decM, decS) to false,
+                    "HA " to true, "%s%d:%02d:%02d".format(haSign, haH, haM, haS) to false)
 
                 // Line 8: Constellation and elongation
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
                     "Constellation  " to true, "$constellation  " to false,
-                    "Sun Dist. " to true, "%.1f\u00B0".format(elongation) to false)
+                    "\u2609 Dist. " to true, "%.1f\u00B0".format(elongation) to false)
 
                 // Line 9: Ecliptic longitude and latitude
                 lineY += lineSpacing
