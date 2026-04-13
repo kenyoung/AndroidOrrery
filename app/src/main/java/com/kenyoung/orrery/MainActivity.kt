@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, PLANET_PATHS, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
     LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -417,7 +417,16 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                         if (screenAnimStopped && usePhoneTime) {
                             TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                         }
-                        Text(text = "Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold), modifier = Modifier.align(Alignment.Center))
+                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold))
+                            val timeDisplay = if (useStandardTime) {
+                                val localFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).toInt()))
+                                "${localFormatter.format(currentInstant)} $stdTimeLabel"
+                            } else {
+                                "$utString UT"
+                            }
+                            Text(text = "$dateString  $timeDisplay", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                        }
                     }
                 },
                 actions = {
@@ -428,6 +437,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Transits" to Screen.TRANSITS,
                             "Planet Elevations" to Screen.ELEVATIONS,
                             "Planet Compass" to Screen.COMPASS,
+                            "Planet Paths" to Screen.PLANET_PATHS,
                             "Object Visibility" to Screen.OBJECT_VISIBILITY,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
@@ -564,6 +574,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(obs) { useStandardTime = it }
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
+                    Screen.PLANET_PATHS -> PlanetPathsScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
                     Screen.MOON -> MoonScreen(obs, onTimeDisplayChange = { useStandardTime = it }, refreshKey = moonRefreshKey)
                     Screen.MOON_ON_DAY -> {
