@@ -23,6 +23,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val jd = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
     val lst = calculateLSTHours(jd, obs.lon)
     val lat = obs.lat
+    val isSouthern = lat < 0.0
 
     val lightBlueInt = Color(0xFFADD8E6).toArgb()
     val horizonColorInt = Color(0xFF444444).toArgb()
@@ -34,6 +35,8 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         val az: Double, val alt: Double,
         val trail: List<Pair<Double, Double>>
     )
+
+    fun displayAz(az: Double) = if (isSouthern) (az - 180.0).mod(360.0) else az
 
     fun computeTrail(name: String, isMoon: Boolean): List<Pair<Double, Double>> {
         val stepDays = TRAIL_STEP_MINUTES / 1440.0
@@ -50,7 +53,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
                 Pair(apparent.ra / 15.0, apparent.dec)
             }
             val azAlt = calculateAzAlt(sampleLst, lat, raH, dec)
-            Pair(azAlt.az, applyRefraction(azAlt.alt).toDouble())
+            Pair(displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble())
         }
     }
 
@@ -60,7 +63,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val sunState = AstroEngine.getBodyState("Sun", jd)
     val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
     val sunAz = calculateAzAlt(lst, lat, sunApparent.ra / 15.0, sunApparent.dec)
-    bodies.add(BodyData("\u2609", Color.Yellow.toArgb(), sunAz.az, applyRefraction(sunAz.alt).toDouble(),
+    bodies.add(BodyData("\u2609", Color.Yellow.toArgb(), displayAz(sunAz.az), applyRefraction(sunAz.alt).toDouble(),
         computeTrail("Sun", false)))
 
     // Moon (with topocentric correction)
@@ -68,7 +71,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val moonApparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
     val topoMoon = toTopocentric(moonApparent.ra, moonApparent.dec, moonState.distGeo, lat, obs.lon, lst)
     val moonAz = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
-    bodies.add(BodyData("\u263E", Color.White.toArgb(), moonAz.az, applyRefraction(moonAz.alt).toDouble(),
+    bodies.add(BodyData("\u263E", Color.White.toArgb(), displayAz(moonAz.az), applyRefraction(moonAz.alt).toDouble(),
         computeTrail("Moon", true)))
 
     // Planets
@@ -76,7 +79,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         val state = AstroEngine.getBodyState(p.name, jd)
         val apparent = j2000ToApparent(state.ra, state.dec, jd)
         val azAlt = calculateAzAlt(lst, lat, apparent.ra / 15.0, apparent.dec)
-        bodies.add(BodyData(p.symbol, p.color.toArgb(), azAlt.az, applyRefraction(azAlt.alt).toDouble(),
+        bodies.add(BodyData(p.symbol, p.color.toArgb(), displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble(),
             computeTrail(p.name, false)))
     }
 
@@ -180,7 +183,10 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
 
         // Draw azimuth ticks and labels (at horizon or bottom of chart)
         val azTickY = if (horizonVisible) altToY(0.0) else chartBottom
-        val cardinalLabels = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        val cardinalLabels = if (isSouthern)
+            listOf("S", "SW", "W", "NW", "N", "NE", "E", "SE")
+        else
+            listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
         for ((idx, deg) in (0..315 step 45).withIndex()) {
             val x = azToX(deg.toDouble())
             drawIntoCanvas { nc ->
