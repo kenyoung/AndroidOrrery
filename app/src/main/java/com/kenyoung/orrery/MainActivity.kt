@@ -534,12 +534,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                 BottomAppBar(containerColor = Color.Black, contentColor = Color.White) {
                     if (isAnimating) {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Button(onClick = { isAnimating = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("STOP") }
+                            Button(onClick = { isAnimating = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red, contentColor = Color.White)) { Text("STOP") }
                         }
                     } else {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                             listOf(1 to 0.125, 10 to 1.25, 100 to 12.5).forEach { (yr, st) ->
-                                Button(onClick = { startAnimation(yr, st) }, colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray), contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.defaultMinSize(minWidth = 1.dp)) { Text("+$yr Yr", style = TextStyle(fontSize = 12.sp)) }
+                                Button(onClick = { startAnimation(yr, st) }, colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray, contentColor = Color.White), contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.defaultMinSize(minWidth = 1.dp)) { Text("+$yr Yr", style = TextStyle(fontSize = 12.sp)) }
                             }
                         }
                     }

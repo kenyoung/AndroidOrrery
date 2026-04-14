@@ -5,13 +5,26 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 private const val TRAIL_HALF_HOURS = 12.0
@@ -28,10 +41,11 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val lightBlueInt = Color(0xFFADD8E6).toArgb()
     val horizonColorInt = Color(0xFF444444).toArgb()
 
+    val trailVisible = remember { mutableStateMapOf("Sun" to true) }
     val planets = remember { getOrreryPlanets().filter { it.name != "Earth" } }
 
     data class BodyData(
-        val symbol: String, val colorInt: Int,
+        val name: String, val symbol: String, val color: Color, val colorInt: Int,
         val az: Double, val alt: Double,
         val trail: List<Pair<Double, Double>>
     )
@@ -63,7 +77,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val sunState = AstroEngine.getBodyState("Sun", jd)
     val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
     val sunAz = calculateAzAlt(lst, lat, sunApparent.ra / 15.0, sunApparent.dec)
-    bodies.add(BodyData("\u2609", Color.Yellow.toArgb(), displayAz(sunAz.az), applyRefraction(sunAz.alt).toDouble(),
+    bodies.add(BodyData("Sun", "\u2609", Color.Yellow, Color.Yellow.toArgb(), displayAz(sunAz.az), applyRefraction(sunAz.alt).toDouble(),
         computeTrail("Sun", false)))
 
     // Moon (with topocentric correction)
@@ -71,7 +85,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val moonApparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
     val topoMoon = toTopocentric(moonApparent.ra, moonApparent.dec, moonState.distGeo, lat, obs.lon, lst)
     val moonAz = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
-    bodies.add(BodyData("\u263E", Color.White.toArgb(), displayAz(moonAz.az), applyRefraction(moonAz.alt).toDouble(),
+    bodies.add(BodyData("Moon", "\u263E", Color.White, Color.White.toArgb(), displayAz(moonAz.az), applyRefraction(moonAz.alt).toDouble(),
         computeTrail("Moon", true)))
 
     // Planets
@@ -79,7 +93,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         val state = AstroEngine.getBodyState(p.name, jd)
         val apparent = j2000ToApparent(state.ra, state.dec, jd)
         val azAlt = calculateAzAlt(lst, lat, apparent.ra / 15.0, apparent.dec)
-        bodies.add(BodyData(p.symbol, p.color.toArgb(), displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble(),
+        bodies.add(BodyData(p.name, p.symbol, p.color, p.color.toArgb(), displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble(),
             computeTrail(p.name, false)))
     }
 
@@ -97,7 +111,8 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val altMin = (minAlt - 1.0).coerceAtLeast(-90.0)
     val altMax = (maxAlt + 1.0).coerceAtMost(90.0)
 
-    Canvas(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
         withDensityScaling { w, h ->
 
         val axisLabelPaint = Paint().apply {
@@ -217,6 +232,7 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         // Draw trails (dotted lines, ±12 hours; dimmed below horizon)
         val dimTrailPaint = Paint(trailPaint).apply { alpha = 100 }
         for (body in bodies) {
+            if (trailVisible[body.name] != true) continue
             trailPaint.color = body.colorInt
             dimTrailPaint.color = body.colorInt
             dimTrailPaint.alpha = 100
@@ -259,6 +275,108 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
             }
         }
 
+        // Draw elevation-crossing time labels when exactly one trail is selected
+        val selectedBodies = bodies.filter { trailVisible[it.name] == true }
+        if (selectedBodies.size == 1) {
+            val body = selectedBodies[0]
+            val trail = body.trail
+            val displayZone = if (obs.useStandardTime)
+                ZoneOffset.ofTotalSeconds((obs.stdOffsetHours * 3600).toInt())
+            else
+                ZoneOffset.UTC
+            val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZone)
+            val startJd = jd - TRAIL_HALF_HOURS / 24.0
+            val stepDays = TRAIL_STEP_MINUTES / 1440.0
+            val timeLabelRisingPaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 24f
+                textAlign = Paint.Align.RIGHT
+                typeface = Typeface.MONOSPACE
+                isAntiAlias = true
+            }
+            val timeLabelSettingPaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 24f
+                textAlign = Paint.Align.LEFT
+                typeface = Typeface.MONOSPACE
+                isAntiAlias = true
+            }
+            drawIntoCanvas { nc ->
+                for (i in 0 until trail.size - 1) {
+                    val (az1, alt1) = trail[i]
+                    val (az2, alt2) = trail[i + 1]
+                    if (abs(az2 - az1) >= 90.0) continue
+                    val lowDeg = (floor(min(alt1, alt2) / 10.0) * 10).toInt()
+                    val highDeg = (ceil(max(alt1, alt2) / 10.0) * 10).toInt()
+                    for (deg in lowDeg..highDeg step 10) {
+                        val level = deg.toDouble()
+                        val rising = alt1 < level && alt2 >= level
+                        val setting = alt1 >= level && alt2 < level
+                        if (!rising && !setting) continue
+                        val t = (level - alt1) / (alt2 - alt1)
+                        val crossAz = az1 + t * (az2 - az1)
+                        val crossX = azToX(crossAz)
+                        val crossY = altToY(level)
+                        val crossJd = startJd + (i + t) * stepDays
+                        val crossEpochSec = ((crossJd - UNIX_EPOCH_JD) * SECONDS_PER_DAY).toLong()
+                        val crossInstant = Instant.ofEpochSecond(crossEpochSec)
+                        val timeStr = timeFormatter.format(crossInstant)
+                        val pad = 24f
+                        if (rising) {
+                            nc.nativeCanvas.drawText(timeStr, crossX - pad, crossY + 8f, timeLabelRisingPaint)
+                        } else {
+                            nc.nativeCanvas.drawText(timeStr, crossX + pad, crossY + 8f, timeLabelSettingPaint)
+                        }
+                    }
+                }
+            }
+        }
+
         }
     }
+
+    // Trail toggle buttons (3 per row)
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        for (row in bodies.chunked(3)) {
+            Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                for (body in row) {
+                    val selected = trailVisible[body.name] == true
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .width(120.dp)
+                            .then(
+                                if (selected) Modifier.border(1.dp, body.color, RoundedCornerShape(4.dp))
+                                else Modifier
+                            )
+                            .clickable {
+                                if (selected) trailVisible.remove(body.name)
+                                else trailVisible[body.name] = true
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = body.symbol,
+                            style = TextStyle(
+                                color = if (selected) body.color else Color.Gray,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = body.name,
+                            style = TextStyle(
+                                color = if (selected) body.color else Color.Gray,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+    } // Column
 }
