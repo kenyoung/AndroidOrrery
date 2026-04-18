@@ -6,8 +6,10 @@ import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
@@ -26,8 +28,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.sin
 
 private const val FORECAST_DAYS = 365
 private const val SAMPLE_STEP_DAYS = 1.0
@@ -65,7 +72,69 @@ private val MAX_DIAMETER_ARCSEC = mapOf(
 // Minimum clearance between any two adjacent planet curves, in arcsec.
 private const val MIN_GAP_ARCSEC = 5.0
 
+// Chart's left margin in reference pixels. Referenced from both the drawing code
+// and the tap-line state (which snaps to the left edge on swipe-year).
+private const val CHART_LEFT_MARGIN = 80f
+
+// A horizontal drag must exceed this (in dp) to be treated as a year-shift swipe
+// rather than a scrub of the tap line.
+private const val SWIPE_THRESHOLD_DP = 200
+
 private val MONTH_ABBREV = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+// Apparent visual magnitude formulas from Mallama & Hilton (2018),
+// Astronomy and Computing 25, 10–24 — the set adopted by the Astronomical
+// Almanac starting in 2019 (IAU 2018). r = heliocentric distance (AU),
+// delta = geocentric distance (AU), alphaDeg = phase angle (Sun–Planet–Earth),
+// ringTiltBDeg = Saturn's ring tilt B (saturnicentric latitude of Earth).
+// Secular brightening of the ice giants and the Uranus sub-Earth-latitude
+// term (a few hundredths of a mag) are not included.
+private fun apparentMagnitude(
+    name: String, r: Double, delta: Double, alphaDeg: Double, ringTiltBDeg: Double = 0.0
+): Double {
+    val rDelta5log = 5.0 * log10(r * delta)
+    val a = alphaDeg
+    return when (name) {
+        "Mercury" -> {
+            // 6th-order polynomial valid for 2° < α < 170°.
+            val phi = a * (6.3280e-2 + a * (-1.6336e-3 + a * (3.3644e-5 +
+                a * (-3.4265e-7 + a * (1.6893e-9 - a * 3.0334e-12)))))
+            -0.613 + rDelta5log + phi
+        }
+        "Venus" -> {
+            // 4th-order, 0° ≤ α ≤ 163.7° (forward-scatter regime not reachable from Earth).
+            val phi = a * (-1.044e-3 + a * (3.687e-4 + a * (-2.814e-6 + a * 8.938e-9)))
+            -4.384 + rDelta5log + phi
+        }
+        "Mars" -> {
+            // Earth-observable α ≤ ~47°.
+            val phi = 0.02267 * a - 1.302e-4 * a * a
+            -1.601 + rDelta5log + phi
+        }
+        "Jupiter" -> {
+            // Earth-observable α ≤ 12°.
+            val phi = -3.7e-4 * a + 6.16e-4 * a * a
+            -9.395 + rDelta5log + phi
+        }
+        "Saturn" -> {
+            // Globe + rings combined, α ≤ 6.5°, |B| ≤ 27°.
+            val bRad = Math.toRadians(ringTiltBDeg)
+            val sinAbsB = sin(abs(bRad))
+            val sinB = sin(bRad)
+            val phi = -1.825 * sinAbsB + 0.026 * abs(a) - 0.378 * sinB * exp(-2.25 * abs(a))
+            -8.914 + rDelta5log + phi
+        }
+        "Uranus" -> {
+            val phi = 6.587e-3 * a + 1.045e-4 * a * a
+            -7.110 + rDelta5log + phi
+        }
+        "Neptune" -> {
+            val phi = 7.944e-3 * a + 9.617e-5 * a * a
+            -6.89 + rDelta5log + phi
+        }
+        else -> 0.0
+    }
+}
 
 private data class PlanetSeries(
     val name: String,
@@ -83,6 +152,10 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
     // Left swipe advances (future), right swipe rewinds (past) — matches the natural
     // page-turn gesture where dragging content leftward reveals what's to the right.
     var yearOffset by remember { mutableStateOf(0) }
+
+    // Reference-pixel x of the tap/scrub line. Initialized to the chart's left edge so the
+    // first render shows a line at today's date.
+    var tappedRefX by remember { mutableStateOf<Float?>(CHART_LEFT_MARGIN) }
 
     val shiftedEpochSec = obs.now.epochSecond + yearOffset.toLong() * FORECAST_DAYS.toLong() * SECONDS_PER_DAY.toLong()
     val startJd = shiftedEpochSec.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -216,6 +289,33 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
             isAntiAlias = true
         }
     }
+    val tapLinePaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            strokeWidth = 5f
+            style = Paint.Style.STROKE
+            isAntiAlias = false
+        }
+    }
+    val tapLabelPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 44f
+            typeface = Typeface.MONOSPACE
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+        }
+    }
+    val tapDatePaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 28f
+            typeface = Typeface.MONOSPACE
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+        }
+    }
+    val tapDateFormatter = remember { DateTimeFormatter.ofPattern("d MMM yyyy") }
 
     Box(modifier = Modifier.fillMaxSize()) {
     Canvas(
@@ -223,25 +323,45 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                val swipeThresholdPx = with(density) { 50.dp.toPx() }
+                val swipeThresholdPx = with(density) { SWIPE_THRESHOLD_DP.dp.toPx() }
+                val dScale = density / REFERENCE_DENSITY
                 var dragAccum = 0f
                 detectHorizontalDragGestures(
-                    onDragStart = { dragAccum = 0f },
+                    onDragStart = { offset ->
+                        dragAccum = 0f
+                        tappedRefX = offset.x / dScale
+                    },
                     onDragCancel = { dragAccum = 0f },
                     onDragEnd = {
                         when {
-                            dragAccum > swipeThresholdPx -> yearOffset -= 1
-                            dragAccum < -swipeThresholdPx -> yearOffset += 1
+                            dragAccum > swipeThresholdPx -> {
+                                yearOffset -= 1
+                                tappedRefX = CHART_LEFT_MARGIN
+                            }
+                            dragAccum < -swipeThresholdPx -> {
+                                yearOffset += 1
+                                tappedRefX = CHART_LEFT_MARGIN
+                            }
                         }
                         dragAccum = 0f
                     },
-                    onHorizontalDrag = { _, amount -> dragAccum += amount }
+                    onHorizontalDrag = { change, amount ->
+                        dragAccum += amount
+                        tappedRefX = change.position.x / dScale
+                    }
                 )
+            }
+            .pointerInput(Unit) {
+                // Convert raw device pixels to reference pixels (matches withDensityScaling).
+                val dScale = density / REFERENCE_DENSITY
+                detectTapGestures { offset ->
+                    tappedRefX = offset.x / dScale
+                }
             }
     ) {
         withDensityScaling { w, h ->
 
-        val leftMargin = 80f
+        val leftMargin = CHART_LEFT_MARGIN
         val rightMargin = 15f
         val topMargin = 35f
         val bottomMargin = 125f
@@ -365,6 +485,125 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 val x = dayToX(t.dayOffset).coerceIn(chartLeft + halfWidth, chartRight - halfWidth)
                 canvas.drawText(label, x, yearY, yearPaint)
             }
+
+            // Tap inspection: a vertical line at the tap x, per-planet labels to one side,
+            // and the tapped date above the chart. Line color is planet-specific (see
+            // bandLineColor) so it stays visible against each lemon's fill.
+            tappedRefX?.let { rawX ->
+                val tapX = rawX.coerceIn(chartLeft, chartRight)
+
+                val dayOffset = ((tapX - chartLeft) / chartWidth) * FORECAST_DAYS
+                val tappedEpochSec = shiftedEpochSec + (dayOffset * SECONDS_PER_DAY).toLong()
+                val tappedLocalDate = Instant.ofEpochSecond(tappedEpochSec).atZone(zone).toLocalDate()
+                val noonInstant = tappedLocalDate.atTime(12, 0).atZone(zone).toInstant()
+                val jdAtNoon = noonInstant.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
+
+                val earthSunDist = AstroEngine.getBodyState("Sun", jdAtNoon).distGeo
+                val diskArcsecAt = DoubleArray(planets.size)
+                val ringArcsecAt = DoubleArray(planets.size)
+                val magnitudes = DoubleArray(planets.size)
+                val phaseAnglesDeg = DoubleArray(planets.size)
+                val ringTiltBDegAt = DoubleArray(planets.size)
+                for ((idx, p) in planets.withIndex()) {
+                    val radiusKm = PLANET_RADIUS_KM[p.name] ?: continue
+                    val state = AstroEngine.getBodyState(p.name, jdAtNoon)
+                    val distKm = state.distGeo * AU_KM
+                    diskArcsecAt[idx] = 2.0 * radiusKm / distKm * ARCSEC_PER_RAD
+                    val r = state.distSun
+                    val delta = state.distGeo
+                    phaseAnglesDeg[idx] = Math.toDegrees(phaseAngleRad(r, delta, earthSunDist))
+                    if (p.name == "Saturn") {
+                        ringTiltBDegAt[idx] = SaturnMoonEngine.calculateRingTiltB(
+                            state.eclipticLon, state.eclipticLat, jdAtNoon)
+                        ringArcsecAt[idx] = 2.0 * SATURN_RING_OUTER_RADIUS_KM / distKm * ARCSEC_PER_RAD
+                    }
+                    magnitudes[idx] = apparentMagnitude(p.name, r, delta, phaseAnglesDeg[idx], ringTiltBDegAt[idx])
+                }
+
+                fun drawSeg(y1: Float, y2: Float, lineColor: Int) {
+                    if (y2 > y1) {
+                        tapLinePaint.color = lineColor
+                        canvas.drawLine(tapX, y1, tapX, y2, tapLinePaint)
+                    }
+                }
+                // Line color by planet: gaps are white, Venus is black (so the line is
+                // visible on Venus's white fill), Saturn is red across its whole ring extent
+                // (ring halo + disk), Uranus is magenta to stand out against the green disk,
+                // everything else white.
+                fun bandLineColor(s: PlanetSeries): Int = when (s.name) {
+                    "Venus" -> android.graphics.Color.BLACK
+                    "Saturn" -> android.graphics.Color.RED
+                    "Uranus" -> android.graphics.Color.MAGENTA
+                    else -> android.graphics.Color.WHITE
+                }
+                val white = android.graphics.Color.WHITE
+                var prevY = chartTop
+                for ((idx, s) in series.withIndex()) {
+                    val baselineY = laneCenterY(idx)
+                    val diskHalfPx = (diskArcsecAt[idx] / 2.0 * pxPerArcsec).toFloat()
+                    val diskTop = baselineY - diskHalfPx
+                    val diskBottom = baselineY + diskHalfPx
+                    val bandColor = bandLineColor(s)
+                    if (s.ringSamplesArcsec != null) {
+                        val ringHalfPx = (ringArcsecAt[idx] / 2.0 * pxPerArcsec).toFloat()
+                        val ringTop = baselineY - ringHalfPx
+                        val ringBottom = baselineY + ringHalfPx
+                        drawSeg(prevY, ringTop, white)
+                        drawSeg(ringTop, diskTop, bandColor)
+                        drawSeg(diskTop, diskBottom, bandColor)
+                        drawSeg(diskBottom, ringBottom, bandColor)
+                        prevY = ringBottom
+                    } else {
+                        drawSeg(prevY, diskTop, white)
+                        drawSeg(diskTop, diskBottom, bandColor)
+                        prevY = diskBottom
+                    }
+                }
+                drawSeg(prevY, chartBottom, white)
+
+                // Put labels on the side that has more room: right of the line when the line
+                // is in the left half of the plot, left of the line when it's in the right half.
+                val labelOnLeft = tapX > (chartLeft + chartRight) / 2f
+                tapLabelPaint.textAlign = if (labelOnLeft) Paint.Align.RIGHT else Paint.Align.LEFT
+                val labelX = if (labelOnLeft) tapX - 8f else tapX + 8f
+                for ((idx, s) in series.withIndex()) {
+                    val y = laneCenterY(idx)
+                    tapLabelPaint.color = bandLineColor(s)
+                    when (s.name) {
+                        "Saturn" -> {
+                            canvas.drawText(
+                                "%.1f\u2033/%.1f\u2033  %+.1fm".format(
+                                    diskArcsecAt[idx], ringArcsecAt[idx], magnitudes[idx]),
+                                labelX, y + 14f, tapLabelPaint)
+                            canvas.drawText(
+                                "Ring Tilt %+.1f\u00B0".format(ringTiltBDegAt[idx]),
+                                labelX, y + 14f + 52f, tapLabelPaint)
+                        }
+                        // Illumination for Uranus/Neptune is essentially always 100%, so omit.
+                        "Uranus", "Neptune" -> {
+                            canvas.drawText(
+                                "%.1f\u2033  %+.1fm".format(diskArcsecAt[idx], magnitudes[idx]),
+                                labelX, y + 14f, tapLabelPaint)
+                        }
+                        else -> {
+                            // Illuminated fraction from phase angle: k = (1 + cos α) / 2.
+                            val illumPct = (1.0 + cos(Math.toRadians(phaseAnglesDeg[idx]))) / 2.0 * 100.0
+                            canvas.drawText(
+                                "%.1f\u2033  %+.1fm  %.0f%%".format(
+                                    diskArcsecAt[idx], magnitudes[idx], illumPct),
+                                labelX, y + 14f, tapLabelPaint)
+                        }
+                    }
+                }
+
+                // Date above the top of the line. Clamped to the canvas so it doesn't clip
+                // when the tap is near an edge.
+                val dateStr = tappedLocalDate.format(tapDateFormatter)
+                val dateHalfWidth = tapDatePaint.measureText(dateStr) / 2f
+                val dateBaseline = chartTop - tapDatePaint.descent() - 2f
+                val dateX = tapX.coerceIn(dateHalfWidth, w - dateHalfWidth)
+                canvas.drawText(dateStr, dateX, dateBaseline, tapDatePaint)
+            }
         }
 
         }
@@ -374,7 +613,10 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
         TextButton(
             onClick = { yearOffset = 0 },
             colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)),
-            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = (-20).dp)
+                .padding(8.dp)
         ) {
             Text("Reset Time", fontWeight = FontWeight.Bold)
         }

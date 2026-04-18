@@ -370,9 +370,7 @@ fun ConstellationsScreen(
                 "Saturn" -> DISK_SATURN_POLAR_RATIO
                 else -> 1.0
             }
-            val cosPhase = (state.distSun * state.distSun + state.distGeo * state.distGeo
-                    - earthSunDist * earthSunDist) / (2.0 * state.distSun * state.distGeo)
-            val phaseAngleDeg = Math.toDegrees(acos(cosPhase.coerceIn(-1.0, 1.0)))
+            val phaseAngleDeg = Math.toDegrees(phaseAngleRad(state.distSun, state.distGeo, earthSunDist))
 
             // East of Sun → lit limb faces left; west of Sun → lit limb faces right
             val dLon = normalizeDegrees(state.eclipticLon - sunEclipticLon)

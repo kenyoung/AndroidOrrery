@@ -483,14 +483,7 @@ fun calculateJovianMoons(jd: Double): Map<String, JovianMoonState> {
     val earthState = AstroEngine.getBodyState("Earth", jd)
     val jupState = AstroEngine.getBodyState("Jupiter", jd)
 
-    val r = earthState.distSun
-    val R = jupState.distSun
-    val Delta = jupState.distGeo
-
-    // Meeus (48.2) Phase Angle
-    // Better: use law of cosines on distances
-    val cosAlpha = (R*R + Delta*Delta - r*r) / (2*R*Delta)
-    val alpha = acos(cosAlpha.coerceIn(-1.0, 1.0))
+    val alpha = phaseAngleRad(jupState.distSun, jupState.distGeo, earthState.distSun)
 
     // Shadow displacement factor (tan alpha)
     val shadowFactor = tan(alpha)
@@ -710,6 +703,15 @@ fun calculateMoonPhaseAngle(epochDay: Double): Double {
 
 fun illuminationFromPhaseAngle(phaseAngleDeg: Double): Double =
     (1.0 - cos(Math.toRadians(phaseAngleDeg))) / 2.0 * 100.0
+
+// Phase angle (Sun–body–Earth) in radians via law of cosines on the triangle.
+// helioDist = body's heliocentric distance, geoDist = body's geocentric distance,
+// earthSunDist = Earth–Sun distance; all in the same units (AU).
+fun phaseAngleRad(helioDist: Double, geoDist: Double, earthSunDist: Double): Double {
+    val cosAlpha = (helioDist * helioDist + geoDist * geoDist - earthSunDist * earthSunDist) /
+            (2.0 * helioDist * geoDist)
+    return acos(cosAlpha.coerceIn(-1.0, 1.0))
+}
 
 // Named lunar phase events (the four "principal phases").
 enum class MoonPhaseEvent(val longName: String, val shortName: String) {
