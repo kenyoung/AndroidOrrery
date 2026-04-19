@@ -8,9 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,6 +27,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -70,15 +74,17 @@ private val MAX_DIAMETER_ARCSEC = mapOf(
 )
 
 // Minimum clearance between any two adjacent planet curves, in arcsec.
-private const val MIN_GAP_ARCSEC = 5.0
+private const val MIN_GAP_ARCSEC = 1.0
+
+// Wider gap between the Uranus and Neptune lanes. Their lemons are tiny, so their
+// labels stack close together; extra vertical space keeps them legible.
+private const val URANUS_NEPTUNE_GAP_ARCSEC = 5.0
 
 // Chart's left margin in reference pixels. Referenced from both the drawing code
-// and the tap-line state (which snaps to the left edge on swipe-year).
+// and the tap-line state (which snaps to the left edge on year-shift).
 private const val CHART_LEFT_MARGIN = 80f
 
-// A horizontal drag must exceed this (in dp) to be treated as a year-shift swipe
-// rather than a scrub of the tap line.
-private const val SWIPE_THRESHOLD_DP = 200
+private val YEAR_BUTTON_PADDING = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
 
 private val MONTH_ABBREV = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -149,8 +155,7 @@ private data class MonthTick(val dayOffset: Double, val month: Int, val year: In
 
 @Composable
 fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
-    // Left swipe advances (future), right swipe rewinds (past) — matches the natural
-    // page-turn gesture where dragging content leftward reveals what's to the right.
+    // Shifted by the -1yr / +1yr buttons; 0 = window starts at today.
     var yearOffset by remember { mutableStateOf(0) }
 
     // Reference-pixel x of the tap/scrub line. Initialized to the chart's left edge so the
@@ -184,16 +189,26 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
     }
 
     val maxDiameters = remember(planets) { planets.map { MAX_DIAMETER_ARCSEC[it.name] ?: 0.0 } }
-    val totalArcsecNeeded = remember(maxDiameters) {
-        maxDiameters.sum() + MIN_GAP_ARCSEC * (maxDiameters.size + 1)
+    // gapsArcsec[i] is the vertical gap above lane i; gapsArcsec[size] is the gap below the last lane.
+    val gapsArcsec = remember(planets) {
+        DoubleArray(planets.size + 1) { i ->
+            if (i in 1 until planets.size &&
+                planets[i - 1].name == "Uranus" && planets[i].name == "Neptune")
+                URANUS_NEPTUNE_GAP_ARCSEC
+            else
+                MIN_GAP_ARCSEC
+        }
     }
-    val baselineArcsec = remember(maxDiameters) {
+    val totalArcsecNeeded = remember(maxDiameters, gapsArcsec) {
+        maxDiameters.sum() + gapsArcsec.sum()
+    }
+    val baselineArcsec = remember(maxDiameters, gapsArcsec) {
         DoubleArray(maxDiameters.size).apply {
-            var cursor = MIN_GAP_ARCSEC
+            var cursor = gapsArcsec[0]
             for (i in maxDiameters.indices) {
                 cursor += maxDiameters[i] / 2.0
                 this[i] = cursor
-                cursor += maxDiameters[i] / 2.0 + MIN_GAP_ARCSEC
+                cursor += maxDiameters[i] / 2.0 + gapsArcsec[i + 1]
             }
         }
     }
@@ -323,33 +338,12 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
-                val swipeThresholdPx = with(density) { SWIPE_THRESHOLD_DP.dp.toPx() }
                 val dScale = density / REFERENCE_DENSITY
-                var dragAccum = 0f
                 detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        dragAccum = 0f
-                        tappedRefX = offset.x / dScale
-                    },
-                    onDragCancel = { dragAccum = 0f },
-                    onDragEnd = {
-                        when {
-                            dragAccum > swipeThresholdPx -> {
-                                yearOffset -= 1
-                                tappedRefX = CHART_LEFT_MARGIN
-                            }
-                            dragAccum < -swipeThresholdPx -> {
-                                yearOffset += 1
-                                tappedRefX = CHART_LEFT_MARGIN
-                            }
-                        }
-                        dragAccum = 0f
-                    },
-                    onHorizontalDrag = { change, amount ->
-                        dragAccum += amount
-                        tappedRefX = change.position.x / dScale
-                    }
-                )
+                    onDragStart = { offset -> tappedRefX = offset.x / dScale }
+                ) { change, _ ->
+                    tappedRefX = change.position.x / dScale
+                }
             }
             .pointerInput(Unit) {
                 // Convert raw device pixels to reference pixels (matches withDensityScaling).
@@ -363,7 +357,9 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
 
         val leftMargin = CHART_LEFT_MARGIN
         val rightMargin = 15f
-        val topMargin = 35f
+        // Leaves room for the top row of buttons and the tap-line date label, which draws
+        // ~30 rp above chartTop.
+        val topMargin = 140f
         val bottomMargin = 125f
 
         val chartLeft = leftMargin
@@ -609,17 +605,40 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
         }
     }
 
+    val shiftYear: (Int) -> Unit = { delta ->
+        yearOffset += delta
+        tappedRefX = CHART_LEFT_MARGIN
+    }
+    YearShiftButton("-1yr", Alignment.TopStart) { shiftYear(-1) }
+    YearShiftButton("+1yr", Alignment.TopEnd) { shiftYear(+1) }
     if (yearOffset != 0) {
         TextButton(
             onClick = { yearOffset = 0 },
             colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)),
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = (-20).dp)
+                .align(Alignment.TopCenter)
                 .padding(8.dp)
         ) {
             Text("Reset Time", fontWeight = FontWeight.Bold)
         }
     }
+    }
+}
+
+@Composable
+private fun BoxScope.YearShiftButton(label: String, alignment: Alignment, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color.DarkGray,
+            contentColor = Color.White,
+        ),
+        contentPadding = YEAR_BUTTON_PADDING,
+        modifier = Modifier
+            .align(alignment)
+            .padding(4.dp)
+            .height(28.dp)
+    ) {
+        Text(label, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }
