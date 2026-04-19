@@ -786,26 +786,26 @@ fun calculateLibration(jd: Double, eclipticLon: Double, eclipticLat: Double): Pa
 
 /**
  * Returns the Moon's age in fractional days since the most recent New Moon.
- * Uses phase angle crossing detection at transit time for the given longitude,
+ * Uses phase angle crossing detection at local midnight for the given longitude,
  * scanning backwards up to 30 days from the given epoch day.
  */
 fun calculateMoonAge(epochDay: Double, lonDeg: Double): Double {
     val midnightOffset = -lonDeg / 360.0
     val baseEpoch = floor(epochDay)
-    // Start at daysBack=0 so that if today IS the New Moon day
-    // (phase > 300° today, < 60° tomorrow), it is detected.
+    // Start at daysBack=0 so that if today contains the New Moon crossing and
+    // that crossing is already in the past, it is detected on the first iteration.
+    // If the crossing is still in the future, fall through to find the previous one.
+    var nextDayPhase = calculateMoonPhaseAngle(baseEpoch + 1.0 + midnightOffset)
     for (daysBack in 0..30) {
         val ed = baseEpoch - daysBack
-        val phase = calculateMoonPhaseAngle(ed + midnightOffset)
-        val nextDayPhase = calculateMoonPhaseAngle(ed + 1.0 + midnightOffset)
-        if (phase > 300.0 && nextDayPhase < 60.0) {
-            // Interpolate to find fractional crossing point
-            val adjustedPhase = phase - 360.0
-            val frac = (0.0 - adjustedPhase) / (nextDayPhase - adjustedPhase)
-            val newMoonEpoch = ed + frac
-            val age = epochDay - newMoonEpoch
-            return if (age < 0.0) 0.0 else age
+        val dayStart = ed + midnightOffset
+        val phase = calculateMoonPhaseAngle(dayStart)
+        val crossing = findMoonPhaseCrossing(dayStart, dayStart + 1.0, phase, nextDayPhase)
+        if (crossing?.event == MoonPhaseEvent.NEW_MOON) {
+            val age = epochDay - crossing.utEpochDay
+            if (age >= 0.0) return age
         }
+        nextDayPhase = phase
     }
     return 0.0
 }
