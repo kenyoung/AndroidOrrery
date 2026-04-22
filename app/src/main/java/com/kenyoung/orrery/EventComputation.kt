@@ -148,7 +148,7 @@ fun computeMoonEventData(
         val (appRa, appDec) = j2000ToApparent(st.ra, st.dec, checkJD)
         val lst = calculateLSTHours(checkJD, lon)
         val topo = toTopocentric(appRa, appDec, st.distGeo, lat, lon, lst)
-        val moonSdDeg = Math.toDegrees(asin(1737400.0 / (st.distGeo * AU_METERS)))
+        val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_M / (st.distGeo * AU_METERS)))
         calculateAltitude(lst - topo.ra / 15.0, lat, topo.dec) > PLANET_HORIZON_ALT - moonSdDeg
     }
 

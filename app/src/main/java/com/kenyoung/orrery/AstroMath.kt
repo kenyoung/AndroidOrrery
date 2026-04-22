@@ -817,7 +817,6 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
     // Start of local day in UT (midnight local time)
     val dayStartUT = epochDayInt - timezoneOffset / 24.0
     val step = 1.0 / 144.0 // 10-minute steps
-    val moonRadiusM = 1737400.0
 
     // Combined moon altitude and hour angle at time t (topocentric)
     fun getMoonState(t: Double): Pair<Double, Double> {
@@ -828,7 +827,7 @@ fun calculateMoonEvents(epochDay: Double, lat: Double, lon: Double, timezoneOffs
         val topo = toTopocentric(appRa, appDec, state.distGeo, lat, lon, lst)
         val haHours = lst - topo.ra / 15.0
         val alt = calculateAltitude(haHours, lat, topo.dec)
-        val sdDeg = Math.toDegrees(asin(moonRadiusM / (state.distGeo * AU_METERS)))
+        val sdDeg = Math.toDegrees(asin(MOON_RADIUS_M / (state.distGeo * AU_METERS)))
         val targetAlt = PLANET_HORIZON_ALT - sdDeg
         return Pair(alt - targetAlt, normalizeHourAngle(haHours))
     }

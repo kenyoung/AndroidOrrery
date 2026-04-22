@@ -231,7 +231,7 @@ object JovianPrecision {
         RP[3] = 14.98832 * (1.0 + rP3)
         RP[4] = 26.36273 * (1.0 + rP4)
 
-        val T0 = (jD - 2433282.423) / DAYS_PER_JULIAN_CENTURY
+        val T0 = (jD - B1950_JD) / DAYS_PER_JULIAN_CENTURY
         val P = 1.3966626 * T0 + 0.0003088 * T0 * T0
         L[1] += P; L[2] += P; L[3] += P; L[4] += P; psi += P
 

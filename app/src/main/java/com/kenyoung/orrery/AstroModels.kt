@@ -14,6 +14,16 @@ import java.time.Instant
 // --- UI CONSTANTS ---
 val LabelColor = Color(0xFFADD8E6) // Light Blue
 
+// --- PHYSICAL & ASTRONOMICAL CONSTANTS ---
+// Additional astronomy constants live in AstroMath.kt alongside the math
+// functions that use them. This section holds values that were duplicated
+// across multiple screen files.
+const val AU_KM = 149597870.7                // Astronomical unit in km
+const val MOON_RADIUS_KM = 1737.4            // Moon mean radius in km
+const val MOON_RADIUS_M = 1737400.0          // Moon mean radius in m (== MOON_RADIUS_KM * 1000)
+const val B1950_JD = 2433282.4235            // B1950.0 epoch in Julian Date
+const val OBLIQUITY_J2000 = 23.4392911       // Ecliptic obliquity at J2000 in degrees
+
 // --- EARTHSHINE ---
 private const val EARTH_SHINE_START = 15.0     // illumination % below which earthshine appears
 private const val EARTH_SHINE_MAXIMUM = 0.2    // maximum earthshine brightness (fraction of full)

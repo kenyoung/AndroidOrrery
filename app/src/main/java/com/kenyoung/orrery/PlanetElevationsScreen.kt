@@ -526,7 +526,7 @@ fun PlanetElevationsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) ->
             val (mRa, mDec) = j2000ToApparent(mSt.ra, mSt.dec, currentJD)
             val mLst = calculateLSTHours(currentJD, lon)
             val mTopo = toTopocentric(mRa, mDec, mSt.distGeo, lat, lon, mLst)
-            val moonSdDeg = Math.toDegrees(Math.asin(1737400.0 / (mSt.distGeo * AU_METERS)))
+            val moonSdDeg = Math.toDegrees(Math.asin(MOON_RADIUS_M / (mSt.distGeo * AU_METERS)))
             calculateAltitude(mLst - mTopo.ra / 15.0, lat, mTopo.dec) > PLANET_HORIZON_ALT - moonSdDeg
         }
         val moonCircumpolar = moonEventData.isCircumpolar

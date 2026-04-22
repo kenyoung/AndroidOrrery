@@ -94,7 +94,6 @@ internal fun createPhasedMoonBitmap(
 }
 
 private const val KM_TO_MILES = 0.621371
-private const val MOON_RADIUS_KM = 1737.4
 private const val ANOMALISTIC_MONTH = 27.554551 // days, perigee to perigee
 
 @Composable
@@ -223,25 +222,19 @@ fun MoonScreen(
     }
     val moonEvents = moonEventData.events
 
-    // Duration Moon is above the horizon during its current moonrise-to-moonset
-    // passage (the one with a rise within the calendar day, or — if the Moon
-    // was already up at day-start — the passage still in progress). Polar cases:
-    // Moon never up during the day → "No moonrise today"; Moon up all day with
-    // no rise or set in the window → "No moonset today" with the calendar day
-    // as the interval. Sunless = minutes within the Moon window when the Sun
-    // is below the horizon; polar phrasings test the calendar day. Same altitude
-    // thresholds used elsewhere on this page. 72h scan at 1-minute resolution
-    // so the window can extend into the previous or next day.
-    val moonUpLineText = remember(dayMode, obs.lat, obs.lon, obs.useStandardTime, cacheKey, refreshKey) {
+    // Scan spans the day before and after so the Moon's rise-to-set passage can
+    // extend beyond the calendar day in either direction.
+    val moonUpLineText = remember(obs.lat, obs.lon, obs.useStandardTime, cacheKey, refreshKey) {
+        val minutesPerDay = 1440
         val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
         val currentLocalEpochDay = currentUtEpochDay + displayOffsetHours / 24.0
         val dayStartLocal = floor(currentLocalEpochDay)
         val dayStartUt = dayStartLocal - displayOffsetHours / 24.0
 
-        val scanMinutes = 4320   // T-24h through T+48h relative to day start
-        val dayStartIdx = 1440
-        val dayEndIdx = 2880
-        val sampleStepDays = 1.0 / 1440.0
+        val scanMinutes = 3 * minutesPerDay
+        val dayStartIdx = minutesPerDay
+        val dayEndIdx = 2 * minutesPerDay
+        val sampleStepDays = 1.0 / minutesPerDay
         val scanStartUt = dayStartUt - 1.0
 
         val moonUp = BooleanArray(scanMinutes)
@@ -258,7 +251,7 @@ fun MoonScreen(
             val moonAppI = j2000ToApparent(moonStateI.ra, moonStateI.dec, sampleJd)
             val moonTopoI = toTopocentric(moonAppI.ra, moonAppI.dec, moonStateI.distGeo, obs.lat, obs.lon, sampleLst)
             val moonAzAltI = calculateAzAlt(sampleLst, obs.lat, moonTopoI.ra / 15.0, moonTopoI.dec)
-            val moonSdI = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonStateI.distGeo * AU_METERS)))
+            val moonSdI = Math.toDegrees(asin(MOON_RADIUS_M / (moonStateI.distGeo * AU_METERS)))
             moonUp[i] = moonAzAltI.alt > (PLANET_HORIZON_ALT - moonSdI)
 
             val sunStateI = AstroEngine.getBodyState("Sun", sampleJd)
@@ -273,7 +266,7 @@ fun MoonScreen(
             if (moonUp[i]) moonUpInDay++
             if (sunUp[i]) sunUpInDay++
         }
-        val sunNeverSetsToday = sunUpInDay == 1440
+        val sunNeverSetsToday = sunUpInDay == minutesPerDay
         val sunNeverRisesToday = sunUpInDay == 0
 
         fun sunlessText(count: Int): String = when {
@@ -308,7 +301,7 @@ fun MoonScreen(
             // Moon up for the entire scan (polar): report the calendar day.
             var sunlessInDay = 0
             for (i in dayStartIdx until dayEndIdx) if (moonUp[i] && !sunUp[i]) sunlessInDay++
-            val moonPart = if (moonUpInDay == 1440) "No moonset today"
+            val moonPart = if (moonUpInDay == minutesPerDay) "No moonset today"
                 else "Moon up %dh %02dm".format(moonUpInDay / 60, moonUpInDay % 60)
             return@remember "$moonPart (${sunlessText(sunlessInDay)})"
         }
@@ -337,7 +330,7 @@ fun MoonScreen(
     }
 
     // Rise/set azimuths
-    val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonState.distGeo * AU_METERS)))
+    val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_M / (moonState.distGeo * AU_METERS)))
     val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
     val riseAz = if (!moonEvents.rise.isNaN()) calculateAzAtRiseSet(obs.lat, topo.dec, true, moonTargetAlt) else Double.NaN
     val setAz = if (!moonEvents.set.isNaN()) calculateAzAtRiseSet(obs.lat, topo.dec, false, moonTargetAlt) else Double.NaN

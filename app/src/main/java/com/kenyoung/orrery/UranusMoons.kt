@@ -31,7 +31,6 @@ object UranusMoonEngine {
     private const val POLE_DEC_DEG = 15.175
 
     private const val URANUS_RADIUS_KM = 25559.0
-    private const val AU_KM = 149597870.7
     private const val C_LIGHT_KM_PER_SEC = 299792.458
     private const val DAYS_PER_YEAR = 365.25
     private const val RAD_TO_ARCSEC = 180.0 / PI * 3600.0
@@ -194,7 +193,7 @@ object UranusMoonEngine {
 
         // Uranus geocentric vector (AU, ICRF) — from ephemeris heliocentric positions
         // Note: helioPos is in ecliptic; convert to equatorial
-        val oblRad = Math.toRadians(23.4392911)
+        val oblRad = Math.toRadians(OBLIQUITY_J2000)
         fun eclToEq(v: Vector3): DoubleArray {
             return doubleArrayOf(
                 v.x,

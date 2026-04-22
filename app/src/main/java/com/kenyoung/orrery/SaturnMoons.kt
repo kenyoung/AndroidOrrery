@@ -139,7 +139,7 @@ object SaturnMoonEngine {
     private class Qs(jde: Double) {
         val t1 = jde - 2411093.0
         val t2 = t1 / 365.25
-        val t3 = (jde - 2433282.423) / 365.25 + 1950.0
+        val t3 = (jde - B1950_JD) / 365.25 + 1950.0
         val t4 = jde - 2411368.0
         val t5 = t4 / 365.25
         val t6 = jde - 2415020.0
@@ -390,7 +390,6 @@ object SaturnMoonEngine {
     // --- Main satellite position calculation (Meeus Ch. 46) ---
     // Returns list of 8 (x, y) tuples in Saturn radii. X+ = west, Y+ = north.
     private fun saturnMoonPositions(jde: Double): List<Triple<Double, Double, Double>> {
-        val B1950_JDE = 2433282.4235  // B1950.0 in JDE
         val (s, beta, bigR) = solarTrueVsop87(jde)
         val ss = sin(s); val cs = cos(s)
         val sb = sin(beta)
@@ -413,7 +412,7 @@ object SaturnMoonEngine {
 
         var lam0 = atan2(y, x)
         var bet0 = atan(z / hypot(x, y))
-        val (lam0p, bet0p) = precessEcliptic(lam0, bet0, jde, B1950_JDE)
+        val (lam0p, bet0p) = precessEcliptic(lam0, bet0, jde, B1950_JD)
         lam0 = lam0p
         bet0 = bet0p
 
@@ -513,7 +512,6 @@ object SaturnMoonEngine {
     // Returns angular radius in radians
     fun calculateAngularRadius(distGeoAU: Double): Double {
         val SATURN_RADIUS_KM = 60268.0
-        val AU_KM = 149597870.7
         return atan(SATURN_RADIUS_KM / (distGeoAU * AU_KM))
     }
 

@@ -696,7 +696,6 @@ private data class SunPositionResult(
 )
 
 private fun sunPosition(tJD: Double): SunPositionResult {
-    val AU_KM = 149597870.7
     val T = (tJD - J2000_JD) / DAYS_PER_JULIAN_CENTURY
     val T2 = T * T
     val T3 = T2 * T

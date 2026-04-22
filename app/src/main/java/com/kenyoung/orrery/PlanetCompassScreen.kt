@@ -127,7 +127,7 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
         val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, jdStart)
         val lstVal = calculateLSTHours(jdStart, lon)
         val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lstVal)
-        val moonSdDeg = Math.toDegrees(asin(1737400.0 / (moonState.distGeo * AU_METERS)))
+        val moonSdDeg = Math.toDegrees(asin(MOON_RADIUS_M / (moonState.distGeo * AU_METERS)))
         val moonTargetAlt = PLANET_HORIZON_ALT - moonSdDeg
 
         val moonEventData = computeMoonEvents(lat, lon, offset, jdStart, currentUtEpochDay, topoMoon.dec, eventCaches["Moon"])

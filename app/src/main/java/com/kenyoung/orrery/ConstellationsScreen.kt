@@ -155,8 +155,6 @@ private data class BrightStar(
 
 // --- Planet disk comparison constants ---
 
-private const val DISK_AU_KM = 149597870.7
-
 private val planetRadiiKm = mapOf(
     "Mercury" to 2439.7,
     "Venus" to 6051.8,
@@ -364,7 +362,7 @@ fun ConstellationsScreen(
         planetNames.map { name ->
             val state = AstroEngine.getBodyState(name, jd)
             val radiusKm = planetRadiiKm[name]!!
-            val angularRadiusRad = atan(radiusKm / (state.distGeo * DISK_AU_KM))
+            val angularRadiusRad = atan(radiusKm / (state.distGeo * AU_KM))
             val polarRatio = when (name) {
                 "Jupiter" -> DISK_JUPITER_POLAR_RATIO
                 "Saturn" -> DISK_SATURN_POLAR_RATIO
@@ -384,7 +382,7 @@ fun ConstellationsScreen(
                 ringTiltB = SaturnMoonEngine.calculateRingTiltB(state.eclipticLon, state.eclipticLat, jd)
                 val (appRa, appDec) = j2000ToApparent(state.ra, state.dec, jd)
                 positionAngleP = SaturnMoonEngine.calculatePositionAngleP(appRa, appDec, jd)
-                ringAngularRadiusRad = atan(radiusKm * SaturnMoonEngine.A_RING_OUTER / (state.distGeo * DISK_AU_KM))
+                ringAngularRadiusRad = atan(radiusKm * SaturnMoonEngine.A_RING_OUTER / (state.distGeo * AU_KM))
             }
             if (name == "Mars") {
                 // Sub-Earth latitude: angle between Mars' north pole and the Earth-Mars line
