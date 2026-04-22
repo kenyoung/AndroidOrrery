@@ -253,10 +253,12 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
 
 @Composable
 fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlign.Center, fontScale: Float = 1.0f) {
+    val size = (8.5f * fontScale).sp
     Text(
         text = text,
         color = Color(0xFF87CEFA),
-        fontSize = (8.5f * fontScale).sp,
+        fontSize = size,
+        lineHeight = size * 1.5f,
         fontWeight = FontWeight.Bold,
         textAlign = align,
         modifier = Modifier.weight(weight)
@@ -274,7 +276,7 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double, fontScale: Float = 
         else Color.Gray
     }
 
-    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+    Row(Modifier.fillMaxWidth()) {
         DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor, fontScale)
         DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor, fontScale)
         DataCell("${data.startDateStr} → ${data.endDateStr}", 0.24f, TextAlign.Center, rowColor, fontScale)
@@ -287,10 +289,12 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double, fontScale: Float = 
 
 @Composable
 fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Color, fontScale: Float = 1.0f) {
+    val size = (7.3f * fontScale).sp
     Text(
         text = text,
         color = color,
-        fontSize = (7.3f * fontScale).sp,
+        fontSize = size,
+        lineHeight = size * 1.5f,
         fontFamily = FontFamily.Monospace,
         textAlign = align,
         modifier = Modifier.weight(weight),
