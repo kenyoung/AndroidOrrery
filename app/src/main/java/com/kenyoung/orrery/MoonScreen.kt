@@ -223,6 +223,104 @@ fun MoonScreen(
     }
     val moonEvents = moonEventData.events
 
+    // Duration Moon is above the horizon during its current moonrise-to-moonset
+    // passage (the one with a rise within the calendar day, or — if the Moon
+    // was already up at day-start — the passage still in progress). Polar cases:
+    // Moon never up during the day → "No moonrise today"; Moon up all day with
+    // no rise or set in the window → "No moonset today" with the calendar day
+    // as the interval. Sunless = minutes within the Moon window when the Sun
+    // is below the horizon; polar phrasings test the calendar day. Same altitude
+    // thresholds used elsewhere on this page. 72h scan at 1-minute resolution
+    // so the window can extend into the previous or next day.
+    val moonUpLineText = remember(dayMode, obs.lat, obs.lon, obs.useStandardTime, cacheKey, refreshKey) {
+        val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
+        val currentLocalEpochDay = currentUtEpochDay + displayOffsetHours / 24.0
+        val dayStartLocal = floor(currentLocalEpochDay)
+        val dayStartUt = dayStartLocal - displayOffsetHours / 24.0
+
+        val scanMinutes = 4320   // T-24h through T+48h relative to day start
+        val dayStartIdx = 1440
+        val dayEndIdx = 2880
+        val sampleStepDays = 1.0 / 1440.0
+        val scanStartUt = dayStartUt - 1.0
+
+        val moonUp = BooleanArray(scanMinutes)
+        val sunUp = BooleanArray(scanMinutes)
+        for (i in 0 until scanMinutes) {
+            val sampleUt = scanStartUt + (i + 0.5) * sampleStepDays
+            val sampleJd = sampleUt + UNIX_EPOCH_JD
+            val sampleLst = calculateLSTHours(sampleJd, obs.lon)
+
+            // Raw geometric altitude against the refraction-baked thresholds,
+            // matching calculateMoonEvents / calculateSunTimes in AstroMath.kt.
+            // Applying applyRefraction here would double-count refraction.
+            val moonStateI = AstroEngine.getBodyState("Moon", sampleJd)
+            val moonAppI = j2000ToApparent(moonStateI.ra, moonStateI.dec, sampleJd)
+            val moonTopoI = toTopocentric(moonAppI.ra, moonAppI.dec, moonStateI.distGeo, obs.lat, obs.lon, sampleLst)
+            val moonAzAltI = calculateAzAlt(sampleLst, obs.lat, moonTopoI.ra / 15.0, moonTopoI.dec)
+            val moonSdI = Math.toDegrees(asin(MOON_RADIUS_KM * 1000.0 / (moonStateI.distGeo * AU_METERS)))
+            moonUp[i] = moonAzAltI.alt > (PLANET_HORIZON_ALT - moonSdI)
+
+            val sunStateI = AstroEngine.getBodyState("Sun", sampleJd)
+            val sunAppI = j2000ToApparent(sunStateI.ra, sunStateI.dec, sampleJd)
+            val sunAzAltI = calculateAzAlt(sampleLst, obs.lat, sunAppI.ra / 15.0, sunAppI.dec)
+            sunUp[i] = sunAzAltI.alt > HORIZON_REFRACTED
+        }
+
+        var moonUpInDay = 0
+        var sunUpInDay = 0
+        for (i in dayStartIdx until dayEndIdx) {
+            if (moonUp[i]) moonUpInDay++
+            if (sunUp[i]) sunUpInDay++
+        }
+        val sunNeverSetsToday = sunUpInDay == 1440
+        val sunNeverRisesToday = sunUpInDay == 0
+
+        fun sunlessText(count: Int): String = when {
+            sunNeverSetsToday -> "No sunset today"
+            sunNeverRisesToday -> "No sunrise today"
+            else -> "%dh %02dm sunless".format(count / 60, count % 60)
+        }
+
+        if (moonUpInDay == 0) {
+            return@remember "No moonrise today"
+        }
+
+        // Find rise: first false→true transition within the calendar day, else the
+        // latest rise before dayStart (Moon was already up at day-start).
+        var riseIdx = -1
+        for (i in dayStartIdx until dayEndIdx) {
+            if (moonUp[i] && i > 0 && !moonUp[i - 1]) { riseIdx = i; break }
+        }
+        if (riseIdx == -1) {
+            for (i in dayStartIdx - 1 downTo 1) {
+                if (moonUp[i] && !moonUp[i - 1]) { riseIdx = i; break }
+            }
+        }
+        var setIdx = -1
+        if (riseIdx >= 0) {
+            for (i in riseIdx + 1 until scanMinutes) {
+                if (!moonUp[i] && moonUp[i - 1]) { setIdx = i; break }
+            }
+        }
+
+        if (riseIdx < 0 || setIdx < 0) {
+            // Moon up for the entire scan (polar): report the calendar day.
+            var sunlessInDay = 0
+            for (i in dayStartIdx until dayEndIdx) if (moonUp[i] && !sunUp[i]) sunlessInDay++
+            val moonPart = if (moonUpInDay == 1440) "No moonset today"
+                else "Moon up %dh %02dm".format(moonUpInDay / 60, moonUpInDay % 60)
+            return@remember "$moonPart (${sunlessText(sunlessInDay)})"
+        }
+
+        val windowMinutes = setIdx - riseIdx
+        var sunlessInWindow = 0
+        for (i in riseIdx until setIdx) if (!sunUp[i]) sunlessInWindow++
+
+        val moonPart = "Moon up %dh %02dm".format(windowMinutes / 60, windowMinutes % 60)
+        "$moonPart (${sunlessText(sunlessInWindow)})"
+    }
+
     // If a named principal phase (New / 1st Qtr / Full / Last Qtr) falls within
     // the current display-tz day, show it above the moon image on both pages.
     val phaseEventText: String? = run {
@@ -311,7 +409,7 @@ fun MoonScreen(
             val bottomMargin = 10f
             val hasNextDayFootnote = riseIsTomorrow || transitIsTomorrow || setIsTomorrow
             // dayMode omits Line 3 (current El/Az/PA + countdown), so one fewer line.
-            val numInfoLines = (if (hasNextDayFootnote) 14 else 13) - if (dayMode) 1 else 0
+            val numInfoLines = (if (hasNextDayFootnote) 15 else 14) - if (dayMode) 1 else 0
             val boxGap = lineSpacing * 0.5f
             val infoHeight = numInfoLines * lineSpacing + 2 * boxGap + (if (hasNextDayFootnote) boxGap / 4f else 0f) + 10f
             val availH = h - infoHeight - topMargin - bottomMargin
@@ -516,8 +614,12 @@ fun MoonScreen(
                     nc.drawText("* Tomorrow", w / 2f, lineY, centerPaint)
                 }
 
-                // Line 6: Distance and angular diameter
+                // Moon-up duration line (above Dist.)
                 lineY += lineSpacing + (if (hasNextDayFootnote) boxGap / 4f else boxGap)
+                nc.drawText(moonUpLineText, w / 2f, lineY, centerPaint)
+
+                // Line 6: Distance and angular diameter
+                lineY += lineSpacing
                 drawCenteredSegments(lineY,
                     "Dist. " to true, "%,.0f km (%,.0f mi)  ".format(moonDistKm, moonDistKm * KM_TO_MILES) to false,
                     "Diam. " to true, "%.1f'".format(angularDiamArcmin) to false)
