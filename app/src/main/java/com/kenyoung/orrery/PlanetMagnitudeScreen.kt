@@ -1,6 +1,7 @@
 package com.kenyoung.orrery
 
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -271,6 +272,8 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
         }
     }
     val tapDateFormatter = remember { DateTimeFormatter.ofPattern("d MMM yyyy") }
+    val brightPaths = remember { List(planets.size) { Path() } }
+    val dimPaths = remember { List(planets.size) { Path() } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(
@@ -343,20 +346,29 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
                         }
                     }
 
-                    // Per-planet polyline, drawn sample-to-sample so segments near the
-                    // Sun (elongation < threshold) can be rendered dim.
-                    for (s in series) {
-                        val dimColor = (s.colorInt and 0x00FFFFFF) or (NEAR_SUN_ALPHA shl 24)
+                    // Per-planet polyline, split into bright + dim paths so segments
+                    // with elongation below NEAR_SUN_ELONG_DEG render with reduced alpha.
+                    for ((sIdx, s) in series.withIndex()) {
+                        val bp = brightPaths[sIdx]
+                        val dp = dimPaths[sIdx]
+                        bp.reset(); dp.reset()
+                        var prevNearSun: Boolean? = null
                         for (k in 0 until SAMPLE_COUNT - 1) {
-                            val x1 = dayToX(k * SAMPLE_STEP_DAYS)
-                            val y1 = magToYClamped(s.magnitudes[k])
-                            val x2 = dayToX((k + 1) * SAMPLE_STEP_DAYS)
-                            val y2 = magToYClamped(s.magnitudes[k + 1])
                             val nearSun = s.elongationsDeg[k] < NEAR_SUN_ELONG_DEG &&
                                     s.elongationsDeg[k + 1] < NEAR_SUN_ELONG_DEG
-                            linePaint.color = if (nearSun) dimColor else s.colorInt
-                            canvas.drawLine(x1, y1, x2, y2, linePaint)
+                            val path = if (nearSun) dp else bp
+                            if (prevNearSun != nearSun) {
+                                path.moveTo(dayToX(k * SAMPLE_STEP_DAYS),
+                                    magToYClamped(s.magnitudes[k]))
+                                prevNearSun = nearSun
+                            }
+                            path.lineTo(dayToX((k + 1) * SAMPLE_STEP_DAYS),
+                                magToYClamped(s.magnitudes[k + 1]))
                         }
+                        linePaint.color = s.colorInt
+                        canvas.drawPath(bp, linePaint)
+                        linePaint.color = (s.colorInt and 0x00FFFFFF) or (NEAR_SUN_ALPHA shl 24)
+                        canvas.drawPath(dp, linePaint)
                     }
 
                     // Opposition and conjunction markers (filled circle, planet-colored,
@@ -432,36 +444,26 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
                         val noonInstant = tappedLocalDate.atTime(12, 0).atZone(zone).toInstant()
                         val jdAtNoon = noonInstant.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
 
-                        val sunState = AstroEngine.getBodyState("Sun", jdAtNoon)
-                        val earthSunDist = sunState.distGeo
-                        val raSunRad = Math.toRadians(sunState.ra)
-                        val decSunRad = Math.toRadians(sunState.dec)
-                        val magAt = DoubleArray(planets.size)
-                        val elongDegAt = DoubleArray(planets.size)
-                        for ((idx, p) in planets.withIndex()) {
-                            val state = AstroEngine.getBodyState(p.name, jdAtNoon)
-                            val alphaDeg = Math.toDegrees(phaseAngleRad(state.distSun, state.distGeo, earthSunDist))
-                            val ringB = if (p.name == "Saturn")
-                                SaturnMoonEngine.calculateRingTiltB(state.eclipticLon, state.eclipticLat, jdAtNoon)
-                            else 0.0
-                            magAt[idx] = apparentMagnitude(p.name, state.distSun, state.distGeo, alphaDeg, ringB)
-                            val raPRad = Math.toRadians(state.ra)
-                            val decPRad = Math.toRadians(state.dec)
-                            val cosSep = sin(decSunRad) * sin(decPRad) +
-                                    cos(decSunRad) * cos(decPRad) * cos(raPRad - raSunRad)
-                            elongDegAt[idx] = Math.toDegrees(acos(cosSep.coerceIn(-1.0, 1.0)))
+                        // Magnitudes and elongations come from the per-day samples used
+                        // to draw the lines, so the readout matches the chart exactly.
+                        val sampleIdx = dayOffset.roundToInt().coerceIn(0, FORECAST_DAYS)
+                        val magAt = DoubleArray(planets.size) {
+                            series[it].magnitudes[sampleIdx].toDouble()
+                        }
+                        val elongDegAt = DoubleArray(planets.size) {
+                            series[it].elongationsDeg[sampleIdx].toDouble()
                         }
 
-                        // Dark hours above horizon: scan the 24h noon-to-noon window around
-                        // the tapped date's night at 5-minute resolution. A sample counts
-                        // toward a planet's total only when the Sun is at or below -6°
-                        // (civil twilight) and the planet is above the refraction-corrected
-                        // horizon.
+                        // Dark hours above horizon: 5-minute-resolution scan of the 24h
+                        // noon-to-noon window around the tapped date's night. A sample
+                        // counts only when the Sun is at or below CIVIL_TWILIGHT and the
+                        // planet is above PLANET_HORIZON_ALT.
                         val darkHoursAt = IntArray(planets.size)
                         run {
-                            val darkSampleCount = 288
-                            val darkStepDays = 1.0 / darkSampleCount
-                            val minutesPerSample = 24 * 60 / darkSampleCount
+                            val darkStepMinutes = 5
+                            val darkSampleCount = 24 * 60 / darkStepMinutes
+                            val darkStepDays = darkStepMinutes / (24.0 * 60.0)
+                            val minutesPerSample = darkStepMinutes
                             val sunDark = BooleanArray(darkSampleCount)
                             val lstAtSample = DoubleArray(darkSampleCount)
                             for (k in 0 until darkSampleCount) {
