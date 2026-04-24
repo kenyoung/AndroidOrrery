@@ -94,7 +94,7 @@ private val MONTH_ABBREV = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Ju
 // ringTiltBDeg = Saturn's ring tilt B (saturnicentric latitude of Earth).
 // Secular brightening of the ice giants and the Uranus sub-Earth-latitude
 // term (a few hundredths of a mag) are not included.
-private fun apparentMagnitude(
+internal fun apparentMagnitude(
     name: String, r: Double, delta: Double, alphaDeg: Double, ringTiltBDeg: Double = 0.0
 ): Double {
     val rDelta5log = 5.0 * log10(r * delta)

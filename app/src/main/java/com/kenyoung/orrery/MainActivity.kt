@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, PLANET_PATHS, ANGULAR_SIZE, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, PLANET_PATHS, ANGULAR_SIZE, PLANET_MAGNITUDE, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
     LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -439,6 +439,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Planet Compass" to Screen.COMPASS,
                             "Planet Paths" to Screen.PLANET_PATHS,
                             "Planet Angular Size" to Screen.ANGULAR_SIZE,
+                            "Planet Magnitude" to Screen.PLANET_MAGNITUDE,
                             "Object Visibility" to Screen.OBJECT_VISIBILITY,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
@@ -577,6 +578,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.PLANET_PATHS -> PlanetPathsScreen(obs) { useStandardTime = it }
                     Screen.ANGULAR_SIZE -> PlanetAngularSizeScreen(obs) { useStandardTime = it }
+                    Screen.PLANET_MAGNITUDE -> PlanetMagnitudeScreen(obs) { useStandardTime = it }
                     Screen.OBJECT_VISIBILITY -> ObjectVisibilityScreen(obs)
                     Screen.MOON -> MoonScreen(obs, onTimeDisplayChange = { useStandardTime = it }, refreshKey = moonRefreshKey)
                     Screen.MOON_ON_DAY -> {
