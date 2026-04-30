@@ -239,11 +239,15 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
                     Text(" hours", color = LabelColor, fontSize = (14 * fontScale).sp)
                 }
                 Row(horizontalArrangement = Arrangement.Center) {
-                    Text("(", color = LabelColor, fontSize = (14 * fontScale).sp)
-                    Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
-                    Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" $timeLabel) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    if (tonightDarkHours.roundToInt() == 0) {
+                        Text("tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    } else {
+                        Text("(", color = LabelColor, fontSize = (14 * fontScale).sp)
+                        Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
+                        Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
+                        Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
+                        Text(" $timeLabel) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    }
                 }
             }
             TimeDisplayToggle(useLocalTime, useDst, onTimeDisplayChange)
