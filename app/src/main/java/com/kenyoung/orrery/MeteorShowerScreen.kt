@@ -233,15 +233,17 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(horizontalArrangement = Arrangement.Center) {
-                    Text("The sky will be very dark for ", color = LabelColor, fontSize = (14 * fontScale).sp)
-                    Text("%.1f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
-                    Text(" hours", color = LabelColor, fontSize = (14 * fontScale).sp)
-                }
-                Row(horizontalArrangement = Arrangement.Center) {
-                    if (tonightDarkHours.roundToInt() == 0) {
-                        Text("tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
-                    } else {
+                if (tonightDarkHours.roundToInt() == 0) {
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        Text("It won't be very dark at anytime tonight", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        Text("The sky will be very dark for ", color = LabelColor, fontSize = (14 * fontScale).sp)
+                        Text("%.1f".format(tonightDarkHours), color = Color.White, fontSize = (14 * fontScale).sp)
+                        Text(" hours", color = LabelColor, fontSize = (14 * fontScale).sp)
+                    }
+                    Row(horizontalArrangement = Arrangement.Center) {
                         Text("(", color = LabelColor, fontSize = (14 * fontScale).sp)
                         Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
                         Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
