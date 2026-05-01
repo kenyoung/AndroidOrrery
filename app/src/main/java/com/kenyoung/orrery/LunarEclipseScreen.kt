@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
+import java.time.LocalDate
 import kotlin.math.*
 
 // ============================================================================
@@ -83,10 +84,21 @@ data class LunarEclipse(
         else -> "Penumbral"
     }
 
-    fun formatDate(): String = "%02d-%02d-%04d".format(day, month, abs(year)) +
-            if (year < 0) " BC" else ""
+}
 
-    fun formatListEntry(): String = "${formatDate()} $typeString"
+// Date of maximum eclipse, shifted by the user's time-reference offset
+// (0 for UT, the standard timezone offset for local time).
+private fun eclipseDisplayDate(eclipse: LunarEclipse, offsetHours: Double): LocalDate {
+    val eclipseUTHours = (eclipse.tDGE - eclipse.dTMinusUT) / 3600.0
+    val deltaDays = floor((eclipseUTHours + offsetHours) / 24.0).toInt()
+    return LocalDate.of(eclipse.year, eclipse.month, eclipse.day).plusDays(deltaDays.toLong())
+}
+
+private fun formatEclipseListEntry(eclipse: LunarEclipse, offsetHours: Double): String {
+    val d = eclipseDisplayDate(eclipse, offsetHours)
+    val y = d.year
+    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, abs(y)) +
+            (if (y < 0) " BC" else "") + " ${eclipse.typeString}"
 }
 
 data class ShoreSegment(
@@ -1028,6 +1040,7 @@ fun LunarEclipseScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
             localOnly = localOnly,
             latitude = latitude,
             longitude = longitude,
+            offsetHours = if (useStandardTime) stdOffsetHours else 0.0,
             onDecadeChange = { decadeStart = it },
             onPenumbralToggle = { showPenumbral = it },
             onPartialToggle = { showPartial = it },
@@ -1048,6 +1061,7 @@ private fun EclipseSelectionView(
     localOnly: Boolean,
     latitude: Double,
     longitude: Double,
+    offsetHours: Double,
     onDecadeChange: (Int) -> Unit,
     onPenumbralToggle: (Boolean) -> Unit,
     onPartialToggle: (Boolean) -> Unit,
@@ -1225,6 +1239,7 @@ private fun EclipseSelectionView(
                     localOnly = localOnly,
                     latitude = latitude,
                     longitude = longitude,
+                    offsetHours = offsetHours,
                     onClick = { onEclipseSelected(eclipse) }
                 )
             }
@@ -1238,6 +1253,7 @@ private fun EclipseListItem(
     localOnly: Boolean,
     latitude: Double,
     longitude: Double,
+    offsetHours: Double,
     onClick: () -> Unit
 ) {
     val typeColor = when (eclipse.eclipseType) {
@@ -1257,7 +1273,7 @@ private fun EclipseListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = eclipse.formatListEntry(),
+            text = formatEclipseListEntry(eclipse, offsetHours),
             color = typeColor,
             fontSize = 16.sp,
             fontFamily = FontFamily.Monospace
@@ -1900,9 +1916,10 @@ private fun renderEclipse(
         // Title - eclipse type in yellow, date in white
         textPaint.textSize = largeTextSize
         textPaint.textAlign = Paint.Align.LEFT
-        val yearStr = if (eclipse.year <= 0) "${abs(eclipse.year - 1)} BC" else "${eclipse.year}"
+        val titleDateLD = eclipseDisplayDate(eclipse, timeOffset)
+        val yearStr = if (titleDateLD.year <= 0) "${abs(titleDateLD.year - 1)} BC" else "${titleDateLD.year}"
         val titlePrefix = "${eclipse.typeString} Lunar Eclipse "
-        val titleDate = "${monthNames[eclipse.month - 1]} ${eclipse.day}, $yearStr"
+        val titleDate = "${monthNames[titleDateLD.monthValue - 1]} ${titleDateLD.dayOfMonth}, $yearStr"
         val prefixWidth = textPaint.measureText(titlePrefix)
         val dateWidth = textPaint.measureText(titleDate)
         val titleStartX = (width - prefixWidth - dateWidth) / 2
