@@ -36,6 +36,7 @@ import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
+import java.time.LocalDate
 import kotlin.math.*
 
 // ============================================================================
@@ -99,24 +100,32 @@ data class SolarEclipse(
         else -> PartialColor
     }
 
-    fun formatDate(): String = "%02d-%02d-%04d".format(day, month, year)
-
-    fun formatDateLong(): String {
-        val monthName = arrayOf(
-            "", "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        )[month.coerceIn(1, 12)]
-        return "$monthName $day, $year"
-    }
-
-    fun formatListEntry(): String = "${formatDate()} $typeString"
-
     /** T0 in hours from midnight (TD) */
     fun t0Hours(): Double = t0.toDouble() / 3600.0
 
     /** Evaluate polynomial at t hours from T0 */
     fun evalPoly(coeffs: FloatArray, t: Double): Double =
         coeffs[0] + coeffs[1] * t + coeffs[2] * t * t
+}
+
+private fun solarEclipseDisplayDate(eclipse: SolarEclipse, offsetHours: Double): LocalDate {
+    val greatestT = findGreatestEclipseT(eclipse)
+    val eclipseUTHours = eclipse.t0Hours() + greatestT - eclipse.deltaT.toDouble() / 3600.0
+    val deltaDays = floor((eclipseUTHours + offsetHours) / 24.0).toInt()
+    return LocalDate.of(eclipse.year, eclipse.month, eclipse.day).plusDays(deltaDays.toLong())
+}
+
+private fun formatSolarEclipseListEntry(eclipse: SolarEclipse, offsetHours: Double): String {
+    val d = solarEclipseDisplayDate(eclipse, offsetHours)
+    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, d.year) + " ${eclipse.typeString}"
+}
+
+private fun formatSolarEclipseDateLong(date: LocalDate): String {
+    val monthName = arrayOf(
+        "", "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )[date.monthValue.coerceIn(1, 12)]
+    return "$monthName ${date.dayOfMonth}, ${date.year}"
 }
 
 /**
@@ -948,6 +957,7 @@ fun SolarEclipseScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
             localOnly = localOnly,
             latitude = latitude,
             longitude = longitude,
+            offsetHours = if (useStandardTime) stdOffsetHours else 0.0,
             onDecadeChange = { decadeStart = it },
             onPartialToggle = { showPartial = it },
             onAnnularToggle = { showAnnular = it },
@@ -970,6 +980,7 @@ private fun SolarEclipseSelectionView(
     localOnly: Boolean,
     latitude: Double,
     longitude: Double,
+    offsetHours: Double,
     onDecadeChange: (Int) -> Unit,
     onPartialToggle: (Boolean) -> Unit,
     onAnnularToggle: (Boolean) -> Unit,
@@ -1149,6 +1160,7 @@ private fun SolarEclipseSelectionView(
                     localOnly = localOnly,
                     latitude = latitude,
                     longitude = longitude,
+                    offsetHours = offsetHours,
                     onClick = { onEclipseSelected(eclipse) }
                 )
             }
@@ -1162,6 +1174,7 @@ private fun SolarEclipseListItem(
     localOnly: Boolean,
     latitude: Double,
     longitude: Double,
+    offsetHours: Double,
     onClick: () -> Unit
 ) {
     val isVisible = localOnly || isEclipseLocallyVisible(eclipse, latitude, longitude)
@@ -1174,7 +1187,7 @@ private fun SolarEclipseListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = eclipse.formatListEntry(),
+            text = formatSolarEclipseListEntry(eclipse, offsetHours),
             color = eclipse.typeColor,
             fontSize = 16.sp,
             fontFamily = FontFamily.Monospace
@@ -1450,7 +1463,7 @@ private fun renderSolarEclipseUpperArea(
         // Line 1: Date and eclipse type (centered)
         labelPaint.textAlign = Paint.Align.LEFT
         val dateLbl = "Date: "
-        val dateVal = "${eclipse.formatDateLong()}  "
+        val dateVal = "${formatSolarEclipseDateLong(solarEclipseDisplayDate(eclipse, timeOffset))}  "
         val typeLbl = "Type: "
         val typeVal = eclipse.typeString
         val totalWidth = labelPaint.measureText(dateLbl) + valuePaint.measureText(dateVal) +

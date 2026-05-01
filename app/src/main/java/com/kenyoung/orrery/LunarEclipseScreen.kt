@@ -86,8 +86,6 @@ data class LunarEclipse(
 
 }
 
-// Date of maximum eclipse, shifted by the user's time-reference offset
-// (0 for UT, the standard timezone offset for local time).
 private fun eclipseDisplayDate(eclipse: LunarEclipse, offsetHours: Double): LocalDate {
     val eclipseUTHours = (eclipse.tDGE - eclipse.dTMinusUT) / 3600.0
     val deltaDays = floor((eclipseUTHours + offsetHours) / 24.0).toInt()
@@ -97,8 +95,9 @@ private fun eclipseDisplayDate(eclipse: LunarEclipse, offsetHours: Double): Loca
 private fun formatEclipseListEntry(eclipse: LunarEclipse, offsetHours: Double): String {
     val d = eclipseDisplayDate(eclipse, offsetHours)
     val y = d.year
-    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, abs(y)) +
-            (if (y < 0) " BC" else "") + " ${eclipse.typeString}"
+    val displayYear = if (y <= 0) abs(y - 1) else y
+    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, displayYear) +
+            (if (y <= 0) " BC" else "") + " ${eclipse.typeString}"
 }
 
 data class ShoreSegment(
