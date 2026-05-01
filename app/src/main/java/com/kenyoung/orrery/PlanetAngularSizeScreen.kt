@@ -160,6 +160,7 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
     // Reference-pixel x of the tap/scrub line. Initialized to the chart's left edge so the
     // first render shows a line at today's date.
     var tappedRefX by remember { mutableStateOf<Float?>(CHART_LEFT_MARGIN) }
+    var hasTapped by remember { mutableStateOf(false) }
 
     val shiftedEpochSec = obs.now.epochSecond + yearOffset.toLong() * FORECAST_DAYS.toLong() * SECONDS_PER_DAY.toLong()
     val startJd = shiftedEpochSec.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -339,9 +340,13 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
             .pointerInput(Unit) {
                 val dScale = density / REFERENCE_DENSITY
                 detectHorizontalDragGestures(
-                    onDragStart = { offset -> tappedRefX = offset.x / dScale }
+                    onDragStart = { offset ->
+                        tappedRefX = offset.x / dScale
+                        hasTapped = true
+                    }
                 ) { change, _ ->
                     tappedRefX = change.position.x / dScale
+                    hasTapped = true
                 }
             }
             .pointerInput(Unit) {
@@ -349,6 +354,7 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 val dScale = density / REFERENCE_DENSITY
                 detectTapGestures { offset ->
                     tappedRefX = offset.x / dScale
+                    hasTapped = true
                 }
             }
     ) {
@@ -619,6 +625,21 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 .padding(8.dp)
         ) {
             Text("Reset Time", fontWeight = FontWeight.Bold)
+        }
+    } else if (!hasTapped) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(4.dp)
+                .height(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Tap to move marker",
+                color = LabelColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp
+            )
         }
     }
     }

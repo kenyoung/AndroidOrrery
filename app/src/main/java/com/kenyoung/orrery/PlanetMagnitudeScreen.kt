@@ -87,6 +87,7 @@ private data class MagMonthTick(val dayOffset: Double, val month: Int, val year:
 fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     var yearOffset by remember { mutableStateOf(0) }
     var tappedRefX by remember { mutableStateOf<Float?>(CHART_LEFT_MARGIN) }
+    var hasTapped by remember { mutableStateOf(false) }
 
     val shiftedEpochSec = obs.now.epochSecond + yearOffset.toLong() * FORECAST_DAYS.toLong() * SECONDS_PER_DAY.toLong()
     val startJd = shiftedEpochSec.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -283,15 +284,20 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
                 .pointerInput(Unit) {
                     val dScale = density / REFERENCE_DENSITY
                     detectHorizontalDragGestures(
-                        onDragStart = { offset -> tappedRefX = offset.x / dScale }
+                        onDragStart = { offset ->
+                            tappedRefX = offset.x / dScale
+                            hasTapped = true
+                        }
                     ) { change, _ ->
                         tappedRefX = change.position.x / dScale
+                        hasTapped = true
                     }
                 }
                 .pointerInput(Unit) {
                     val dScale = density / REFERENCE_DENSITY
                     detectTapGestures { offset ->
                         tappedRefX = offset.x / dScale
+                        hasTapped = true
                     }
                 }
         ) {
@@ -530,6 +536,21 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
                     .padding(8.dp)
             ) {
                 Text("Reset Time", fontWeight = FontWeight.Bold)
+            }
+        } else if (!hasTapped) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(4.dp)
+                    .height(28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Tap to move marker",
+                    color = LabelColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
             }
         }
     }
