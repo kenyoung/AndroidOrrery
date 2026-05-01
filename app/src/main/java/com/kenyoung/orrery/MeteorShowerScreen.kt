@@ -235,7 +235,7 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
             ) {
                 if (tonightDarkHours.roundToInt() == 0) {
                     Row(horizontalArrangement = Arrangement.Center) {
-                        Text("It won't be very dark at anytime tonight", color = LabelColor, fontSize = (14 * fontScale).sp)
+                        Text("It won't be very dark at any time tonight", color = LabelColor, fontSize = (14 * fontScale).sp)
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.Center) {
