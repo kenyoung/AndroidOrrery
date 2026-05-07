@@ -44,6 +44,13 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     val currentAlt = applyRefraction(currentAltRaw)
     val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
 
+    // Moon altitude — used to show "Moon is up" indicator during darkness.
+    val moonState = AstroEngine.getBodyState("Moon", currentJd)
+    val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, currentJd)
+    val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lst)
+    val (_, moonAltRaw) = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
+    val moonIsUp = applyRefraction(moonAltRaw) > 0.0
+
     // Twilight data for the table (anchored to observing night).
     // Use dawn Golden Hour end (sun at 6°) as the transition point, not sunrise,
     // so the table shows this morning's dawn times during the Golden Hour period.
@@ -322,6 +329,9 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 val currentlyY = chartTop + currentlyLabelPaint.textSize + 4f
                 nc.drawText("Currently", currentlyX, currentlyY, currentlyLabelPaint)
                 nc.drawText(sunlightState, currentlyX, currentlyY + 54f, currentlyStatePaint)
+                if (sunlightState == "Darkness" && moonIsUp) {
+                    nc.drawText("Moon is up", currentlyX, currentlyY + 108f, currentlyStatePaint)
+                }
 
                 // --- Hour labels (Band 2: below chart) ---
                 for (displayHour in 0..23 step 3) {
