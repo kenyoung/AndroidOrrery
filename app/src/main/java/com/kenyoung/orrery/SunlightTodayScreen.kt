@@ -44,12 +44,16 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     val currentAlt = applyRefraction(currentAltRaw)
     val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
 
-    // Moon altitude — used to show "Moon is up" indicator during darkness.
-    val moonState = AstroEngine.getBodyState("Moon", currentJd)
-    val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, currentJd)
-    val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lst)
-    val (_, moonAltRaw) = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
-    val moonIsUp = applyRefraction(moonAltRaw) > 0.0
+    // Skip the moon-altitude calc when not in darkness — its only consumer
+    // is the "Moon is up" indicator that draws only during darkness.
+    val isDarkness = currentAltRaw < ASTRONOMICAL_TWILIGHT
+    val moonIsUp = isDarkness && run {
+        val moonState = AstroEngine.getBodyState("Moon", currentJd)
+        val (moonAppRa, moonAppDec) = j2000ToApparent(moonState.ra, moonState.dec, currentJd)
+        val topoMoon = toTopocentric(moonAppRa, moonAppDec, moonState.distGeo, lat, lon, lst)
+        val (_, moonAltRaw) = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
+        applyRefraction(moonAltRaw) > 0.0
+    }
 
     // Twilight data for the table (anchored to observing night).
     // Use dawn Golden Hour end (sun at 6°) as the transition point, not sunrise,
@@ -327,10 +331,11 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 }
                 val currentlyX = chartLeft + tickLen + 10f
                 val currentlyY = chartTop + currentlyLabelPaint.textSize + 4f
+                val stateLineSpacing = 54f
                 nc.drawText("Currently", currentlyX, currentlyY, currentlyLabelPaint)
-                nc.drawText(sunlightState, currentlyX, currentlyY + 54f, currentlyStatePaint)
-                if (sunlightState == "Darkness" && moonIsUp) {
-                    nc.drawText("Moon is up", currentlyX, currentlyY + 108f, currentlyStatePaint)
+                nc.drawText(sunlightState, currentlyX, currentlyY + stateLineSpacing, currentlyStatePaint)
+                if (moonIsUp) {
+                    nc.drawText("Moon is up", currentlyX, currentlyY + 2 * stateLineSpacing, currentlyStatePaint)
                 }
 
                 // --- Hour labels (Band 2: below chart) ---

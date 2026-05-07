@@ -670,65 +670,41 @@ fun MoonScreen(
                     "Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
                     "Apogee in " to true, "%.1f days".format(daysToApogee) to false)
 
-                // Lines 12-13: Days until next New, 1st Qtr, Full, and Last Qtr.
-                // Scan forward using actual phase angle crossings, then interpolate
-                // within the crossing day for fractional precision.
-                var daysToNewMoon = -1.0
-                var daysToFirstQuarter = -1.0
-                var daysToFullMoon = -1.0
-                var daysToLastQuarter = -1.0
                 val baseEpoch = floor(currentUtEpochDay)
-                val fractionalDay = currentUtEpochDay - baseEpoch
+                val phaseEvents = mutableListOf<Pair<String, Double>>()
                 var prevPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(baseEpoch - 1, obs.lon))
                 for (dayOffset in 0..30) {
-                    val ed = baseEpoch + dayOffset
-                    val curPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, obs.lon))
-                    if (daysToFirstQuarter < 0.0 && prevPhase < 90.0 && curPhase >= 90.0) {
-                        val frac = (90.0 - prevPhase) / (curPhase - prevPhase)
-                        daysToFirstQuarter = (dayOffset - 1 + frac) - fractionalDay
-                        if (daysToFirstQuarter < 0.0) daysToFirstQuarter = 0.0
+                    val curEpoch = baseEpoch + dayOffset
+                    val curPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(curEpoch, obs.lon))
+                    val crossing = findMoonPhaseCrossing(curEpoch - 1.0, curEpoch, prevPhase, curPhase)
+                    if (crossing != null) {
+                        val label = when (crossing.event) {
+                            MoonPhaseEvent.NEW_MOON -> "New"
+                            MoonPhaseEvent.FIRST_QUARTER -> "1st Qtr"
+                            MoonPhaseEvent.FULL_MOON -> "Full"
+                            MoonPhaseEvent.LAST_QUARTER -> "Last Qtr"
+                        }
+                        val daysFromNow = (crossing.utEpochDay - currentUtEpochDay).coerceAtLeast(0.0)
+                        phaseEvents.add(label to daysFromNow)
+                        if (phaseEvents.size == 4) break
                     }
-                    if (daysToFullMoon < 0.0 && prevPhase < 180.0 && curPhase >= 180.0) {
-                        val frac = (180.0 - prevPhase) / (curPhase - prevPhase)
-                        daysToFullMoon = (dayOffset - 1 + frac) - fractionalDay
-                        if (daysToFullMoon < 0.0) daysToFullMoon = 0.0
-                    }
-                    if (daysToLastQuarter < 0.0 && prevPhase < 270.0 && curPhase >= 270.0) {
-                        val frac = (270.0 - prevPhase) / (curPhase - prevPhase)
-                        daysToLastQuarter = (dayOffset - 1 + frac) - fractionalDay
-                        if (daysToLastQuarter < 0.0) daysToLastQuarter = 0.0
-                    }
-                    if (daysToNewMoon < 0.0 && prevPhase > 300.0 && curPhase < 60.0) {
-                        val adjustedPrev = prevPhase - 360.0
-                        val frac = (0.0 - adjustedPrev) / (curPhase - adjustedPrev)
-                        daysToNewMoon = (dayOffset - 1 + frac) - fractionalDay
-                        if (daysToNewMoon < 0.0) daysToNewMoon = 0.0
-                    }
-                    if (daysToNewMoon >= 0.0 && daysToFirstQuarter >= 0.0 &&
-                        daysToFullMoon >= 0.0 && daysToLastQuarter >= 0.0) break
                     prevPhase = curPhase
                 }
-
-                val phaseEvents = listOf(
-                    "New" to daysToNewMoon,
-                    "1st Qtr" to daysToFirstQuarter,
-                    "Full" to daysToFullMoon,
-                    "Last Qtr" to daysToLastQuarter
-                ).sortedBy { it.second }
+                val sortedPhases = phaseEvents.sortedBy { it.second }
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "${phaseEvents[0].first} in " to true,
-                    "%.1f days  ".format(phaseEvents[0].second) to false,
-                    "${phaseEvents[1].first} in " to true,
-                    "%.1f days".format(phaseEvents[1].second) to false)
+                    "${sortedPhases[0].first} in " to true,
+                    "%.1f days  ".format(sortedPhases[0].second) to false,
+                    "${sortedPhases[1].first} in " to true,
+                    "%.1f days".format(sortedPhases[1].second) to false)
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "${phaseEvents[2].first} in " to true,
-                    "%.1f days  ".format(phaseEvents[2].second) to false,
-                    "${phaseEvents[3].first} in " to true,
-                    "%.1f days".format(phaseEvents[3].second) to false)
+                    "${sortedPhases[2].first} in " to true,
+                    "%.1f days  ".format(sortedPhases[2].second) to false,
+                    "${sortedPhases[3].first} in " to true,
+                    "%.1f days".format(sortedPhases[3].second) to false)
             }
         }
     }
