@@ -670,21 +670,33 @@ fun MoonScreen(
                     "Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
                     "Apogee in " to true, "%.1f days".format(daysToApogee) to false)
 
-                // Line 12: Days until next Full Moon and New Moon
+                // Lines 12-13: Days until next New, 1st Qtr, Full, and Last Qtr.
                 // Scan forward using actual phase angle crossings, then interpolate
                 // within the crossing day for fractional precision.
-                var daysToFullMoon = -1.0
                 var daysToNewMoon = -1.0
+                var daysToFirstQuarter = -1.0
+                var daysToFullMoon = -1.0
+                var daysToLastQuarter = -1.0
                 val baseEpoch = floor(currentUtEpochDay)
                 val fractionalDay = currentUtEpochDay - baseEpoch
                 var prevPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(baseEpoch - 1, obs.lon))
                 for (dayOffset in 0..30) {
                     val ed = baseEpoch + dayOffset
                     val curPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(ed, obs.lon))
+                    if (daysToFirstQuarter < 0.0 && prevPhase < 90.0 && curPhase >= 90.0) {
+                        val frac = (90.0 - prevPhase) / (curPhase - prevPhase)
+                        daysToFirstQuarter = (dayOffset - 1 + frac) - fractionalDay
+                        if (daysToFirstQuarter < 0.0) daysToFirstQuarter = 0.0
+                    }
                     if (daysToFullMoon < 0.0 && prevPhase < 180.0 && curPhase >= 180.0) {
                         val frac = (180.0 - prevPhase) / (curPhase - prevPhase)
                         daysToFullMoon = (dayOffset - 1 + frac) - fractionalDay
                         if (daysToFullMoon < 0.0) daysToFullMoon = 0.0
+                    }
+                    if (daysToLastQuarter < 0.0 && prevPhase < 270.0 && curPhase >= 270.0) {
+                        val frac = (270.0 - prevPhase) / (curPhase - prevPhase)
+                        daysToLastQuarter = (dayOffset - 1 + frac) - fractionalDay
+                        if (daysToLastQuarter < 0.0) daysToLastQuarter = 0.0
                     }
                     if (daysToNewMoon < 0.0 && prevPhase > 300.0 && curPhase < 60.0) {
                         val adjustedPrev = prevPhase - 360.0
@@ -692,17 +704,31 @@ fun MoonScreen(
                         daysToNewMoon = (dayOffset - 1 + frac) - fractionalDay
                         if (daysToNewMoon < 0.0) daysToNewMoon = 0.0
                     }
-                    if (daysToFullMoon >= 0.0 && daysToNewMoon >= 0.0) break
+                    if (daysToNewMoon >= 0.0 && daysToFirstQuarter >= 0.0 &&
+                        daysToFullMoon >= 0.0 && daysToLastQuarter >= 0.0) break
                     prevPhase = curPhase
                 }
 
-                lineY += lineSpacing
-                drawCenteredSegments(lineY,
-                    "Full Moon in " to true, "%.1f days".format(daysToFullMoon) to false)
+                val phaseEvents = listOf(
+                    "New" to daysToNewMoon,
+                    "1st Qtr" to daysToFirstQuarter,
+                    "Full" to daysToFullMoon,
+                    "Last Qtr" to daysToLastQuarter
+                ).sortedBy { it.second }
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "New Moon in " to true, "%.1f days".format(daysToNewMoon) to false)
+                    "${phaseEvents[0].first} in " to true,
+                    "%.1f days  ".format(phaseEvents[0].second) to false,
+                    "${phaseEvents[1].first} in " to true,
+                    "%.1f days".format(phaseEvents[1].second) to false)
+
+                lineY += lineSpacing
+                drawCenteredSegments(lineY,
+                    "${phaseEvents[2].first} in " to true,
+                    "%.1f days  ".format(phaseEvents[2].second) to false,
+                    "${phaseEvents[3].first} in " to true,
+                    "%.1f days".format(phaseEvents[3].second) to false)
             }
         }
     }
