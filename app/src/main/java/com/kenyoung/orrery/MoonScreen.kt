@@ -670,13 +670,17 @@ fun MoonScreen(
                     "Perigee in " to true, "%.1f days  ".format(daysToPerigee) to false,
                     "Apogee in " to true, "%.1f days".format(daysToApogee) to false)
 
-                val baseEpoch = floor(currentUtEpochDay)
+                // Start the scan at "now" rather than yesterday's midnight so past
+                // phase events aren't picked up. Subsequent samples step forward at
+                // midnight UT. Forward-scanning means events come out chronologically.
+                val firstMidnight = floor(currentUtEpochDay) + 1.0
                 val phaseEvents = mutableListOf<Pair<String, Double>>()
-                var prevPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(baseEpoch - 1, obs.lon))
+                var prevTime = currentUtEpochDay
+                var prevPhase = calculateMoonPhaseAngle(prevTime)
                 for (dayOffset in 0..30) {
-                    val curEpoch = baseEpoch + dayOffset
-                    val curPhase = calculateMoonPhaseAngle(estimateMoonTransitEpochDay(curEpoch, obs.lon))
-                    val crossing = findMoonPhaseCrossing(curEpoch - 1.0, curEpoch, prevPhase, curPhase)
+                    val curTime = firstMidnight + dayOffset
+                    val curPhase = calculateMoonPhaseAngle(curTime)
+                    val crossing = findMoonPhaseCrossing(prevTime, curTime, prevPhase, curPhase)
                     if (crossing != null) {
                         val label = when (crossing.event) {
                             MoonPhaseEvent.NEW_MOON -> "New"
@@ -684,27 +688,26 @@ fun MoonScreen(
                             MoonPhaseEvent.FULL_MOON -> "Full"
                             MoonPhaseEvent.LAST_QUARTER -> "Last Qtr"
                         }
-                        val daysFromNow = (crossing.utEpochDay - currentUtEpochDay).coerceAtLeast(0.0)
-                        phaseEvents.add(label to daysFromNow)
+                        phaseEvents.add(label to (crossing.utEpochDay - currentUtEpochDay))
                         if (phaseEvents.size == 4) break
                     }
+                    prevTime = curTime
                     prevPhase = curPhase
                 }
-                val sortedPhases = phaseEvents.sortedBy { it.second }
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "${sortedPhases[0].first} in " to true,
-                    "%.1f days  ".format(sortedPhases[0].second) to false,
-                    "${sortedPhases[1].first} in " to true,
-                    "%.1f days".format(sortedPhases[1].second) to false)
+                    "${phaseEvents[0].first} in " to true,
+                    "%.1f days  ".format(phaseEvents[0].second) to false,
+                    "${phaseEvents[1].first} in " to true,
+                    "%.1f days".format(phaseEvents[1].second) to false)
 
                 lineY += lineSpacing
                 drawCenteredSegments(lineY,
-                    "${sortedPhases[2].first} in " to true,
-                    "%.1f days  ".format(sortedPhases[2].second) to false,
-                    "${sortedPhases[3].first} in " to true,
-                    "%.1f days".format(sortedPhases[3].second) to false)
+                    "${phaseEvents[2].first} in " to true,
+                    "%.1f days  ".format(phaseEvents[2].second) to false,
+                    "${phaseEvents[3].first} in " to true,
+                    "%.1f days".format(phaseEvents[3].second) to false)
             }
         }
     }
