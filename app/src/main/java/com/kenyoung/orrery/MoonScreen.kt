@@ -673,11 +673,13 @@ fun MoonScreen(
                 // Start the scan at "now" rather than yesterday's midnight so past
                 // phase events aren't picked up. Subsequent samples step forward at
                 // midnight UT. Forward-scanning means events come out chronologically.
+                // The window (>31 days) always exceeds one synodic month, so the next
+                // four principal phases are always found.
                 val firstMidnight = floor(currentUtEpochDay) + 1.0
                 val phaseEvents = mutableListOf<Pair<String, Double>>()
                 var prevTime = currentUtEpochDay
                 var prevPhase = calculateMoonPhaseAngle(prevTime)
-                for (dayOffset in 0..30) {
+                for (dayOffset in 0..31) {
                     val curTime = firstMidnight + dayOffset
                     val curPhase = calculateMoonPhaseAngle(curTime)
                     val crossing = findMoonPhaseCrossing(prevTime, curTime, prevPhase, curPhase)
@@ -695,19 +697,17 @@ fun MoonScreen(
                     prevPhase = curPhase
                 }
 
-                lineY += lineSpacing
-                drawCenteredSegments(lineY,
-                    "${phaseEvents[0].first} in " to true,
-                    "%.1f days  ".format(phaseEvents[0].second) to false,
-                    "${phaseEvents[1].first} in " to true,
-                    "%.1f days".format(phaseEvents[1].second) to false)
-
-                lineY += lineSpacing
-                drawCenteredSegments(lineY,
-                    "${phaseEvents[2].first} in " to true,
-                    "%.1f days  ".format(phaseEvents[2].second) to false,
-                    "${phaseEvents[3].first} in " to true,
-                    "%.1f days".format(phaseEvents[3].second) to false)
+                // Draw the events two per line. Indexing is guarded by chunked() so a
+                // short list (impossible for the 0..31 window, but cheap insurance)
+                // can't trigger an index crash.
+                phaseEvents.chunked(2).forEach { line ->
+                    lineY += lineSpacing
+                    val segments = line.flatMapIndexed { idx, event ->
+                        val fmt = if (idx == 0 && line.size == 2) "%.1f days  " else "%.1f days"
+                        listOf("${event.first} in " to true, fmt.format(event.second) to false)
+                    }
+                    drawCenteredSegments(lineY, *segments.toTypedArray())
+                }
             }
         }
     }
