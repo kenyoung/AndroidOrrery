@@ -199,8 +199,8 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 HeaderCell("Shower Name", 0.28f, TextAlign.Left, fontScale)
                 HeaderCell("Rate", 0.06f, TextAlign.Right, fontScale)
-                HeaderCell("Dates", 0.24f, TextAlign.Center, fontScale)
-                HeaderCell("Max", 0.06f, TextAlign.Center, fontScale)
+                HeaderCell("Dates", 0.19f, TextAlign.Center, fontScale)
+                HeaderCell("Max", 0.10f, TextAlign.Center, fontScale)
                 HeaderCell("V", 0.06f, TextAlign.Center, fontScale)
                 HeaderCell("Moon%", 0.10f, TextAlign.Center, fontScale)
                 HeaderCell("Dark", 0.08f, TextAlign.Center, fontScale)
@@ -285,8 +285,8 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double, fontScale: Float = 
     Row(Modifier.fillMaxWidth()) {
         DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor, fontScale)
         DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor, fontScale)
-        DataCell("${data.startDateStr} → ${data.endDateStr}", 0.24f, TextAlign.Center, rowColor, fontScale)
-        DataCell(data.maxDateStr, 0.06f, TextAlign.Center, rowColor, fontScale)
+        DataCell("${data.startDateStr}→${data.endDateStr}", 0.19f, TextAlign.Center, rowColor, fontScale)
+        DataCell(data.maxDateStr, 0.10f, TextAlign.Center, rowColor, fontScale)
         DataCell(data.shower.velocity, 0.06f, TextAlign.Center, rowColor, fontScale)
         DataCell("${data.moonPercent}${data.moonTrend}", 0.10f, TextAlign.Center, rowColor, fontScale)
         DataCell("%.1f".format(data.maxDarkHours), 0.08f, TextAlign.Center, rowColor, fontScale)
