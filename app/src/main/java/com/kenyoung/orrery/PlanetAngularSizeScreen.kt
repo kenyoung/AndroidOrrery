@@ -34,6 +34,7 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.acos
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
@@ -82,6 +83,13 @@ private const val URANUS_NEPTUNE_GAP_ARCSEC = 5.0
 // Chart's left margin in reference pixels. Referenced from both the drawing code
 // and the tap-line state (which snaps to the left edge on year-shift).
 private const val CHART_LEFT_MARGIN = 80f
+
+// Lemon spans where solar elongation is below this threshold are drawn dim
+// — the planet is too close to the Sun to observe regardless of its size.
+private const val NEAR_SUN_ELONG_DEG = 15f
+
+// Alpha applied to the lemon fill color for near-Sun spans (0..255).
+private const val NEAR_SUN_ALPHA = 0x50
 
 private val YEAR_BUTTON_PADDING = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
 
@@ -148,6 +156,7 @@ private data class PlanetSeries(
     val colorInt: Int,
     val samplesArcsec: FloatArray,
     val ringSamplesArcsec: FloatArray?,
+    val elongationsDeg: FloatArray,
 )
 
 private data class MonthTick(val dayOffset: Double, val month: Int, val year: Int)
@@ -170,11 +179,20 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
 
     // Recomputed once per day — 7 planets × 366 samples per recomp would be wasteful per-minute.
     val series: List<PlanetSeries> = remember(dayKey) {
+        // Sun RA/Dec per sample, shared by every planet's elongation calc.
+        val sunRaDeg = DoubleArray(SAMPLE_COUNT)
+        val sunDecDeg = DoubleArray(SAMPLE_COUNT)
+        for (i in 0 until SAMPLE_COUNT) {
+            val ss = AstroEngine.getBodyState("Sun", startJd + i * SAMPLE_STEP_DAYS)
+            sunRaDeg[i] = ss.ra
+            sunDecDeg[i] = ss.dec
+        }
         planets.map { p ->
             val radiusKm = PLANET_RADIUS_KM[p.name] ?: 0.0
             val hasRings = p.name == "Saturn"
             val samples = FloatArray(SAMPLE_COUNT)
             val ringSamples = if (hasRings) FloatArray(SAMPLE_COUNT) else null
+            val elongs = FloatArray(SAMPLE_COUNT)
             for (i in 0 until SAMPLE_COUNT) {
                 val jd = startJd + i * SAMPLE_STEP_DAYS
                 val state = AstroEngine.getBodyState(p.name, jd)
@@ -183,8 +201,15 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 if (hasRings) {
                     ringSamples!![i] = (2.0 * SATURN_RING_OUTER_RADIUS_KM / distKm * ARCSEC_PER_RAD).toFloat()
                 }
+                val decSRad = Math.toRadians(sunDecDeg[i])
+                val raSRad = Math.toRadians(sunRaDeg[i])
+                val decPRad = Math.toRadians(state.dec)
+                val raPRad = Math.toRadians(state.ra)
+                val cosSep = sin(decSRad) * sin(decPRad) +
+                        cos(decSRad) * cos(decPRad) * cos(raPRad - raSRad)
+                elongs[i] = Math.toDegrees(acos(cosSep.coerceIn(-1.0, 1.0))).toFloat()
             }
-            PlanetSeries(p.name, p.symbol, p.color, p.color.toArgb(), samples, ringSamples)
+            PlanetSeries(p.name, p.symbol, p.color, p.color.toArgb(), samples, ringSamples, elongs)
         }
     }
 
@@ -413,31 +438,50 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 tickArcsec += tickStep
             }
 
-            fun buildLemon(baselineY: Float, samples: FloatArray) {
+            // Closed lemon polygon over the sample range [startK, endK]: top edge forward,
+            // bottom edge back. Drawing a lemon as per-run sub-polygons lets adjacent runs
+            // (bright vs. dim) abut at a shared sample with no gap.
+            fun buildLemon(baselineY: Float, samples: FloatArray, startK: Int, endK: Int) {
                 lemonPath.reset()
-                for (k in 0 until SAMPLE_COUNT) {
+                for (k in startK..endK) {
                     val x = dayToX(k * SAMPLE_STEP_DAYS)
                     val y = baselineY - (samples[k] / 2.0 * pxPerArcsec).toFloat()
-                    if (k == 0) lemonPath.moveTo(x, y) else lemonPath.lineTo(x, y)
+                    if (k == startK) lemonPath.moveTo(x, y) else lemonPath.lineTo(x, y)
                 }
-                for (k in SAMPLE_COUNT - 1 downTo 0) {
+                for (k in endK downTo startK) {
                     val x = dayToX(k * SAMPLE_STEP_DAYS)
                     val y = baselineY + (samples[k] / 2.0 * pxPerArcsec).toFloat()
                     lemonPath.lineTo(x, y)
                 }
                 lemonPath.close()
             }
+            // Draw a lemon split by solar elongation: spans where both endpoints are within
+            // NEAR_SUN_ELONG_DEG of the Sun get the reduced-alpha fill. baseColor must be opaque.
+            fun drawLemon(baselineY: Float, samples: FloatArray, elongs: FloatArray, baseColor: Int) {
+                val dimColor = (baseColor and 0x00FFFFFF) or (NEAR_SUN_ALPHA shl 24)
+                // A segment counts as near-Sun only when both of its endpoints are.
+                fun segNearSun(idx: Int) =
+                    elongs[idx] < NEAR_SUN_ELONG_DEG && elongs[idx + 1] < NEAR_SUN_ELONG_DEG
+                var k = 0
+                while (k < SAMPLE_COUNT - 1) {
+                    val nearSun = segNearSun(k)
+                    var j = k + 1
+                    while (j < SAMPLE_COUNT - 1 && segNearSun(j) == nearSun) {
+                        j++
+                    }
+                    buildLemon(baselineY, samples, k, j)
+                    lemonFillPaint.color = if (nearSun) dimColor else baseColor
+                    canvas.drawPath(lemonPath, lemonFillPaint)
+                    k = j
+                }
+            }
             for ((i, s) in series.withIndex()) {
                 val baselineY = laneCenterY(i)
                 // Rings drawn first (wider, white) so the disk lemon overlays them.
                 if (s.ringSamplesArcsec != null) {
-                    buildLemon(baselineY, s.ringSamplesArcsec)
-                    lemonFillPaint.color = android.graphics.Color.WHITE
-                    canvas.drawPath(lemonPath, lemonFillPaint)
+                    drawLemon(baselineY, s.ringSamplesArcsec, s.elongationsDeg, android.graphics.Color.WHITE)
                 }
-                buildLemon(baselineY, s.samplesArcsec)
-                lemonFillPaint.color = s.colorInt
-                canvas.drawPath(lemonPath, lemonFillPaint)
+                drawLemon(baselineY, s.samplesArcsec, s.elongationsDeg, s.colorInt)
             }
 
             val tickY = chartBottom
