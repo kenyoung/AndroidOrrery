@@ -713,6 +713,16 @@ fun phaseAngleRad(helioDist: Double, geoDist: Double, earthSunDist: Double): Dou
     return acos(cosAlpha.coerceIn(-1.0, 1.0))
 }
 
+// Angular separation between two equatorial positions, in degrees.
+// Used for solar elongation (separation between a body and the Sun).
+fun calculateAngularSeparation(ra1Deg: Double, dec1Deg: Double, ra2Deg: Double, dec2Deg: Double): Double {
+    val dec1Rad = Math.toRadians(dec1Deg)
+    val dec2Rad = Math.toRadians(dec2Deg)
+    val cosSep = sin(dec1Rad) * sin(dec2Rad) +
+            cos(dec1Rad) * cos(dec2Rad) * cos(Math.toRadians(ra2Deg - ra1Deg))
+    return Math.toDegrees(acos(cosSep.coerceIn(-1.0, 1.0)))
+}
+
 // Named lunar phase events (the four "principal phases").
 enum class MoonPhaseEvent(val longName: String, val shortName: String) {
     NEW_MOON("New Moon", "New Moon"),

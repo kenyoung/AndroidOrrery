@@ -34,7 +34,6 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
-import kotlin.math.acos
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
@@ -201,13 +200,8 @@ fun PlanetAngularSizeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -
                 if (hasRings) {
                     ringSamples!![i] = (2.0 * SATURN_RING_OUTER_RADIUS_KM / distKm * ARCSEC_PER_RAD).toFloat()
                 }
-                val decSRad = Math.toRadians(sunDecDeg[i])
-                val raSRad = Math.toRadians(sunRaDeg[i])
-                val decPRad = Math.toRadians(state.dec)
-                val raPRad = Math.toRadians(state.ra)
-                val cosSep = sin(decSRad) * sin(decPRad) +
-                        cos(decSRad) * cos(decPRad) * cos(raPRad - raSRad)
-                elongs[i] = Math.toDegrees(acos(cosSep.coerceIn(-1.0, 1.0))).toFloat()
+                elongs[i] = calculateAngularSeparation(
+                    sunRaDeg[i], sunDecDeg[i], state.ra, state.dec).toFloat()
             }
             PlanetSeries(p.name, p.symbol, p.color, p.color.toArgb(), samples, ringSamples, elongs)
         }

@@ -33,12 +33,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import kotlin.math.acos
 import kotlin.math.ceil
-import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 private const val FORECAST_DAYS = 365
 private const val SAMPLE_STEP_DAYS = 1.0
@@ -118,13 +115,8 @@ fun PlanetMagnitudeScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> 
                     SaturnMoonEngine.calculateRingTiltB(state.eclipticLon, state.eclipticLat, jd)
                 else 0.0
                 mags[i] = apparentMagnitude(p.name, state.distSun, state.distGeo, alphaDeg, ringB).toFloat()
-                val decSRad = Math.toRadians(sunDecDeg[i])
-                val raSRad = Math.toRadians(sunRaDeg[i])
-                val decPRad = Math.toRadians(state.dec)
-                val raPRad = Math.toRadians(state.ra)
-                val cosSep = sin(decSRad) * sin(decPRad) +
-                        cos(decSRad) * cos(decPRad) * cos(raPRad - raSRad)
-                elongs[i] = Math.toDegrees(acos(cosSep.coerceIn(-1.0, 1.0))).toFloat()
+                elongs[i] = calculateAngularSeparation(
+                    sunRaDeg[i], sunDecDeg[i], state.ra, state.dec).toFloat()
             }
             val events = mutableListOf<MagEvent>()
             for (i in 1 until SAMPLE_COUNT - 1) {

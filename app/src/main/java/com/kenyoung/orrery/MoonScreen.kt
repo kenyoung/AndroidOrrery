@@ -350,16 +350,8 @@ fun MoonScreen(
     // Elongation from Sun
     val sunState = AstroEngine.getBodyState("Sun", jd)
     val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
-    val elongation = run {
-        val moonRaRad = Math.toRadians(apparent.ra)
-        val moonDecRad = Math.toRadians(apparent.dec)
-        val sunRaRad = Math.toRadians(sunApparent.ra)
-        val sunDecRad = Math.toRadians(sunApparent.dec)
-        Math.toDegrees(acos(
-            (sin(sunDecRad) * sin(moonDecRad) +
-                cos(sunDecRad) * cos(moonDecRad) * cos(moonRaRad - sunRaRad)).coerceIn(-1.0, 1.0)
-        ))
-    }
+    val elongation = calculateAngularSeparation(
+        sunApparent.ra, sunApparent.dec, apparent.ra, apparent.dec)
 
     // Perigee/apogee: use Moon's mean anomaly to estimate days to next
     val T = (jd - 2451545.0) / 36525.0
