@@ -96,7 +96,7 @@ private fun formatEclipseListEntry(eclipse: LunarEclipse, offsetHours: Double): 
     val d = eclipseDisplayDate(eclipse, offsetHours)
     val y = d.year
     val displayYear = if (y <= 0) abs(y - 1) else y
-    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, displayYear) +
+    return "%02d/%02d/%04d".format(d.dayOfMonth, d.monthValue, displayYear) +
             (if (y <= 0) " BC" else "") + " ${eclipse.typeString}"
 }
 

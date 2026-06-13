@@ -117,7 +117,7 @@ private fun solarEclipseDisplayDate(eclipse: SolarEclipse, offsetHours: Double):
 
 private fun formatSolarEclipseListEntry(eclipse: SolarEclipse, offsetHours: Double): String {
     val d = solarEclipseDisplayDate(eclipse, offsetHours)
-    return "%02d-%02d-%04d".format(d.dayOfMonth, d.monthValue, d.year) + " ${eclipse.typeString}"
+    return "%02d/%02d/%04d".format(d.dayOfMonth, d.monthValue, d.year) + " ${eclipse.typeString}"
 }
 
 private fun formatSolarEclipseDateLong(date: LocalDate): String {
