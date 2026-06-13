@@ -196,7 +196,7 @@ fun PlanetElevationsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) ->
         }
 
         // --- DRAW HEADER ---
-        val dateStr = nowDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))
+        val dateStr = nowDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
         val tzSuffix = if (useLocalTime) " ($stdTimeLabel)" else " (UT)"
         val titlePart1 = "Planet Elevations for "
         drawIntoCanvas {

@@ -65,7 +65,7 @@ fun SunlightTodayScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
 
     // Date and time for title — round to nearest minute to avoid showing previous minute
     val displayZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
-    val dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy").withZone(displayZoneId)
+    val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(displayZoneId)
     val dateStr = dateFormatter.format(now)
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
     val currentTimeStr = timeFormatter.format(now.plusSeconds(30))
