@@ -419,13 +419,16 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                         }
                         Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(text = "Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold))
-                            val timeDisplay = if (useStandardTime) {
-                                val localFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).toInt()))
-                                "${localFormatter.format(currentInstant)} $stdTimeLabel"
-                            } else {
-                                "$utString UT"
+                            // Sunlight Today has its own date/time title, so the header subtitle is redundant there
+                            if (currentScreen != Screen.SUNLIGHT_TODAY) {
+                                val timeDisplay = if (useStandardTime) {
+                                    val localFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).toInt()))
+                                    "${localFormatter.format(currentInstant)} $stdTimeLabel"
+                                } else {
+                                    "$utString UT"
+                                }
+                                Text(text = "$dateString  $timeDisplay", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                             }
-                            Text(text = "$dateString  $timeDisplay", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         }
                     }
                 },
@@ -574,7 +577,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.TRANSITS -> if (cache != null) GraphicsWindow(obs, cache!!) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Transits Display", color = Color.White) }
                     Screen.ELEVATIONS -> PlanetElevationsScreen(obs) { useStandardTime = it }
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(obs) { useStandardTime = it }
-                    Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs) { useStandardTime = it }
+                    Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs)
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.PLANET_PATHS -> PlanetPathsScreen(obs) { useStandardTime = it }
                     Screen.ANGULAR_SIZE -> PlanetAngularSizeScreen(obs) { useStandardTime = it }
