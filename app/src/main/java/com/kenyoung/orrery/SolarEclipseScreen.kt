@@ -1046,13 +1046,32 @@ private fun SolarEclipseSelectionView(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Text(
-                text = "$decadeStart → $decadeEnd",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
+            // Arrow as a separate Text so it can be raised to sit vertically centered
+            // on the digits (matches the Lunar Eclipses decade selector).
+            Row {
+                Text(
+                    text = "$decadeStart",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = " → ",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.offset(y = (-7).dp)
+                )
+                Text(
+                    text = "$decadeEnd",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 

@@ -246,7 +246,10 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
                     Row(horizontalArrangement = Arrangement.Center) {
                         Text("(", color = LabelColor, fontSize = (14 * fontScale).sp)
                         Text(tonightStartTime, color = Color.White, fontSize = (14 * fontScale).sp)
-                        Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp)
+                        // Raise the arrow so its stroke sits vertically centered on the
+                        // digits; the → glyph otherwise renders low within its line box.
+                        Text(" → ", color = LabelColor, fontSize = (14 * fontScale).sp,
+                            modifier = Modifier.offset(y = (-3.5 * fontScale).dp))
                         Text(tonightEndTime, color = Color.White, fontSize = (14 * fontScale).sp)
                         Text(" $timeLabel) tonight.", color = LabelColor, fontSize = (14 * fontScale).sp)
                     }
@@ -285,7 +288,7 @@ fun ShowerRow(data: ShowerRowData, tonightDarkHours: Double, fontScale: Float = 
     Row(Modifier.fillMaxWidth()) {
         DataCell(data.shower.name, 0.28f, TextAlign.Left, rowColor, fontScale)
         DataCell(data.shower.rate, 0.06f, TextAlign.Right, rowColor, fontScale)
-        DataCell("${data.startDateStr}→${data.endDateStr}", 0.19f, TextAlign.Center, rowColor, fontScale)
+        DateRangeCell(data.startDateStr, data.endDateStr, 0.19f, rowColor, fontScale)
         DataCell(data.maxDateStr, 0.10f, TextAlign.Center, rowColor, fontScale)
         DataCell(data.shower.velocity, 0.06f, TextAlign.Center, rowColor, fontScale)
         DataCell("${data.moonPercent}${data.moonTrend}", 0.10f, TextAlign.Center, rowColor, fontScale)
@@ -306,6 +309,26 @@ fun RowScope.DataCell(text: String, weight: Float, align: TextAlign, color: Colo
         modifier = Modifier.weight(weight),
         maxLines = 1 // Ensure text is forced to fit or truncate cleanly if still too long
     )
+}
+
+// Like DataCell but renders "start→end" with the arrow as its own Text, raised so
+// it sits vertically centered on the digits instead of low on the baseline.
+@Composable
+fun RowScope.DateRangeCell(startStr: String, endStr: String, weight: Float, color: Color, fontScale: Float = 1.0f) {
+    val size = (7.3f * fontScale).sp
+    Row(
+        modifier = Modifier.weight(weight),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(startStr, color = color, fontSize = size, lineHeight = size * 1.5f,
+            fontFamily = FontFamily.Monospace, maxLines = 1)
+        // Offset is ~1/4 of the font size, matching the time-range arrow's fraction.
+        Text("→", color = color, fontSize = size, lineHeight = size * 1.5f,
+            fontFamily = FontFamily.Monospace, maxLines = 1,
+            modifier = Modifier.offset(y = (-1.8 * fontScale).dp))
+        Text(endStr, color = color, fontSize = size, lineHeight = size * 1.5f,
+            fontFamily = FontFamily.Monospace, maxLines = 1)
+    }
 }
 
 // --- CALCULATION HELPERS ---
