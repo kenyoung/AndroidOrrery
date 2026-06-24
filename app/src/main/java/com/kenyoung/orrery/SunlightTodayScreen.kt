@@ -74,6 +74,26 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val riseAz = if (!riseTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, true, HORIZON_REFRACTED) else Double.NaN
     val setAz = if (!setTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, false, HORIZON_REFRACTED) else Double.NaN
 
+    // "Tonight's" very-dark period — same definition as the Meteor Showers page
+    // (Sun below nautical twilight AND Moon below its illumination-dependent
+    // threshold). Scanned over the noon-to-noon block containing tonight, choosing
+    // the block the same way the Meteor Showers page does.
+    val sunAboveHorizonNow = currentAltRaw >= HORIZON_REFRACTED
+    val utEpochFloor = floor(currentUtEpochDay)
+    val darkSearchBase =
+        if (sunAboveHorizonNow || currentUtEpochDay - utEpochFloor > 0.5) utEpochFloor else utEpochFloor - 1.0
+    val darkResult = calculateDarkHoursDetails(darkSearchBase, lat, lon)
+    val hasDark = !darkResult.startEpochDay.isNaN() && !darkResult.endEpochDay.isNaN()
+    // Map the dark period's start/end (UT epoch days) onto the dial's display clock,
+    // the same UT-hour + displayOffsetHours mapping the dial uses for the Sun marker.
+    val darkStartDisplayHour =
+        if (hasDark) normalizeTime((darkResult.startEpochDay - floor(darkResult.startEpochDay)) * 24.0 + displayOffsetHours) else 0.0
+    val darkEndDisplayHour =
+        if (hasDark) normalizeTime((darkResult.endEpochDay - floor(darkResult.endEpochDay)) * 24.0 + displayOffsetHours) else 0.0
+    val darkSweepHours = if (hasDark) (darkResult.endEpochDay - darkResult.startEpochDay) * 24.0 else 0.0
+    val darkRangeStr = if (hasDark)
+        "%s→%s".format(formatTimeMM(darkStartDisplayHour, false), formatTimeMM(darkEndDisplayHour, false)) else null
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             withDensityScaling { w, h ->
@@ -490,10 +510,12 @@ fun SunlightTodayScreen(obs: ObserverState) {
                 val sideLabelPaint = Paint().apply { color = LabelColor.toArgb(); textSize = 40f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
                 val sideValuePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 46f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
                 val sideChangePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 32f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+                val darkRangeStrShown = darkRangeStr ?: "none"
                 val sideTextW = maxOf(
                     sideLabelPaint.measureText("Daylight"), sideLabelPaint.measureText("Night"),
                     sideValuePaint.measureText(dayValueStr), sideValuePaint.measureText(nightValueStr),
-                    if (changeStr != null) sideChangePaint.measureText(changeStr) else 0f
+                    if (changeStr != null) sideChangePaint.measureText(changeStr) else 0f,
+                    sideChangePaint.measureText("Very dark"), sideChangePaint.measureText(darkRangeStrShown)
                 ) + 12f
 
                 // The Sun marker sits just outside the rim and travels the whole circle over a
@@ -537,6 +559,13 @@ fun SunlightTodayScreen(obs: ObserverState) {
                         drawCircle(if (polarDay) Color.Yellow else dialNightColor, radius = r, center = Offset(cx, cy))
                     }
 
+                    // Black wedge over the very-dark period (Meteor Showers definition).
+                    // Drawn after the day/night fill so it sits on top of the night region.
+                    if (hasDark) {
+                        drawArc(Color.Black, hourToArc(darkStartDisplayHour), (darkSweepHours / 24.0 * 360.0).toFloat(),
+                            useCenter = true, topLeft = dialTopLeft, size = dialSize)
+                    }
+
                     // Thin line bisecting the dial vertically (Midnight at top through center to Noon).
                     // Each half is coloured to contrast with the fill under it (white over the dark
                     // night fill, near-black over the yellow daylight fill).
@@ -566,6 +595,11 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     val xRight = cx + r + sunClear + sideGap
                     nc.drawText("Night", xRight, cy - labelRise, sideLabelPaint)
                     nc.drawText(nightValueStr, xRight, cy + valueDrop, sideValuePaint)
+                    // Very-dark period begin/end, under the night length
+                    sideChangePaint.textAlign = Paint.Align.LEFT
+                    val darkLabelY = cy + valueDrop + sideChangePaint.textSize + 8f
+                    nc.drawText("Very dark", xRight, darkLabelY, sideChangePaint)
+                    nc.drawText(darkRangeStr ?: "none", xRight, darkLabelY + sideChangePaint.textSize + 4f, sideChangePaint)
 
                     // Current-time Sun marker, just outside the rim, with a dotted radial line
                     val currentDisplayHour = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + displayOffsetHours)
