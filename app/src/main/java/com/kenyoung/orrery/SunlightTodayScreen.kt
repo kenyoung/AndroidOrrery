@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
@@ -93,6 +94,46 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val darkSweepHours = if (hasDark) (darkResult.endEpochDay - darkResult.startEpochDay) * 24.0 else 0.0
     val darkRangeStr = if (hasDark)
         "%s→%s".format(formatTimeMM(darkStartDisplayHour, false), formatTimeMM(darkEndDisplayHour, false)) else null
+
+    // Longest and shortest day of the current calendar year at this location.
+    // The extremes always fall within a few days of a solstice, so sample only a
+    // small window around each (≈June 21 and ≈Dec 21) rather than the whole year.
+    // The window covers the solstice's date drift across years and both hemispheres
+    // (June solstice is longest in the north, shortest in the south, and vice versa).
+    // Day length uses the same rise/set solver as today's value, so when today falls
+    // in-window the solstice difference reads exactly 00:00:00. Polar days/nights are
+    // disambiguated by transit altitude.
+    val hasRiseSetToday = !riseTime.isNaN() && !setTime.isNaN()
+    val todayDayLenHours = if (hasRiseSetToday) setTime - riseTime else if (transitAlt > 0.0) 24.0 else 0.0
+    val scanYear = LocalDate.ofEpochDay(floor(epochDay).toLong()).year
+    fun dayLengthHours(d: Double): Double {
+        val (dRise, dSet) = calculateSunTimes(d, lat, lon, offset)
+        return if (!dRise.isNaN() && !dSet.isNaN()) {
+            var l = dSet - dRise
+            if (l < 0.0) l += 24.0
+            l
+        } else {
+            val (_, dDec) = calculateSunTransit(d, lon, offset)
+            if (90.0 - abs(lat - dDec) > HORIZON_REFRACTED) 24.0 else 0.0
+        }
+    }
+    val solsticeScanRadius = 3
+    var maxDayLenHours = 0.0
+    var minDayLenHours = 24.0
+    for (solsticeMonth in intArrayOf(6, 12)) {
+        val solsticeDay = LocalDate.of(scanYear, solsticeMonth, 21).toEpochDay()
+        for (k in -solsticeScanRadius..solsticeScanRadius) {
+            val len = dayLengthHours((solsticeDay + k).toDouble())
+            if (len > maxDayLenHours) maxDayLenHours = len
+            if (len < minDayLenHours) minDayLenHours = len
+        }
+    }
+    fun formatHMS(hours: Double): String {
+        val totalSec = round(hours * 3600.0).toInt()
+        return "%02d:%02d:%02d".format(totalSec / 3600, (totalSec % 3600) / 60, totalSec % 60)
+    }
+    val belowMaxStr = "%s < max".format(formatHMS(abs(todayDayLenHours - maxDayLenHours)))
+    val aboveMinStr = "%s > min".format(formatHMS(abs(todayDayLenHours - minDayLenHours)))
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -515,6 +556,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     sideLabelPaint.measureText("Daylight"), sideLabelPaint.measureText("Night"),
                     sideValuePaint.measureText(dayValueStr), sideValuePaint.measureText(nightValueStr),
                     if (changeStr != null) sideChangePaint.measureText(changeStr) else 0f,
+                    sideChangePaint.measureText(belowMaxStr), sideChangePaint.measureText(aboveMinStr),
                     sideChangePaint.measureText("Very dark"), sideChangePaint.measureText(darkRangeStrShown)
                 ) + 12f
 
@@ -574,8 +616,9 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     drawLine(if (isDaylightHour(12.0)) axisDark else Color.White, Offset(cx, cy), Offset(cx, cy + r), strokeWidth = 1f)
 
                     // Midnight / Noon rim labels, just outside the rim
-                    nc.drawText("Midnight", cx, cy - r - 12f, dialLabelPaint)
-                    nc.drawText("Noon", cx, cy + r + dialLabelPaint.textSize + 4f, dialLabelPaint)
+                    val clockPrefix = if (useLocalTime) "Timezone" else "UTC"
+                    nc.drawText("$clockPrefix Midnight", cx, cy - r - 12f, dialLabelPaint)
+                    nc.drawText("$clockPrefix Noon", cx, cy + r + dialLabelPaint.textSize + 4f, dialLabelPaint)
 
                     // Daylight length to the LEFT, night length to the RIGHT — both placed
                     // beyond the Sun's maximum reach (rim + sunClear), so it can never overlap them.
@@ -586,10 +629,15 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     val xLeft = cx - r - sunClear - sideGap
                     nc.drawText("Daylight", xLeft, cy - labelRise, sideLabelPaint)
                     nc.drawText(dayValueStr, xLeft, cy + valueDrop, sideValuePaint)
+                    sideChangePaint.textAlign = Paint.Align.RIGHT
+                    var leftLineY = cy + valueDrop + sideChangePaint.textSize + 8f
                     if (changeStr != null) {
-                        sideChangePaint.textAlign = Paint.Align.RIGHT
-                        nc.drawText(changeStr, xLeft, cy + valueDrop + sideChangePaint.textSize + 8f, sideChangePaint)
+                        nc.drawText(changeStr, xLeft, leftLineY, sideChangePaint)
+                        leftLineY += sideChangePaint.textSize + 4f
                     }
+                    nc.drawText(belowMaxStr, xLeft, leftLineY, sideChangePaint)
+                    leftLineY += sideChangePaint.textSize + 4f
+                    nc.drawText(aboveMinStr, xLeft, leftLineY, sideChangePaint)
                     sideLabelPaint.textAlign = Paint.Align.LEFT
                     sideValuePaint.textAlign = Paint.Align.LEFT
                     val xRight = cx + r + sunClear + sideGap
