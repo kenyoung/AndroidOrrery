@@ -76,13 +76,14 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val setAz = if (!setTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, false, HORIZON_REFRACTED) else Double.NaN
 
     // "Tonight's" very-dark period — same definition as the Meteor Showers page
-    // (Sun below nautical twilight AND Moon below its illumination-dependent
-    // threshold). Scanned over the noon-to-noon block containing tonight, choosing
-    // the block the same way the Meteor Showers page does.
-    val sunAboveHorizonNow = currentAltRaw >= HORIZON_REFRACTED
-    val utEpochFloor = floor(currentUtEpochDay)
-    val darkSearchBase =
-        if (sunAboveHorizonNow || currentUtEpochDay - utEpochFloor > 0.5) utEpochFloor else utEpochFloor - 1.0
+    // (Sun below nautical twilight AND Moon below its illumination-dependent threshold).
+    // Anchor the noon-to-noon UT scan to the SAME night the dial shows: the night that
+    // follows eventEpochDay, whose local (solar) midnight is nightMidnightUt. Keying off
+    // the UT "now" instead lands on the adjacent night for observers far from UTC (e.g. a
+    // CDT evening falls on the next UT day), so the dial's darkness and this scan would
+    // disagree and the clipped wedge below would vanish.
+    val nightMidnightUt = (eventEpochDay + 1.0) - offset / 24.0
+    val darkSearchBase = floor(nightMidnightUt - 0.5)
     val darkResult = calculateDarkHoursDetails(darkSearchBase, lat, lon)
     val hasDark = !darkResult.startEpochDay.isNaN() && !darkResult.endEpochDay.isNaN()
     // Map the dark period's start/end (UT epoch days) onto the dial's display clock,
@@ -91,7 +92,6 @@ fun SunlightTodayScreen(obs: ObserverState) {
         if (hasDark) normalizeTime((darkResult.startEpochDay - floor(darkResult.startEpochDay)) * 24.0 + displayOffsetHours) else 0.0
     val darkEndDisplayHour =
         if (hasDark) normalizeTime((darkResult.endEpochDay - floor(darkResult.endEpochDay)) * 24.0 + displayOffsetHours) else 0.0
-    val darkSweepHours = if (hasDark) (darkResult.endEpochDay - darkResult.startEpochDay) * 24.0 else 0.0
     val darkRangeStr = if (hasDark)
         "%s→%s".format(formatTimeMM(darkStartDisplayHour, false), formatTimeMM(darkEndDisplayHour, false)) else null
 
@@ -516,8 +516,16 @@ fun SunlightTodayScreen(obs: ObserverState) {
 
                 // --- 24-hour day/night dial (below all other elements) ---
                 // 0:00 at top, time runs clockwise (6h right, noon bottom, 18h left).
-                // Yellow = Sun above horizon, blue = night. Times are in the page's display clock.
-                val dialNightColor = Color(0xFF1A1AB3)
+                // Yellow = Sun above horizon; the night side darkens through the twilight
+                // phases (civil → nautical → astronomical → deepest night), mirroring the
+                // elevation chart's bands. Times are in the page's display clock.
+                // The ramp is brightened relative to the chart's near-black astro band so the
+                // deepest-night fill stays visibly blue and the black very-dark wedge reads on it.
+                val dialNightColor = Color(0xFF0C1240)      // deepest night (Sun below -18°)
+                val dialAstroColor = Color(0xFF161E60)      // astronomical twilight (-12° to -18°)
+                val dialNauticalColor = Color(0xFF24348C)   // nautical twilight (-6° to -12°)
+                val dialCivilColor = Color(0xFF3450C8)      // civil twilight (horizon to -6°)
+                val dialGoldenColor = Color(0xFFECD383)     // golden hour (Sun +6° to horizon)
 
                 // Day / night lengths (independent of the display offset)
                 val hasRiseSet = !riseTime.isNaN() && !setTime.isNaN()
@@ -601,11 +609,56 @@ fun SunlightTodayScreen(obs: ObserverState) {
                         drawCircle(if (polarDay) Color.Yellow else dialNightColor, radius = r, center = Offset(cx, cy))
                     }
 
-                    // Black wedge over the very-dark period (Meteor Showers definition).
-                    // Drawn after the day/night fill so it sits on top of the night region.
-                    if (hasDark) {
-                        drawArc(Color.Black, hourToArc(darkStartDisplayHour), (darkSweepHours / 24.0 * 360.0).toFloat(),
+                    // Golden-hour and twilight sub-bands on the dusk and dawn flanks, drawn over
+                    // the day/night fill. Boundary times are the same Sun-altitude crossings shown
+                    // in the table above, mapped to the display clock the same way. A wedge whose
+                    // start or end time is undefined (a phase never reached in high-latitude
+                    // summer) is skipped. The deepest-night base shows through between the two
+                    // astronomical wedges.
+                    fun dialDisplayHour(solarH: Double) = normalizeTime(solarH - offset + displayOffsetHours)
+                    fun drawDialWedge(startSolar: Double, endSolar: Double, color: Color) {
+                        if (startSolar.isNaN() || endSolar.isNaN()) return
+                        val startHr = dialDisplayHour(startSolar)
+                        var sweepHr = dialDisplayHour(endSolar) - startHr
+                        while (sweepHr < 0.0) sweepHr += 24.0
+                        while (sweepHr > 24.0) sweepHr -= 24.0
+                        if (sweepHr <= 0.0) return
+                        drawArc(color, hourToArc(startHr), (sweepHr / 24.0 * 360.0).toFloat(),
                             useCenter = true, topLeft = dialTopLeft, size = dialSize)
+                    }
+                    // Altitude-crossing index: 0=+6° (golden hour), 1=horizon (sunrise/sunset),
+                    // 2=-6° (civil), 3=-12° (nautical), 4=-18° (astro). dusk = evening, dawn = morning.
+                    val dusk = twilightData.dusk
+                    val dawn = twilightData.dawn
+                    // Golden hour (Sun +6° to horizon): above-horizon, so drawn over the daylight arc.
+                    drawDialWedge(dusk[0], dusk[1], dialGoldenColor)         // evening golden hour
+                    drawDialWedge(dawn[1], dawn[0], dialGoldenColor)         // morning golden hour
+                    // Twilight bands below the horizon, darkening into night.
+                    drawDialWedge(dusk[1], dusk[2], dialCivilColor)          // evening: civil
+                    drawDialWedge(dusk[2], dusk[3], dialNauticalColor)
+                    drawDialWedge(dusk[3], dusk[4], dialAstroColor)
+                    drawDialWedge(dawn[4], dawn[3], dialAstroColor)          // morning: astro → ...
+                    drawDialWedge(dawn[3], dawn[2], dialNauticalColor)
+                    drawDialWedge(dawn[2], dawn[1], dialCivilColor)          // ... → civil
+
+
+                    // Black wedge over the very-dark (meteor) period, clipped to the astronomical-
+                    // dark interval (Sun below -18°, i.e. between dusk[4] and dawn[4]) so it can
+                    // never paint over the daylight, golden-hour, or twilight wedges. The very-dark
+                    // period (Sun below -12° plus a Moon condition) is shallower, so without this
+                    // clip it would spill into the twilight bands. The two intervals are intersected
+                    // in absolute UT (linear, no clock wrap) and only the overlap is drawn.
+                    if (hasDark && !dusk[4].isNaN() && !dawn[4].isNaN()) {
+                        val darknessBeginUt = duskMidnightUt + dusk[4] / 24.0
+                        val darknessEndUt = dawnMidnightUt + dawn[4] / 24.0
+                        val clipStartUt = max(darkResult.startEpochDay, darknessBeginUt)
+                        val clipEndUt = min(darkResult.endEpochDay, darknessEndUt)
+                        if (clipEndUt > clipStartUt) {
+                            val blackStartHour = normalizeTime((clipStartUt - floor(clipStartUt)) * 24.0 + displayOffsetHours)
+                            val blackSweepHours = (clipEndUt - clipStartUt) * 24.0
+                            drawArc(Color.Black, hourToArc(blackStartHour), (blackSweepHours / 24.0 * 360.0).toFloat(),
+                                useCenter = true, topLeft = dialTopLeft, size = dialSize)
+                        }
                     }
 
                     // Thin line bisecting the dial vertically (Midnight at top through center to Noon).
@@ -652,7 +705,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     // Current-time Sun marker, just outside the rim, with a dotted radial line
                     val currentDisplayHour = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + displayOffsetHours)
                     val sunArcRad = Math.toRadians(hourToArc(currentDisplayHour).toDouble())
-                    val sunDist = r + sunBeyondRim
+                    val sunDist = (r + sunBeyondRim) * 1.03f    // 3% farther out from center
                     val sunX = (cx + sunDist * cos(sunArcRad)).toFloat()
                     val sunY = (cy + sunDist * sin(sunArcRad)).toFloat()
                     // Thin red line from the center out along the current-time / Sun direction
