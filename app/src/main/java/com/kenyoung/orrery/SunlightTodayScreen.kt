@@ -103,8 +103,12 @@ fun SunlightTodayScreen(obs: ObserverState) {
     // Day length uses the same rise/set solver as today's value, so when today falls
     // in-window the solstice difference reads exactly 00:00:00. Polar days/nights are
     // disambiguated by transit altitude.
-    val hasRiseSetToday = !riseTime.isNaN() && !setTime.isNaN()
-    val todayDayLenHours = if (hasRiseSetToday) setTime - riseTime else if (transitAlt > 0.0) 24.0 else 0.0
+    // Today's day/night lengths (independent of the display offset); reused below for
+    // the solstice comparison and later by the day/night dial.
+    val hasRiseSet = !riseTime.isNaN() && !setTime.isNaN()
+    val polarDay = !hasRiseSet && transitAlt > 0.0
+    val dayLenHours = if (hasRiseSet) setTime - riseTime else if (polarDay) 24.0 else 0.0
+    val nightLenHours = 24.0 - dayLenHours
     val scanYear = LocalDate.ofEpochDay(floor(epochDay).toLong()).year
     fun dayLengthHours(d: Double): Double {
         val (dRise, dSet) = calculateSunTimes(d, lat, lon, offset)
@@ -132,8 +136,8 @@ fun SunlightTodayScreen(obs: ObserverState) {
         val totalSec = round(hours * 3600.0).toInt()
         return "%02d:%02d:%02d".format(totalSec / 3600, (totalSec % 3600) / 60, totalSec % 60)
     }
-    val belowMaxStr = "%s < max".format(formatHMS(abs(todayDayLenHours - maxDayLenHours)))
-    val aboveMinStr = "%s > min".format(formatHMS(abs(todayDayLenHours - minDayLenHours)))
+    val belowMaxStr = "%s < max".format(formatHMS(abs(dayLenHours - maxDayLenHours)))
+    val aboveMinStr = "%s > min".format(formatHMS(abs(dayLenHours - minDayLenHours)))
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -527,11 +531,8 @@ fun SunlightTodayScreen(obs: ObserverState) {
                 val dialCivilColor = Color(0xFF3450C8)      // civil twilight (horizon to -6°)
                 val dialGoldenColor = Color(0xFFECD383)     // golden hour (Sun +6° to horizon)
 
-                // Day / night lengths (independent of the display offset)
-                val hasRiseSet = !riseTime.isNaN() && !setTime.isNaN()
-                val polarDay = !hasRiseSet && transitAlt > 0.0
-                val dayLenHours = if (hasRiseSet) setTime - riseTime else if (polarDay) 24.0 else 0.0
-                val nightLenHours = 24.0 - dayLenHours
+                // Day / night lengths (hasRiseSet, polarDay, dayLenHours, nightLenHours)
+                // are computed once in the composable body above.
                 fun formatHoursMinutes(hours: Double): String {
                     var hh = floor(hours).toInt()
                     var mm = round((hours - hh) * 60.0).toInt()
