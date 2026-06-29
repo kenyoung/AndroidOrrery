@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 
 // Navigation Enum
 enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, COMPASS, PLANET_PATHS, ANGULAR_SIZE, PLANET_MAGNITUDE, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
+    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, DARK_TIME, COMPASS, PLANET_PATHS, ANGULAR_SIZE, PLANET_MAGNITUDE, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
     LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
@@ -250,9 +250,18 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
         else currentInstant.atZone(ZoneId.of("UTC")).toLocalDate()
 
     val cache by produceState<AstroCache?>(initialValue = null, currentScreen, effectiveDate.toEpochDay(), effectiveLat, effectiveLon) {
-        if (currentScreen == Screen.TRANSITS) {
+        // Dark Time reuses the Transits chart background (sun + twilight), so it needs the same cache.
+        if (currentScreen == Screen.TRANSITS || currentScreen == Screen.DARK_TIME) {
             value = withContext(Dispatchers.Default) {
                 calculateCache(effectiveDate, effectiveLat, effectiveLon)
+            }
+        }
+    }
+
+    val darkCache by produceState<DarkIntervalCache?>(initialValue = null, currentScreen, effectiveDate.toEpochDay(), effectiveLat, effectiveLon) {
+        if (currentScreen == Screen.DARK_TIME) {
+            value = withContext(Dispatchers.Default) {
+                calculateDarkCache(effectiveDate, effectiveLat, effectiveLon)
             }
         }
     }
@@ -446,6 +455,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             "Object Visibility" to Screen.OBJECT_VISIBILITY,
                             "Planet Phenomena" to Screen.PHENOMENA,
                             "Sunlight Today" to Screen.SUNLIGHT_TODAY,
+                            "Dark Time" to Screen.DARK_TIME,
                         )
                         val moonScreens = listOf(
                             "Moon Now" to Screen.MOON,
@@ -578,6 +588,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.ELEVATIONS -> PlanetElevationsScreen(obs) { useStandardTime = it }
                     Screen.PHENOMENA -> PlanetPhenomenaScreen(obs) { useStandardTime = it }
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs)
+                    Screen.DARK_TIME -> if (cache != null && darkCache != null) DarkTimeScreen(obs, cache!!, darkCache!!) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Dark Time Display", color = Color.White) }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
                     Screen.PLANET_PATHS -> PlanetPathsScreen(obs) { useStandardTime = it }
                     Screen.ANGULAR_SIZE -> PlanetAngularSizeScreen(obs) { useStandardTime = it }
