@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,7 @@ import kotlin.math.*
 private const val DARK_MONTH_LABEL_TEXT_SIZE = 30f
 private const val DARK_BAND_COLOR = 0xFF00FF00.toInt()
 private const val DARK_TOP_MARGIN = 40f // reserved at the top for the hour-axis labels
+private const val DARK_READOUT_LINE_WIDTH = 6f // stroke width of the draggable red readout line
 private const val DRAG_TOP_GAIN = 4f      // gain approached for fast moves (1f = 1:1 finger tracking)
 private const val DRAG_SLOW_REF_PX = 40f  // sets the low-speed rate; smaller -> finer slow control. Independent of DRAG_TOP_GAIN.
 private val DARK_MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM")
@@ -56,11 +58,12 @@ private fun nightDayToFrac(nightDay: Long, nowEpochDay: Double): Float =
 data class DarkNight(
     val intervals: List<Pair<Double, Double>>,
     val totalHours: Double,
-    val startUt: Double, // UT epoch-day of first dark minute (NaN if none)
-    val endUt: Double    // UT epoch-day of last dark minute (NaN if none)
+    val startUt: Double,        // UT epoch-day of first dark minute (NaN if none)
+    val endUt: Double,          // UT epoch-day of last dark minute (NaN if none)
+    val moonIllumPercent: Double // Moon illumination % representative of the night's middle
 )
 
-private val EMPTY_DARK_NIGHT = DarkNight(emptyList(), 0.0, Double.NaN, Double.NaN)
+private val EMPTY_DARK_NIGHT = DarkNight(emptyList(), 0.0, Double.NaN, Double.NaN, Double.NaN)
 
 // Per-night dark data indexed by integer epoch day. Built off-thread; never touched on the draw path.
 class DarkIntervalCache(
@@ -134,7 +137,14 @@ private fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNigh
 
     // Each interval is monotonic in the signed-hours frame, so its length in hours is just gEnd - gStart.
     val totalHours = intervals.sumOf { it.second - it.first }
-    return DarkNight(intervals, totalHours, firstDarkUt, lastDarkUt)
+
+    // Representative Moon illumination for the readout: at the middle of the dark window, or local
+    // midnight when there's no darkness. It varies slowly so the exact instant barely matters.
+    val repUt = if (!firstDarkUt.isNaN()) (firstDarkUt + lastDarkUt) / 2.0
+                else epochDay + 1.0 - offsetHours / 24.0
+    val moonIllumPercent = illuminationFromPhaseAngle(calculateMoonPhaseAngle(repUt))
+
+    return DarkNight(intervals, totalHours, firstDarkUt, lastDarkUt, moonIllumPercent)
 }
 
 // Build the year's worth of nightly dark intervals. Mirrors calculateCache's date range
@@ -173,17 +183,25 @@ fun DarkTimeScreen(obs: ObserverState, cache: AstroCache, darkCache: DarkInterva
     }
     var lineFrac by remember { mutableStateOf(initialLineFrac) }
 
-    Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-        detectVerticalDragGestures { change, dragAmount ->
-            change.consume()
-            // Speed-proportional gain: a fast finger (large per-event travel) moves the line up
-            // to DRAG_TOP_GAIN times finger speed, while small/slow moves ease it onto an exact
-            // date. The low-speed rate depends only on DRAG_SLOW_REF_PX, not on DRAG_TOP_GAIN.
-            val travel = abs(dragAmount)
-            val gain = DRAG_TOP_GAIN * travel / (travel + DRAG_TOP_GAIN * DRAG_SLOW_REF_PX)
-            lineFrac = (lineFrac + (dragAmount / size.height.toFloat()) * gain).coerceIn(0f, 1f)
+    Box(modifier = Modifier.fillMaxSize()
+        .pointerInput(Unit) {
+            detectVerticalDragGestures { change, dragAmount ->
+                change.consume()
+                // Speed-proportional gain: a fast finger (large per-event travel) moves the line up
+                // to DRAG_TOP_GAIN times finger speed, while small/slow moves ease it onto an exact
+                // date. The low-speed rate depends only on DRAG_SLOW_REF_PX, not on DRAG_TOP_GAIN.
+                val travel = abs(dragAmount)
+                val gain = DRAG_TOP_GAIN * travel / (travel + DRAG_TOP_GAIN * DRAG_SLOW_REF_PX)
+                lineFrac = (lineFrac + (dragAmount / size.height.toFloat()) * gain).coerceIn(0f, 1f)
+            }
         }
-    }) {
+        .pointerInput(Unit) {
+            // Tap to jump the line straight to the tapped date (coarse); drag for fine positioning.
+            detectTapGestures { offset ->
+                lineFrac = (offset.y / size.height.toFloat()).coerceIn(0f, 1f)
+            }
+        }
+    ) {
         // Base chart: independent of the red line, so dragging never re-runs this heavy draw.
         Canvas(modifier = Modifier.fillMaxSize()) {
             withDensityScaling { w, h ->
@@ -430,7 +448,7 @@ fun DarkTimeScreen(obs: ObserverState, cache: AstroCache, darkCache: DarkInterva
                 val refY = (lineFrac * h).coerceIn(DARK_TOP_MARGIN, h)
                 drawIntoCanvas { canvas ->
                     val redArgb = 0xFFFF0000.toInt()
-                    val linePaint = Paint().apply { color = redArgb; strokeWidth = 2f; style = Paint.Style.STROKE }
+                    val linePaint = Paint().apply { color = redArgb; strokeWidth = DARK_READOUT_LINE_WIDTH; style = Paint.Style.STROKE }
                     canvas.nativeCanvas.drawLine(0f, refY, w, refY, linePaint)
 
                     val nightDay = fracToNightDay(refY / h, nowEpochDay)
@@ -443,13 +461,15 @@ fun DarkTimeScreen(obs: ObserverState, cache: AstroCache, darkCache: DarkInterva
                     }
 
                     val dateStr = LocalDate.ofEpochDay(nightDay).format(DARK_READOUT_DATE_FORMAT)
+                    val illumStr = "Moon Illumination: ${round(night.moonIllumPercent).toInt()}%"
                     val lines = if (night.totalHours <= 0.0 || night.startUt.isNaN()) {
-                        listOf(dateStr, "No darkness")
+                        listOf(dateStr, illumStr, "No darkness")
                     } else {
                         val mins = round(night.totalHours * 60.0).toInt()
                         listOf(
                             dateStr,
-                            "Darkness: ${mins / 60}h ${mins % 60}m",
+                            illumStr,
+                            "Moonless Darkness: ${mins / 60}h ${mins % 60}m",
                             "${fmtStd(night.startUt)} – ${fmtStd(night.endUt)} $stdTimeLabel"
                         )
                     }
