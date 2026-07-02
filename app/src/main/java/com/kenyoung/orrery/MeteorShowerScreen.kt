@@ -410,10 +410,10 @@ fun moonDarkThreshold(illumPercent: Double): Double {
 fun isDark(epochDay: Double, lat: Double, lon: Double): Boolean {
     val jd = epochDay + UNIX_EPOCH_JD
 
-    // 1. Sun below nautical twilight
+    // 1. Sun below astronomical twilight
     val sunState = AstroEngine.getBodyState("Sun", jd)
     val sunAlt = getAltitude(sunState.ra, sunState.dec, epochDay, lat, lon)
-    if (sunAlt >= NAUTICAL_TWILIGHT) return false
+    if (sunAlt >= ASTRONOMICAL_TWILIGHT) return false
 
     // 2. Moon below illumination-dependent threshold
     val moonState = AstroEngine.getBodyState("Moon", jd)

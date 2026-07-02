@@ -84,16 +84,23 @@ fun SunlightTodayScreen(obs: ObserverState) {
     // disagree and the clipped wedge below would vanish.
     val nightMidnightUt = (eventEpochDay + 1.0) - offset / 24.0
     val darkSearchBase = floor(nightMidnightUt - 0.5)
-    val darkResult = calculateDarkHoursDetails(darkSearchBase, lat, lon)
-    val hasDark = !darkResult.startEpochDay.isNaN() && !darkResult.endEpochDay.isNaN()
+    // Same computation the Dark Time page uses, so the two pages agree exactly.
+    val darkNight = computeDarkNight(darkSearchBase.toLong(), lat, lon)
+    val hasDark = !darkNight.startUt.isNaN() && !darkNight.endUt.isNaN()
     // Map the dark period's start/end (UT epoch days) onto the dial's display clock,
     // the same UT-hour + displayOffsetHours mapping the dial uses for the Sun marker.
     val darkStartDisplayHour =
-        if (hasDark) normalizeTime((darkResult.startEpochDay - floor(darkResult.startEpochDay)) * 24.0 + displayOffsetHours) else 0.0
+        if (hasDark) normalizeTime((darkNight.startUt - floor(darkNight.startUt)) * 24.0 + displayOffsetHours) else 0.0
     val darkEndDisplayHour =
-        if (hasDark) normalizeTime((darkResult.endEpochDay - floor(darkResult.endEpochDay)) * 24.0 + displayOffsetHours) else 0.0
+        if (hasDark) normalizeTime((darkNight.endUt - floor(darkNight.endUt)) * 24.0 + displayOffsetHours) else 0.0
+    // Round to the nearest minute (matching the Dark Time page's fmtStd) so the two pages'
+    // start/end times agree exactly; formatTimeMM would truncate and read ~1 min earlier.
+    fun fmtDarkTime(displayHour: Double): String {
+        val m = ((round(displayHour * 60.0).toInt() % 1440) + 1440) % 1440
+        return "%02d:%02d".format(m / 60, m % 60)
+    }
     val darkRangeStr = if (hasDark)
-        "%s→%s".format(formatTimeMM(darkStartDisplayHour, false), formatTimeMM(darkEndDisplayHour, false)) else null
+        "%s→%s".format(fmtDarkTime(darkStartDisplayHour), fmtDarkTime(darkEndDisplayHour)) else null
 
     // Longest and shortest day of the current calendar year at this location.
     // The extremes always fall within a few days of a solstice, so sample only a
@@ -643,21 +650,15 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     drawDialWedge(dawn[2], dawn[1], dialCivilColor)          // ... → civil
 
 
-                    // Black wedge over the very-dark (meteor) period, clipped to the astronomical-
-                    // dark interval (Sun below -18°, i.e. between dusk[4] and dawn[4]) so it can
-                    // never paint over the daylight, golden-hour, or twilight wedges. The very-dark
-                    // period (Sun below -12° plus a Moon condition) is shallower, so without this
-                    // clip it would spill into the twilight bands. The two intervals are intersected
-                    // in absolute UT (linear, no clock wrap) and only the overlap is drawn.
-                    if (hasDark && !dusk[4].isNaN() && !dawn[4].isNaN()) {
-                        val darknessBeginUt = duskMidnightUt + dusk[4] / 24.0
-                        val darknessEndUt = dawnMidnightUt + dawn[4] / 24.0
-                        val clipStartUt = max(darkResult.startEpochDay, darknessBeginUt)
-                        val clipEndUt = min(darkResult.endEpochDay, darknessEndUt)
-                        if (clipEndUt > clipStartUt) {
-                            val blackStartHour = normalizeTime((clipStartUt - floor(clipStartUt)) * 24.0 + displayOffsetHours)
-                            val blackSweepHours = (clipEndUt - clipStartUt) * 24.0
-                            drawArc(Color.Black, hourToArc(blackStartHour), (blackSweepHours / 24.0 * 360.0).toFloat(),
+                    // Black wedge over the very-dark (meteor) period. Spans exactly the same
+                    // [startUt, endUt] shown in the "Very dark" readout above, so the wedge's start,
+                    // end, and angular extent agree with the displayed times. The very-dark period
+                    // begins at astronomical twilight (Sun below -18°) plus a Moon condition, so it
+                    // sits within the dial's deepest-night (astro-dark) band.
+                    if (hasDark) {
+                        val blackSweepHours = (darkNight.endUt - darkNight.startUt) * 24.0
+                        if (blackSweepHours > 0.0) {
+                            drawArc(Color.Black, hourToArc(darkStartDisplayHour), (blackSweepHours / 24.0 * 360.0).toFloat(),
                                 useCenter = true, topLeft = dialTopLeft, size = dialSize)
                         }
                     }

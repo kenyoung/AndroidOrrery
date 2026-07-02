@@ -81,7 +81,9 @@ class DarkIntervalCache(
 // illumination-dependent altitude. Coarse 5-min scan locates transitions; each edge is
 // bisection-refined to ~second precision. Edges are stored as signed-hours offsets so the
 // green band lines up with the twilight background drawn from cache.getSunTimes.
-private fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNight {
+// Shared by the Dark Time chart and the Sunlight Today dial so both report identical
+// very-dark hours and start/end times. Coarse 5-min isDark() scan with bisection-refined edges.
+fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNight {
     val offsetHours = lon / 15.0
     val startSearch = epochDay + 0.5
     val endSearch = epochDay + 1.5
