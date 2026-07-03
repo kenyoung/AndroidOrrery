@@ -76,17 +76,21 @@ class DarkIntervalCache(
     }
 }
 
-// Scan one night (noon-to-noon, the same window the Meteor Showers page uses) for the
-// intervals when isDark() holds — Sun below nautical twilight AND Moon below its
+// Scan the night following local date epochDay (local solar noon to noon) for the
+// intervals when isDark() holds — Sun below astronomical twilight AND Moon below its
 // illumination-dependent altitude. Coarse 5-min scan locates transitions; each edge is
 // bisection-refined to ~second precision. Edges are stored as signed-hours offsets so the
-// green band lines up with the twilight background drawn from cache.getSunTimes.
-// Shared by the Dark Time chart and the Sunlight Today dial so both report identical
-// very-dark hours and start/end times. Coarse 5-min isDark() scan with bisection-refined edges.
+// green band lines up with the twilight background drawn from cache.getSunTimes. Shared
+// by the Dark Time chart, the Sunlight Today dial, and the Meteor Showers page so all
+// three report identical very-dark hours and start/end times.
 fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNight {
     val offsetHours = lon / 15.0
-    val startSearch = epochDay + 0.5
-    val endSearch = epochDay + 1.5
+    // The window must be anchored to LOCAL solar noons; a UT noon-to-noon window clips the
+    // night at its UT-noon edges for observers far from Greenwich (e.g. Anchorage lost all
+    // darkness after ~02:00 local solar). Local anchoring also keeps the signed-hours frame
+    // monotonic over the whole window, so intervals can never straddle the ±12 wrap.
+    val startSearch = epochDay + 0.5 - offsetHours / 24.0
+    val endSearch = epochDay + 1.5 - offsetHours / 24.0
     val coarse = 5.0 / 1440.0 // 5 minutes in days
 
     fun gAt(t: Double) = darkGraphOffset(jdFracToLocalHours(t, offsetHours))
@@ -108,7 +112,9 @@ fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNight {
 
     var prevT = startSearch
     var prevDark = isDark(prevT, lat, lon)
-    var segStartG: Double? = if (prevDark) gAt(startSearch) else null
+    // The window edges sit exactly on the ±12 boundary of the signed-hours frame, where
+    // gAt could flip sign from floating-point rounding — use the exact values instead.
+    var segStartG: Double? = if (prevDark) -12.0 else null
     var segStartUt = if (prevDark) startSearch else Double.NaN
 
     fun closeSegment(gEnd: Double, utEnd: Double) {
@@ -135,7 +141,7 @@ fun computeDarkNight(epochDay: Long, lat: Double, lon: Double): DarkNight {
         }
         prevT = t
     }
-    closeSegment(gAt(endSearch), endSearch)
+    closeSegment(12.0, endSearch)
 
     // Each interval is monotonic in the signed-hours frame, so its length in hours is just gEnd - gStart.
     val totalHours = intervals.sumOf { it.second - it.first }

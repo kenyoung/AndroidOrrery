@@ -135,8 +135,8 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
                 val pct = (frac * 100).roundToInt()
                 val trend = if (phaseAngle > 0 && phaseAngle < 180) "+" else "-"
 
-                // Dark Hours at Max
-                val darkHours = calculateDarkHoursForNight(maxEpoch, lat, lon)
+                // Dark Hours at Max — same shared computation as the other pages.
+                val darkHours = computeDarkNight(maxDate.toEpochDay(), lat, lon).totalHours
 
                 ShowerRowData(
                     shower = shower,
@@ -156,21 +156,25 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
             val sunStateNow = AstroEngine.getBodyState("Sun", nowEpochDay + UNIX_EPOCH_JD)
             val sunAltNow = getAltitude(sunStateNow.ra, sunStateNow.dec, nowEpochDay, lat, lon)
             val sunAboveHorizon = sunAltNow >= HORIZON_REFRACTED
-            val epochFloor = floor(nowEpochDay)
-            val frac = nowEpochDay - epochFloor
+            // Decide which night block "tonight" means in the LOCAL solar frame, matching
+            // the local-noon-to-noon scan window.
+            val localSolarDay = nowEpochDay + lon / 15.0 / 24.0
+            val localFloor = floor(localSolarDay)
+            val localFrac = localSolarDay - localFloor
 
-            // Determine Start of "Night Block" (Noon to Noon)
             // Daytime or evening: scan from today's noon. Early morning: scan from yesterday's noon.
-            val searchBase = if (sunAboveHorizon || frac > 0.5) {
-                epochFloor
+            val searchBase = if (sunAboveHorizon || localFrac > 0.5) {
+                localFloor
             } else {
-                epochFloor - 1.0
+                localFloor - 1.0
             }
 
-            val dhResult = calculateDarkHoursDetails(searchBase, lat, lon)
-            tonightDarkHours = dhResult.totalHours
-            tonightStartEpoch = dhResult.startEpochDay
-            tonightEndEpoch = dhResult.endEpochDay
+            // Same shared computation (bisection-refined edges) as the Sunlight Today and
+            // Dark Time pages, so all three report identical very-dark hours and times.
+            val darkNight = computeDarkNight(searchBase.toLong(), lat, lon)
+            tonightDarkHours = darkNight.totalHours
+            tonightStartEpoch = darkNight.startUt
+            tonightEndEpoch = darkNight.endUt
         }
         isCalculating = false
     }
@@ -233,7 +237,10 @@ fun MeteorShowerScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Uni
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (tonightDarkHours.roundToInt() == 0) {
+                // Show the "no darkness" message only when there is truly none — rounding to
+                // whole hours here hid real dark periods under 30 min that the Sunlight Today
+                // and Dark Time pages report.
+                if (tonightDarkHours <= 0.0) {
                     Row(horizontalArrangement = Arrangement.Center) {
                         Text("It won't be very dark at any time tonight", color = LabelColor, fontSize = (14 * fontScale).sp)
                     }
@@ -333,44 +340,6 @@ fun RowScope.DateRangeCell(startStr: String, endStr: String, weight: Float, colo
 
 // --- CALCULATION HELPERS ---
 
-fun calculateDarkHoursForNight(epochDay: Double, lat: Double, lon: Double): Double {
-    return calculateDarkHoursDetails(epochDay, lat, lon).totalHours
-}
-
-// Data class for dark hours result
-data class DarkHoursResult(
-    val totalHours: Double,
-    val startEpochDay: Double,
-    val endEpochDay: Double
-)
-
-// Returns DarkHoursResult with total hours and start/end epoch days
-fun calculateDarkHoursDetails(epochDay: Double, lat: Double, lon: Double): DarkHoursResult {
-    // We scan at 1 min resolution from Noon (epochDay+0.5) to Noon (epochDay+1.5)
-    val startSearch = epochDay + 0.5
-    val endSearch = epochDay + 1.5
-    val step = 1.0 / 1440.0 // 1 minute in days
-    var totalDays = 0.0
-
-    var firstDark: Double? = null
-    var lastDark: Double? = null
-
-    var t = startSearch
-    while (t < endSearch) {
-        if (isDark(t, lat, lon)) {
-            totalDays += step
-            if (firstDark == null) firstDark = t
-            lastDark = t
-        }
-        t += step
-    }
-
-    val totalHours = totalDays * 24.0
-    val startEpoch = firstDark ?: Double.NaN
-    val endEpoch = if (lastDark != null) lastDark + step else Double.NaN
-    return DarkHoursResult(totalHours, startEpoch, endEpoch)
-}
-
 // Moon illumination % -> max Moon elevation (deg) for sky to be "very dark"
 // Linearly interpolated between table entries.
 private val moonDarkThresholdTable = doubleArrayOf(
@@ -433,9 +402,9 @@ fun getAltitude(raDeg: Double, decDeg: Double, epochDay: Double, lat: Double, lo
 }
 
 fun toLocalTimeStr(epochDay: Double): String {
-    val frac = epochDay - floor(epochDay)
-    val h = frac * 24.0
-    val hh = h.toInt()
-    val mm = ((h - hh) * 60).toInt()
-    return "%02d:%02d".format(hh, mm)
+    // Round to the nearest minute (like the Dark Time page's fmtStd) so the footer's
+    // times agree exactly with the Sunlight Today and Dark Time readouts; truncation
+    // would read up to a minute earlier.
+    val m = ((round((epochDay - floor(epochDay)) * 1440.0).toInt() % 1440) + 1440) % 1440
+    return "%02d:%02d".format(m / 60, m % 60)
 }

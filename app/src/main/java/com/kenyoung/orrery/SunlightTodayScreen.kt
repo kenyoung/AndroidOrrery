@@ -76,31 +76,29 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val setAz = if (!setTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, false, HORIZON_REFRACTED) else Double.NaN
 
     // "Tonight's" very-dark period — same definition as the Meteor Showers page
-    // (Sun below nautical twilight AND Moon below its illumination-dependent threshold).
-    // Anchor the noon-to-noon UT scan to the SAME night the dial shows: the night that
-    // follows eventEpochDay, whose local (solar) midnight is nightMidnightUt. Keying off
-    // the UT "now" instead lands on the adjacent night for observers far from UTC (e.g. a
-    // CDT evening falls on the next UT day), so the dial's darkness and this scan would
-    // disagree and the clipped wedge below would vanish.
-    val nightMidnightUt = (eventEpochDay + 1.0) - offset / 24.0
-    val darkSearchBase = floor(nightMidnightUt - 0.5)
-    // Same computation the Dark Time page uses, so the two pages agree exactly.
-    val darkNight = computeDarkNight(darkSearchBase.toLong(), lat, lon)
-    val hasDark = !darkNight.startUt.isNaN() && !darkNight.endUt.isNaN()
-    // Map the dark period's start/end (UT epoch days) onto the dial's display clock,
-    // the same UT-hour + displayOffsetHours mapping the dial uses for the Sun marker.
-    val darkStartDisplayHour =
-        if (hasDark) normalizeTime((darkNight.startUt - floor(darkNight.startUt)) * 24.0 + displayOffsetHours) else 0.0
-    val darkEndDisplayHour =
-        if (hasDark) normalizeTime((darkNight.endUt - floor(darkNight.endUt)) * 24.0 + displayOffsetHours) else 0.0
+    // (Sun below astronomical twilight AND Moon below its illumination-dependent threshold).
+    // computeDarkNight scans local solar noon to noon around the night that follows local
+    // date eventEpochDay — the SAME night the dial shows. Same computation as the Dark
+    // Time page, so the two pages agree exactly.
+    val darkNight = computeDarkNight(eventEpochDay.toLong(), lat, lon)
+    // Map a dark-interval edge (signed hours from local solar midnight, the frame
+    // computeDarkNight stores intervals in) onto the dial's display clock, the same
+    // UT-hour + displayOffsetHours mapping the dial uses for the Sun marker.
+    fun darkDisplayHour(g: Double) = normalizeTime(g - offset + displayOffsetHours)
     // Round to the nearest minute (matching the Dark Time page's fmtStd) so the two pages'
     // start/end times agree exactly; formatTimeMM would truncate and read ~1 min earlier.
     fun fmtDarkTime(displayHour: Double): String {
         val m = ((round(displayHour * 60.0).toInt() % 1440) + 1440) % 1440
         return "%02d:%02d".format(m / 60, m % 60)
     }
-    val darkRangeStr = if (hasDark)
-        "%s→%s".format(fmtDarkTime(darkStartDisplayHour), fmtDarkTime(darkEndDisplayHour)) else null
+    // One range string per dark sub-interval: on nights where a bright Moon interrupts
+    // the darkness, each moonless stretch is listed separately, matching the dial's
+    // black wedges below. Polar night (dark through the whole noon-to-noon window) would
+    // show a degenerate "noon→noon" range, so call it out as all day instead.
+    val darkRangeStrs = darkNight.intervals.map { (gStart, gEnd) ->
+        if (gEnd - gStart >= 24.0 - 1e-9) "all day"
+        else "%s→%s".format(fmtDarkTime(darkDisplayHour(gStart)), fmtDarkTime(darkDisplayHour(gEnd)))
+    }.ifEmpty { listOf("none") }
 
     // Longest and shortest day of the current calendar year at this location.
     // The extremes always fall within a few days of a solstice, so sample only a
@@ -567,13 +565,12 @@ fun SunlightTodayScreen(obs: ObserverState) {
                 val sideLabelPaint = Paint().apply { color = LabelColor.toArgb(); textSize = 40f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
                 val sideValuePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 46f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
                 val sideChangePaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 32f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
-                val darkRangeStrShown = darkRangeStr ?: "none"
                 val sideTextW = maxOf(
                     sideLabelPaint.measureText("Daylight"), sideLabelPaint.measureText("Night"),
                     sideValuePaint.measureText(dayValueStr), sideValuePaint.measureText(nightValueStr),
                     if (changeStr != null) sideChangePaint.measureText(changeStr) else 0f,
                     sideChangePaint.measureText(belowMaxStr), sideChangePaint.measureText(aboveMinStr),
-                    sideChangePaint.measureText("Very dark"), sideChangePaint.measureText(darkRangeStrShown)
+                    sideChangePaint.measureText("Very dark"), darkRangeStrs.maxOf { sideChangePaint.measureText(it) }
                 ) + 12f
 
                 // The Sun marker sits just outside the rim and travels the whole circle over a
@@ -650,16 +647,23 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     drawDialWedge(dawn[2], dawn[1], dialCivilColor)          // ... → civil
 
 
-                    // Black wedge over the very-dark (meteor) period. Spans exactly the same
-                    // [startUt, endUt] shown in the "Very dark" readout above, so the wedge's start,
-                    // end, and angular extent agree with the displayed times. The very-dark period
-                    // begins at astronomical twilight (Sun below -18°) plus a Moon condition, so it
-                    // sits within the dial's deepest-night (astro-dark) band.
-                    if (hasDark) {
-                        val blackSweepHours = (darkNight.endUt - darkNight.startUt) * 24.0
-                        if (blackSweepHours > 0.0) {
-                            drawArc(Color.Black, hourToArc(darkStartDisplayHour), (blackSweepHours / 24.0 * 360.0).toFloat(),
-                                useCenter = true, topLeft = dialTopLeft, size = dialSize)
+                    // Black wedges over the very-dark (meteor) sub-intervals — one per interval,
+                    // so a bright Moon rising mid-night leaves the moonlit gap unpainted instead
+                    // of blacking out hours that are not dark. Each wedge spans exactly the range
+                    // shown in the "Very dark" readout. The very-dark period requires the Sun
+                    // below astronomical twilight (-18°) plus a Moon condition, so the wedges sit
+                    // within the dial's deepest-night (astro-dark) band.
+                    for ((gStart, gEnd) in darkNight.intervals) {
+                        val startArc = hourToArc(darkDisplayHour(gStart))
+                        val sweepArc = ((gEnd - gStart) / 24.0 * 360.0).toFloat()
+                        drawArc(Color.Black, startArc, sweepArc,
+                            useCenter = true, topLeft = dialTopLeft, size = dialSize)
+                        // Polar night only: the wedge is the whole disc, which would vanish
+                        // against the black page background — a thin gray rim keeps it visible.
+                        // Ordinary partial wedges get no rim (it reads as a stray white arc).
+                        if (gEnd - gStart >= 24.0 - 1e-9) {
+                            drawArc(Color(0xFF555555), startArc, sweepArc, useCenter = false,
+                                topLeft = dialTopLeft, size = dialSize, style = Stroke(width = 2f))
                         }
                     }
 
@@ -702,7 +706,11 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     sideChangePaint.textAlign = Paint.Align.LEFT
                     val darkLabelY = cy + valueDrop + sideChangePaint.textSize + 8f
                     nc.drawText("Very dark", xRight, darkLabelY, sideChangePaint)
-                    nc.drawText(darkRangeStr ?: "none", xRight, darkLabelY + sideChangePaint.textSize + 4f, sideChangePaint)
+                    var darkRangeY = darkLabelY + sideChangePaint.textSize + 4f
+                    for (rangeStr in darkRangeStrs) {
+                        nc.drawText(rangeStr, xRight, darkRangeY, sideChangePaint)
+                        darkRangeY += sideChangePaint.textSize + 4f
+                    }
 
                     // Current-time Sun marker, just outside the rim, with a dotted radial line
                     val currentDisplayHour = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + displayOffsetHours)
