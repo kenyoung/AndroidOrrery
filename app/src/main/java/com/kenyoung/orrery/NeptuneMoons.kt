@@ -41,7 +41,7 @@ object NeptuneMoonEngine {
     // Triton orbital theory
     private const val TRITON_OMEGA0_DEG = 73.395781
     private const val TRITON_OMEGA_DOT_DEG_PER_DAY = 0.001452458
-    private const val TRITON_T0_JD = 2378520.5  // ~1846 epoch
+    private const val TRITON_T0_JD = 2378520.5  // ~1800 epoch
 
     // Perturbation coefficients: kI, kU, kOmega, k1, k2
     // argument = k1 * uPrime + k2 * (omegaPrime - omegaBar)

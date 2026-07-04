@@ -46,7 +46,7 @@ data class ShowerRowData(
     val isActive: Boolean
 )
 
-// --- CSV DATA SOURCE ---
+// --- SHOWER DATA ---
 val meteorShowersList = listOf(
     MeteorShower("alpha Centaurids", "ACE", 1, 28, 2, 21, 2, 8, "6", "57"),
     MeteorShower("gamma Normids", "GNO", 3, 7, 3, 23, 3, 15, "4", "68"),

@@ -271,7 +271,8 @@ internal fun precessJ2000ToDate(raDeg: Double, decDeg: Double, jd: Double): RaDe
 
 // --- J2000 TO APPARENT (precession + nutation) ---
 // Converts J2000 equatorial coordinates to apparent (true) equatorial coordinates of date.
-// Use for display Az/Alt only — rise/set algorithms are calibrated with HORIZON_REFRACTED.
+// Applied for display Az/Alt and inside the rise/set solvers (calculateSunTimes,
+// calculateSunTransit, calculatePlanetEvents, calculateMoonEvents).
 fun j2000ToApparent(raDeg: Double, decDeg: Double, jd: Double): RaDec {
     // Step 1: precess J2000 → mean of date
     val (meanRa, meanDec) = precessJ2000ToDate(raDeg, decDeg, jd)
@@ -396,7 +397,7 @@ fun normalizeTime(t: Double): Double {
     return v
 }
 
-// Convert a Julian day fraction to local hours using the given timezone offset
+// Convert a Unix epoch-day fraction (UT time of day) to local hours using the given timezone offset
 fun jdFracToLocalHours(jd: Double, timezoneOffset: Double): Double =
     normalizeTime((jd - floor(jd)) * 24.0 + timezoneOffset)
 
@@ -929,7 +930,8 @@ fun calculateMoonPosition(epochDay: Double): RaDec {
 }
 // Returns true if an event at [eventRawHours] (un-normalized local hours relative to anchor
 // midnight) falls on a later calendar day than [currentDisplayDate] in the display timezone.
-// Used by Compass and Elevations to append "*" to times that belong to the next day.
+// Used by the Compass, Elevations, Moon, and Sunlight Today pages to append "*" to times
+// that belong to the next day.
 fun isEventTomorrow(anchorEpochDay: Double, eventRawHours: Double, currentDisplayDate: Long): Boolean {
     if (eventRawHours.isNaN()) return false
     val anchorDate = floor(anchorEpochDay).toLong()

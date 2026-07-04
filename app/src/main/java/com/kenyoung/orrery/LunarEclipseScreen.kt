@@ -1649,7 +1649,7 @@ private fun renderEclipse(
     drawScope.drawCircle(colorLabel, moonRadiusPixels.toFloat(), Offset(shadowPx, shadowPy), style = Stroke(2f))
 
     // Current Moon position (Full Moon image) if within ±6 hours of penumbral phase
-    // and the image fits entirely inside the Moon path diagram
+    // and the Moon disk fits inside the Moon path diagram (the image, 25% larger, may slightly overhang)
     if (currentTJD >= penEclipseStartTJD - 6.0 / 24.0 && currentTJD <= penEclipseEndTJD + 6.0 / 24.0) {
         val curSun = sunPosition(currentTJD)
         val curMoon = moonPosition(currentTJD)
@@ -1884,7 +1884,7 @@ private fun renderEclipse(
     )
     drawScope.drawCircle(colorRed, 5f, Offset(userPx, userPy))
 
-    // Variables to store "Maximum Eclipse" label bounding box for green line positioning
+    // Variables to store "Maximum Eclipse" label bounding box for connecting-line positioning
     var maxEclipseLabelLeft = 0f
     var maxEclipseLabelRight = 0f
 
@@ -1912,7 +1912,7 @@ private fun renderEclipse(
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
 
-        // Title - eclipse type in yellow, date in white
+        // Title - eclipse type in light blue, date in white
         textPaint.textSize = largeTextSize
         textPaint.textAlign = Paint.Align.LEFT
         val titleDateLD = eclipseDisplayDate(eclipse, timeOffset)
@@ -1943,7 +1943,7 @@ private fun renderEclipse(
         textPaint.textSize = smallTextSize
         canvas.nativeCanvas.drawText(visibilityMsg, width / 2, visibilityY, textPaint)
 
-        // Duration info - labels in yellow, numbers in white
+        // Duration info - labels in light blue, numbers in white
         textPaint.textAlign = Paint.Align.LEFT
         val durPart1 = "Visible for penumbral: "
         val durNum1 = "$minutesPen"
@@ -1983,7 +1983,7 @@ private fun renderEclipse(
         canvas.nativeCanvas.drawText(durPart4, durX, durationY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER
 
-        // Saros and magnitude - labels in yellow, numbers in white
+        // Saros and magnitude - labels in light blue, numbers in white
         textPaint.textAlign = Paint.Align.LEFT
         val mag = if (eclipse.eclipseType == PENUMBRAL_LUNAR_ECLIPSE) eclipse.penMag else eclipse.umbMag
         val sarosLabel = "Saros Number "
@@ -2006,7 +2006,7 @@ private fun renderEclipse(
         canvas.nativeCanvas.drawText(magValue, sarosStartX + sarosLabelWidth + sarosNumWidth + magLabelWidth, sarosY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER
 
-        // Maximum eclipse time - label in light blue, time in yellow
+        // Maximum eclipse time - label in light blue, time in white
         // Use left-aligned paint to precisely control positioning and measure bounding box
         textPaint.textSize = mediumTextSize
         textPaint.textAlign = Paint.Align.LEFT
@@ -2029,7 +2029,7 @@ private fun renderEclipse(
         canvas.nativeCanvas.drawText(elevationSuffix, maxLabelStartX + labelWidth + timeWidth, maxEclipseY, textPaint)
         textPaint.textAlign = Paint.Align.CENTER  // Restore center alignment
 
-        // Store bounding box for the green line (will be drawn later)
+        // Store bounding box for the connecting line (will be drawn later)
         maxEclipseLabelLeft = maxLabelStartX
         maxEclipseLabelRight = maxLabelStartX + totalWidth
 

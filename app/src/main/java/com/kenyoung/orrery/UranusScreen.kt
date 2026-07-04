@@ -232,10 +232,7 @@ private fun DrawScope.drawUranusSystem(
     val centerX = w / 2f
     val centerY = h / 2f
 
-    // Flip conventions: East Left (default) means east is left on screen = positive x.
-    // Moon eastArcsec is positive east. With East Left: east = +screen X.
-    // flipEast: +1 for East Left (east = screen right? no...).
-    // Actually: in astronomy, "East Left" means east is on the LEFT side of the image.
+    // In astronomy, "East Left" means east is on the LEFT side of the image.
     // Screen +X = right. So east (+eastArcsec) should map to screen LEFT = -X.
     // With isEastRight=false (East Left): screenX = centerX - eastArcsec * pxPerArcsec
     // With isEastRight=true (East Right): screenX = centerX + eastArcsec * pxPerArcsec

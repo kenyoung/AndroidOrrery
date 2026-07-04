@@ -474,8 +474,8 @@ private fun CompassCanvas(
                 val haNorm = normalizeHourAngle(lst - raHours)
 
                 // Determine isUp/isPre/isPost by comparing current time against the
-                // displayed event times, avoiding the mismatch between apparent RA/Dec
-                // (used by altitude calc) and J2000 RA/Dec (used by rise/set solver).
+                // displayed event times, guaranteeing the coloring is always consistent
+                // with the event times shown in the table.
                 val currentLocalSolar = (currentUtEpochDay - floor(obj.anchorEpochDay)) * 24.0 + offset
                 val riseH = obj.events.rise
                 val transitH = obj.events.transit + if (obj.transitTomorrow) 24.0 else 0.0

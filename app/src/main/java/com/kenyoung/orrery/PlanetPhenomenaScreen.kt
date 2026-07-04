@@ -196,7 +196,7 @@ private fun findPhenomenaRow(
     }
 
     // Golden Section Search for finding Max/Min (Elongations for Mercury and Venus)
-    // precision ~ 1 minute (0.0007 days)
+    // precision ~ 9 seconds (0.0001 days)
     fun findPeakTime(tStart: Double, tEnd: Double, isMax: Boolean): Double {
         val gr = (sqrt(5.0) - 1.0) / 2.0
         var a = tStart

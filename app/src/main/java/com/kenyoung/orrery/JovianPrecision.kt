@@ -16,8 +16,8 @@ object JovianPrecision {
      *
      * @param jD Julian Day
      * @param deltaAU Distance from Earth to Jupiter in AU
-     * @param lambda0 Heliocentric Longitude of Jupiter (degrees)
-     * @param beta0 Heliocentric Latitude of Jupiter (degrees)
+     * @param lambda0 Geocentric ecliptic longitude of Jupiter (degrees)
+     * @param beta0 Geocentric ecliptic latitude of Jupiter (degrees)
      * @return A map of MoonName -> Vector3 (X, Y, Z in Jupiter radii)
      */
     fun highAccuracyJovSats(

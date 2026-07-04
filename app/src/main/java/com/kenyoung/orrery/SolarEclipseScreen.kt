@@ -511,7 +511,6 @@ private fun computeLocalCircumstances(
     }
 
     // Compute obscuration from magnitude
-    // For uniform disk: obscuration = 1 - cos(a)/pi where a relates to magnitude
     // Simplified formula using magnitude and size ratio
     val k = abs(maxL1 - maxL2) / (maxL1 + maxL2)  // Moon/Sun angular size ratio
     val obscuration = computeObscuration(maxMag, k)
@@ -575,7 +574,6 @@ private fun computeObscuration(mag: Double, k: Double): Double {
 
     // Partial: use the geometric intersection of two circles
     // Sun radius = 1, Moon radius = k, center distance = 1 + k - 2*mag*1
-    // Actually: distance between centers d = (1 + k) * (1 - mag) when mag = (1+k-d)/(1+k)... no
     // mag = (s + m - d) / (2*s) where s = Sun radius, m = Moon radius, d = center distance
     // So d = s + m - 2*s*mag = 1 + k - 2*mag
     val d = (1.0 + k - 2.0 * mag).coerceAtLeast(0.0)
@@ -814,9 +812,6 @@ private fun computeVisibilityRegion(eclipse: SolarEclipse): List<Triple<Float, F
 }
 
 /**
- * Compute render data for the selected eclipse.
- */
-/**
  * Find the time t (hours from T0) of greatest eclipse — when the shadow axis
  * is closest to Earth's center (minimum of x² + y²).
  */
@@ -845,6 +840,9 @@ private fun findGreatestEclipseT(eclipse: SolarEclipse): Double {
     return bestT
 }
 
+/**
+ * Compute render data for the selected eclipse.
+ */
 private fun computeRenderData(
     eclipse: SolarEclipse,
     latDeg: Double,

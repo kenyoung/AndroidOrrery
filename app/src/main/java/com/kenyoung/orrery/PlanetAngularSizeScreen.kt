@@ -45,7 +45,7 @@ private const val SAMPLE_STEP_DAYS = 1.0
 private const val SAMPLE_COUNT = FORECAST_DAYS + 1
 private const val ARCSEC_PER_RAD = 206264.806
 
-// Equatorial radii, km. Saturn radius is the planet disk only; rings handled separately.
+// Volumetric mean radii, km. Saturn radius is the planet disk only; rings handled separately.
 private val PLANET_RADIUS_KM = mapOf(
     "Mercury" to 2439.7,
     "Venus"   to 6051.8,

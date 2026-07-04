@@ -31,7 +31,7 @@ object SaturnMoonEngine {
 
     private const val D = Math.PI / 180.0      // degrees to radians
 
-    // Differential-refraction constants (index 0 unused, 1=Mimas..8=Iapetus)
+    // Differential light-time constants (index 0 unused, 1=Mimas..8=Iapetus)
     private val kConst = intArrayOf(0, 20947, 23715, 26382, 29876, 35313, 53800, 59222, 91820)
 
     // Ring dimensions in Saturn equatorial radii
@@ -388,7 +388,7 @@ object SaturnMoonEngine {
     }
 
     // --- Main satellite position calculation (Meeus Ch. 46) ---
-    // Returns list of 8 (x, y) tuples in Saturn radii. X+ = west, Y+ = north.
+    // Returns list of 8 (x, y, z) triples in Saturn radii. X+ = west, Y+ = north.
     private fun saturnMoonPositions(jde: Double): List<Triple<Double, Double, Double>> {
         val (s, beta, bigR) = solarTrueVsop87(jde)
         val ss = sin(s); val cs = cos(s)

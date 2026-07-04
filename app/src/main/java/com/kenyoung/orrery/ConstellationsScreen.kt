@@ -114,7 +114,7 @@ private fun DrawScope.drawEcliptic(obliquity: Double) {
 }
 
 /**
- * Boundary segment in RA/Dec coordinates (B1875.0 hours/degrees).
+ * Boundary segment in RA/Dec coordinates (J2025.0 hours/degrees).
  */
 private data class MapSegment(
     val ra1: Double, val dec1: Double,
@@ -663,7 +663,7 @@ private fun DrawScope.drawSkyMap(
             val y = decToY(label.decDeg - 3.0)
             canvas.drawText(label.symbol, x, y, zodiacPaint)
         }
-        // Ophiuchus text at RA 18h15m, Dec +9°30'
+        // Ophiuchus text at RA 17h45m, Dec +18°
         canvas.drawText("Ophiuchus", raToX(17.75), decToY(18.0), ophiuchusPaint)
         for (row in rows) {
             if (row.appDecDeg < DEC_MIN || row.appDecDeg > DEC_MAX) continue
@@ -687,7 +687,7 @@ private fun DrawScope.drawStarMap(
     drawRect(Color.Gray, style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
 
     // Stars — size and brightness scale with magnitude
-    // Magnitude range: ~-1.5 (Sirius) to 3.0
+    // Magnitude range: ~-1.5 (Sirius) to 3.5
     val magMin = -1.5  // brightest
     val magMax = 3.5   // faintest
     val magRange = magMax - magMin
@@ -785,7 +785,7 @@ private fun DrawScope.drawPlanetDisks(disks: List<PlanetDiskInfo>, northUp: Bool
     }
     val labelHeight = namePaint.textSize + sizePaint.textSize + 4f
 
-    // Row 1 center: Jupiter at max radius just touches top of canvas
+    // Row 1 center: Venus at max radius just touches top of canvas
     val row1CenterY = row1MaxPx
     val row1LabelTop = row1CenterY + row1MaxPx + 2f
 

@@ -230,7 +230,7 @@ fun SaturnScreen(
                 val infoSize = 7.sp
                 val mono = androidx.compose.ui.text.font.FontFamily.Monospace
                 val angDiamArcsec = Math.toDegrees(saturnData.angularRadiusRad) * 2.0 * 3600.0
-                // Saturn magnitude: Meeus formula V = -8.95 + 5·log10(r·Δ) + 0.044·|α|
+                // Saturn magnitude: V = -8.95 + 5·log10(r·Δ) + 0.044·|α| (adapted from Meeus, who uses -8.88 and |ΔU|)
                 // with ring correction. Use simplified: add ring brightness term from B
                 val phaseAngle = 0.0 // negligible for Saturn (< 6°)
                 val mag = -8.95 + 5.0 * kotlin.math.log10(saturnData.distSun * saturnData.distGeo) +

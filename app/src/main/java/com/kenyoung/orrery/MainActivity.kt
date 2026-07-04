@@ -162,7 +162,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var animationTargetEpoch by remember { mutableStateOf(0.0) }
     var animationStep by remember { mutableStateOf(0.0) }
 
-    // Screen-local animation stopped state (Jovian Moons, Saturn)
+    // Screen-local animation stopped state (Jovian Moons, Saturn, Uranus, Neptune, Constellations)
     var screenAnimStopped by remember { mutableStateOf(false) }
     var screenAnimResetTrigger by remember { mutableStateOf(0) }
 
@@ -656,7 +656,6 @@ fun calculateCache(nowDate: LocalDate, lat: Double, lon: Double): AstroCache {
 
     for (i in 0 until daysCount) {
         val currentEpochDay = startEpochDay + i
-        // Use Compatibility Function
         val (rise, set) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours)
         sunRise[i] = rise; sunSet[i] = set
         val (aRise, aSet) = calculateSunTimes(currentEpochDay, lat, lon, offsetHours, ASTRONOMICAL_TWILIGHT)
@@ -759,7 +758,7 @@ fun LocationDialog(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { CityData.load(context) }
     }
-    // null = still loading, empty = loaded OK, non-empty = error message
+    // tzError: null = no error, non-null = error message; tzDone tracks load completion
     val tzError = remember { mutableStateOf<String?>(null) }
     val tzDone = remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {

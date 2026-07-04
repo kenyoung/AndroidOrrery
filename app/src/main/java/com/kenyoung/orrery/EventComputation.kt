@@ -143,7 +143,7 @@ fun computeMoonEventData(
 
     // Circumpolar detection: NaN rise+set means either always up or never up
     val isCircumpolar = moonEvents.rise.isNaN() && moonEvents.set.isNaN() && run {
-        val checkJD = anchorMidnightJD + 12.0 / 24.0 // noon UT
+        val checkJD = anchorMidnightJD + 12.0 / 24.0 // local solar noon
         val st = AstroEngine.getBodyState("Moon", checkJD)
         val (appRa, appDec) = j2000ToApparent(st.ra, st.dec, checkJD)
         val lst = calculateLSTHours(checkJD, lon)

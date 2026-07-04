@@ -81,7 +81,7 @@ fun MoonThisMonthScreen(
     // Pre-compute phase data and events
     val phaseData = remember(displayMonth.year, displayMonth.monthValue, lon) {
         val angles = DoubleArray(daysInMonth + 1)
-        val midnightOffset = -lon / 360.0 // local apparent midnight in UT
+        val midnightOffset = -lon / 360.0 // local mean midnight in UT
         for (d in 1..daysInMonth) {
             val epochDay = monthStart.withDayOfMonth(d).toEpochDay().toDouble()
             angles[d - 1] = calculateMoonPhaseAngle(epochDay + midnightOffset)
@@ -278,7 +278,7 @@ fun MoonThisMonthScreen(
                     val cellLabelColor = if (isToday) android.graphics.Color.WHITE else labelColorInt
                     val cellPhaseColor = if (isToday) android.graphics.Color.WHITE else Color.Red.toArgb()
 
-                    // Moon age: days since most recent New Moon, evaluated at local apparent noon
+                    // Moon age: days since most recent New Moon, evaluated at local mean noon
                     val dayEpoch = monthStart.withDayOfMonth(d).toEpochDay()
                     val localNoon = dayEpoch.toDouble() + 0.5 - lon / 360.0
                     val moonAge = calculateMoonAge(localNoon, lon)
