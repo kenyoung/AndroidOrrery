@@ -57,11 +57,9 @@ fun SunlightTodayScreen(obs: ObserverState) {
     }
 
     // Twilight data for the table (anchored to observing night).
-    // Use dawn Golden Hour end (sun at 6°) as the transition point, not sunrise,
-    // so the table shows this morning's dawn times during the Golden Hour period.
-    val goldenRiseTime = calculateSunTimes(floor(epochDay), lat, lon, offset, GOLDEN_HOUR_ALT).rise
-    val transitionTime = if (!goldenRiseTime.isNaN()) goldenRiseTime else riseTime
-    val eventEpochDay = if (!transitionTime.isNaN() && currentLocalSolar < transitionTime) floor(epochDay) - 1.0 else floor(epochDay)
+    // Switch from last night to the coming night at sunrise. NaN rise (polar
+    // day/night) falls through to the coming night.
+    val eventEpochDay = if (!riseTime.isNaN() && currentLocalSolar < riseTime) floor(epochDay) - 1.0 else floor(epochDay)
     val twilightData = computeTwilightTimes(eventEpochDay, lat, lon, offset)
 
     // Date and time for title — round to nearest minute to avoid showing previous minute
