@@ -93,10 +93,17 @@ fun SunlightTodayScreen(obs: ObserverState) {
     // the darkness, each moonless stretch is listed separately, matching the dial's
     // black wedges below. Polar night (dark through the whole noon-to-noon window) would
     // show a degenerate "noon→noon" range, so call it out as all day instead.
-    val darkRangeStrs = darkNight.intervals.map { (gStart, gEnd) ->
-        if (gEnd - gStart >= 24.0 - 1e-9) "all day"
-        else "%s→%s".format(fmtDarkTime(darkDisplayHour(gStart)), fmtDarkTime(darkDisplayHour(gEnd)))
-    }.ifEmpty { listOf("none") }
+    val darkRangeStrs = buildList {
+        darkNight.intervals.mapTo(this) { (gStart, gEnd) ->
+            if (gEnd - gStart >= 24.0 - 1e-9) "all day"
+            else "%s→%s".format(fmtDarkTime(darkDisplayHour(gStart)), fmtDarkTime(darkDisplayHour(gEnd)))
+        }
+        if (isEmpty()) add("none")
+        // Total very dark time below the ranges, to the nearest tenth of an hour;
+        // omitted when it rounds below 0.1 h.
+        val totalTenths = round(darkNight.totalHours * 10.0) / 10.0
+        if (totalTenths >= 0.1) add("(%.1f hours)".format(totalTenths))
+    }
 
     // Longest and shortest day of the current calendar year at this location.
     // The extremes always fall within a few days of a solstice, so sample only a
