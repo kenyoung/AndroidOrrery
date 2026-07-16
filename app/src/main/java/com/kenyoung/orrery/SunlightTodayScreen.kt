@@ -372,14 +372,20 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     nc.drawText("%.0f°".format(round(currentAzRaw)), xNow + sunLabelOffset, yNow + sunLabelPaint.textSize / 3f, sunLabelPaint)
                 }
 
-                // "Currently" label + sunlight state in upper-left of chart
+                // "Currently" label + sunlight state in upper-left of chart.
+                // Darkness upgrades to Very Dark when the current moment lies inside one of
+                // the very-dark intervals shown in the lower right (Moon down or dim too).
+                // gNow maps the current local solar time into the signed-hours-from-local-
+                // solar-midnight frame the intervals are stored in (evening negative).
+                val gNow = if (currentLocalSolar >= 12.0) currentLocalSolar - 24.0 else currentLocalSolar
+                val inVeryDark = darkNight.intervals.any { (gStart, gEnd) -> gNow in gStart..gEnd }
                 val sunlightState = when {
                     currentAltRaw >= GOLDEN_HOUR_ALT -> "Daylight"
                     currentAltRaw >= HORIZON_REFRACTED -> "Golden Hour"
                     currentAltRaw >= CIVIL_TWILIGHT -> "Civil Twilight"
                     currentAltRaw >= NAUTICAL_TWILIGHT -> "Nautical Twilight"
                     currentAltRaw >= ASTRONOMICAL_TWILIGHT -> "Astro. Twilight"
-                    else -> "Darkness"
+                    else -> if (inVeryDark) "Very Dark" else "Darkness"
                 }
                 val currentlyLabelPaint = Paint().apply {
                     isAntiAlias = true
