@@ -106,6 +106,55 @@ enum class Screen {
     SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
 }
 
+// Menu names for each screen, grouped as they appear in the 3-dot menu. Shared by the
+// dropdown menu and the top-bar title so the two can never disagree.
+private val screensBeforeOuter = listOf(
+    "Planet Transits" to Screen.TRANSITS,
+    "Planet Elevations" to Screen.ELEVATIONS,
+    "Planet Compass" to Screen.COMPASS,
+    "Planet Paths" to Screen.PLANET_PATHS,
+    "Planet Angular Size" to Screen.ANGULAR_SIZE,
+    "Planet Magnitude" to Screen.PLANET_MAGNITUDE,
+    "Object Visibility" to Screen.OBJECT_VISIBILITY,
+    "Planet Phenomena" to Screen.PHENOMENA,
+    "Sunlight Today" to Screen.SUNLIGHT_TODAY,
+    "Dark Time" to Screen.DARK_TIME,
+)
+private val moonScreens = listOf(
+    "Moon Now" to Screen.MOON,
+    "Moon This Month" to Screen.MOON_THIS_MONTH,
+    "Lunar Calendar" to Screen.MOON_CALENDAR,
+)
+private val eclipseScreens = listOf(
+    "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
+    "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
+)
+private val outerPlanetScreens = listOf(
+    "Jovian Moons" to Screen.JOVIAN_MOONS,
+    "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
+    "Saturn" to Screen.SATURN,
+    "Uranus" to Screen.URANUS,
+    "Neptune" to Screen.NEPTUNE,
+)
+private val orreryScreens = listOf(
+    "Schematic Orrery" to Screen.SCHEMATIC,
+    "To-scale Orrery" to Screen.SCALE,
+)
+private val screensAfterOuter = listOf(
+    "Analemma" to Screen.ANALEMMA,
+    "Meteor Showers" to Screen.METEOR_SHOWERS,
+    "Constellations" to Screen.CONSTELLATIONS,
+)
+private val screensAfterOrreries = listOf(
+    "Astronomical Times" to Screen.TIMES,
+)
+// MOON_ON_DAY is reached from the Lunar Calendar, not the menu, so it needs its own entry.
+private val screenMenuTitles: Map<Screen, String> =
+    (screensBeforeOuter + moonScreens + eclipseScreens + outerPlanetScreens +
+        orreryScreens + screensAfterOuter + screensAfterOrreries)
+        .associate { (title, screen) -> screen to title } +
+        (Screen.MOON_ON_DAY to "Moon On Day")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Boolean = false) {
@@ -427,7 +476,10 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                         }
                         Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "Orrery", style = TextStyle(color = Color.White, fontSize = 24.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold))
+                            Text(
+                                text = "Orrery ${screenMenuTitles[currentScreen] ?: ""}",
+                                style = TextStyle(color = Color.White, fontSize = 15.8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            )
                             // Sunlight Today has its own date/time title, so the header subtitle is redundant there
                             if (currentScreen != Screen.SUNLIGHT_TODAY) {
                                 val timeDisplay = if (useStandardTime) {
@@ -445,43 +497,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, "Options", tint = Color.White) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
-                        val screensBeforeOuter = listOf(
-                            "Planet Transits" to Screen.TRANSITS,
-                            "Planet Elevations" to Screen.ELEVATIONS,
-                            "Planet Compass" to Screen.COMPASS,
-                            "Planet Paths" to Screen.PLANET_PATHS,
-                            "Planet Angular Size" to Screen.ANGULAR_SIZE,
-                            "Planet Magnitude" to Screen.PLANET_MAGNITUDE,
-                            "Object Visibility" to Screen.OBJECT_VISIBILITY,
-                            "Planet Phenomena" to Screen.PHENOMENA,
-                            "Sunlight Today" to Screen.SUNLIGHT_TODAY,
-                            "Dark Time" to Screen.DARK_TIME,
-                        )
-                        val moonScreens = listOf(
-                            "Moon Now" to Screen.MOON,
-                            "Moon This Month" to Screen.MOON_THIS_MONTH,
-                            "Lunar Calendar" to Screen.MOON_CALENDAR,
-                        )
-                        val eclipseScreens = listOf(
-                            "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
-                            "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
-                        )
-                        val outerPlanetScreens = listOf(
-                            "Jovian Moons" to Screen.JOVIAN_MOONS,
-                            "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
-                            "Saturn" to Screen.SATURN,
-                            "Uranus" to Screen.URANUS,
-                            "Neptune" to Screen.NEPTUNE,
-                        )
-                        val orreryScreens = listOf(
-                            "Schematic Orrery" to Screen.SCHEMATIC,
-                            "To-scale Orrery" to Screen.SCALE,
-                        )
-                        val screensAfterOuter = listOf(
-                            "Analemma" to Screen.ANALEMMA,
-                            "Meteor Showers" to Screen.METEOR_SHOWERS,
-                            "Constellations" to Screen.CONSTELLATIONS,
-                        )
                         fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }
                         screensBeforeOuter.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
@@ -529,9 +544,6 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                                 DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
                             }
                         }
-                        val screensAfterOrreries = listOf(
-                            "Astronomical Times" to Screen.TIMES,
-                        )
                         screensAfterOrreries.forEach { (title, screen) ->
                             DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
