@@ -455,25 +455,20 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             TopAppBar(
                 title = {
                     Box(modifier = Modifier.fillMaxWidth()) {
+                        // Manual-time readout and Reset Time sit above the centered
+                        // page title; the -25.2dp offset keeps them clear of it.
                         if (!usePhoneTime) {
-                            Column(modifier = Modifier.align(Alignment.CenterStart)) {
-                                Text(
-                                    text = dateString,
-                                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                                    modifier = Modifier.offset(y = (-6).dp)
-                                )
-                                Text(
-                                    text = "${DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("UTC")).format(currentInstant)} UT",
-                                    style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                                    modifier = Modifier.offset(y = (-6).dp)
-                                )
-                            }
+                            Text(
+                                text = "$dateString ${DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("UTC")).format(currentInstant)} UT",
+                                style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.align(Alignment.CenterStart).offset(y = (-25.2).dp)
+                            )
                             if (!isAnimating) {
-                                TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
+                                TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd).offset(y = (-25.2).dp)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                             }
                         }
                         if (screenAnimStopped && usePhoneTime) {
-                            TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
+                            TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd).offset(y = (-25.2).dp)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                         }
                         Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
