@@ -16,18 +16,15 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import java.time.LocalDate
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 @Composable
 fun SunlightTodayScreen(obs: ObserverState) {
     val epochDay = obs.epochDay; val lat = obs.lat; val lon = obs.lon; val now = obs.now
-    val stdOffsetHours = obs.stdOffsetHours; val stdTimeLabel = obs.stdTimeLabel
+    val stdOffsetHours = obs.stdOffsetHours
     val useLocalTime = obs.useStandardTime
 
     val offset = lon / 15.0
-    val timeLabel = if (useLocalTime) stdTimeLabel else "UT"
     val displayOffsetHours = if (useLocalTime) stdOffsetHours else 0.0
 
     // Sun transit and rise/set for the current day
@@ -62,13 +59,6 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val eventEpochDay = if (!riseTime.isNaN() && currentLocalSolar < riseTime) floor(epochDay) - 1.0 else floor(epochDay)
     val twilightData = computeTwilightTimes(eventEpochDay, lat, lon, offset)
 
-    // Date and time for title — round to nearest minute to avoid showing previous minute
-    val displayZoneId = if (useLocalTime) ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).roundToInt()) else ZoneOffset.UTC
-    val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(displayZoneId)
-    val dateStr = dateFormatter.format(now)
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(displayZoneId)
-    val currentTimeStr = timeFormatter.format(now.plusSeconds(30))
-
     // Rise/set azimuths
     val riseAz = if (!riseTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, true, HORIZON_REFRACTED) else Double.NaN
     val setAz = if (!setTime.isNaN()) calculateAzAtRiseSet(lat, transitDec, false, HORIZON_REFRACTED) else Double.NaN
@@ -92,18 +82,14 @@ fun SunlightTodayScreen(obs: ObserverState) {
     // One range string per dark sub-interval: on nights where a bright Moon interrupts
     // the darkness, each moonless stretch is listed separately, matching the dial's
     // black wedges below. Polar night (dark through the whole noon-to-noon window) would
-    // show a degenerate "noon→noon" range, so call it out as all day instead.
-    val darkRangeStrs = buildList {
-        darkNight.intervals.mapTo(this) { (gStart, gEnd) ->
-            if (gEnd - gStart >= 24.0 - 1e-9) "all day"
-            else "%s→%s".format(fmtDarkTime(darkDisplayHour(gStart)), fmtDarkTime(darkDisplayHour(gEnd)))
-        }
-        if (isEmpty()) add("none")
-        // Total very dark time below the ranges, to the nearest tenth of an hour;
-        // omitted when it rounds below 0.1 h.
-        val totalTenths = round(darkNight.totalHours * 10.0) / 10.0
-        if (totalTenths >= 0.1) add("(%.1f hours)".format(totalTenths))
-    }
+    // show a degenerate "noon→noon" range, so call it out as all day instead. A final
+    // line gives the total to the nearest tenth of an hour, omitted below 0.1 h.
+    val darkTotalTenths = round(darkNight.totalHours * 10.0)
+    val darkReadoutLines = darkNight.intervals.map { (gStart, gEnd) ->
+        if (gEnd - gStart >= 24.0 - 1e-9) "all day"
+        else "%s→%s".format(fmtDarkTime(darkDisplayHour(gStart)), fmtDarkTime(darkDisplayHour(gEnd)))
+    }.ifEmpty { listOf("none") } +
+        listOfNotNull("(%.1f hours)".format(darkTotalTenths / 10.0).takeIf { darkTotalTenths >= 1.0 })
 
     // Longest and shortest day of the current calendar year at this location.
     // The extremes always fall within a few days of a solstice, so sample only a
@@ -160,19 +146,17 @@ fun SunlightTodayScreen(obs: ObserverState) {
             val sunRayInner = 21f
             val sunRayOuter = 33f
             val curveStrokeWidth = 6f
-            val chartFraction = 0.375f                          // chart height as a proportion of canvas
+            val chartFraction = 0.415f                          // chart height as a proportion of canvas
 
             // Vertical-fit scale. On short screens, compress the fixed text block (title, axis
             // and event labels, twilight table) and the chart together so the dial always has
             // room and nothing is clipped at the bottom. vScale == 1 on normal/large screens.
             val sunClearEst = (sunRadius + 6f) * 1.33f + sunRayOuter + 8f
             val dialBudgetMin = 2f * (sunClearEst + 6f) + 240f  // dial reserves + a minimum dial diameter
-            val fixedBlockEst = 800f                            // title + label bands + table, at full size
+            val fixedBlockEst = 700f                            // label bands + table, at full size
             val vScale = ((h - dialBudgetMin) / (fixedBlockEst + chartFraction * h)).coerceIn(0.4f, 1f)
 
             // Paints
-            val titlePaintLabel = Paint().apply { color = LabelColor.toArgb(); textSize = 63f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
-            val titlePaintWhite = Paint().apply { color = android.graphics.Color.WHITE; textSize = 63f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
             val axisLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 33f; textAlign = Paint.Align.RIGHT; isAntiAlias = true }
             val hourLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 33f; textAlign = Paint.Align.CENTER; isAntiAlias = true }
             val eventLabelPaint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 39f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
@@ -186,17 +170,16 @@ fun SunlightTodayScreen(obs: ObserverState) {
 
             // Apply the vertical-fit scale to every upper-block text size (the dial draws its
             // own fixed-size labels and Sun symbol, which must match the chart's Sun symbol).
-            listOf(titlePaintLabel, titlePaintWhite, axisLabelPaint, hourLabelPaint, eventLabelPaint,
+            listOf(axisLabelPaint, hourLabelPaint, eventLabelPaint,
                    eventTimePaint, eventAzPaint, bandLabelPaint, sunLabelPaint,
                    tableHeaderPaint, tableLabelPaint, tableDataPaint).forEach { it.textSize *= vScale }
 
             // Layout — four non-overlapping vertical bands, each sized from font metrics.
             // The chart gets a fixed proportion of the canvas so its size never varies
             // with the altitude range. Remaining space is allocated to labels and table.
-            val titleY = 60f * vScale
             val chartLeft = 80f
             val chartRight = w - 20f
-            val chartTop = titleY + 40f * vScale
+            val chartTop = 40f * vScale
             val rowHeight = 57f * vScale
 
             // Chart height is a proportion of the canvas, compressed with the rest on short screens.
@@ -237,31 +220,6 @@ fun SunlightTodayScreen(obs: ObserverState) {
 
             drawIntoCanvas { canvas ->
                 val nc = canvas.nativeCanvas
-
-                // --- Title (font size auto-scaled to fit screen width) ---
-                val titleText1 = "Sunlight Today  "
-                val titleText2 = dateStr
-                val titleText3 = "  $currentTimeStr"
-                val titleText4 = "  ($timeLabel)"
-                val titleMargin = 20f
-                val availableWidth = w - 2 * titleMargin
-                val fullWidth = titlePaintLabel.measureText(titleText1) +
-                    titlePaintWhite.measureText(titleText2) +
-                    titlePaintWhite.measureText(titleText3) +
-                    titlePaintLabel.measureText(titleText4)
-                if (fullWidth > availableWidth) {
-                    val scale = availableWidth / fullWidth
-                    titlePaintLabel.textSize *= scale
-                    titlePaintWhite.textSize *= scale
-                }
-                var tx = titleMargin
-                nc.drawText(titleText1, tx, titleY, titlePaintLabel)
-                tx += titlePaintLabel.measureText(titleText1)
-                nc.drawText(titleText2, tx, titleY, titlePaintWhite)
-                tx += titlePaintWhite.measureText(titleText2)
-                nc.drawText(titleText3, tx, titleY, titlePaintWhite)
-                tx += titlePaintWhite.measureText(titleText3)
-                nc.drawText(titleText4, tx, titleY, titlePaintLabel)
 
                 // --- Chart content (y-axis scaled to fit full nadir-to-peak range) ---
                 val civilY = altToY(CIVIL_TWILIGHT)
@@ -375,9 +333,9 @@ fun SunlightTodayScreen(obs: ObserverState) {
                 // "Currently" label + sunlight state in upper-left of chart.
                 // Darkness upgrades to Very Dark when the current moment lies inside one of
                 // the very-dark intervals shown in the lower right (Moon down or dim too).
-                // gNow maps the current local solar time into the signed-hours-from-local-
-                // solar-midnight frame the intervals are stored in (evening negative).
-                val gNow = if (currentLocalSolar >= 12.0) currentLocalSolar - 24.0 else currentLocalSolar
+                // darkGraphOffset maps the current local solar time into the signed-hours-
+                // from-local-solar-midnight frame the intervals are stored in.
+                val gNow = darkGraphOffset(currentLocalSolar)
                 val inVeryDark = darkNight.intervals.any { (gStart, gEnd) -> gNow in gStart..gEnd }
                 val sunlightState = when {
                     currentAltRaw >= GOLDEN_HOUR_ALT -> "Daylight"
@@ -581,7 +539,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     sideValuePaint.measureText(dayValueStr), sideValuePaint.measureText(nightValueStr),
                     if (changeStr != null) sideChangePaint.measureText(changeStr) else 0f,
                     sideChangePaint.measureText(belowMaxStr), sideChangePaint.measureText(aboveMinStr),
-                    sideChangePaint.measureText("Very dark"), darkRangeStrs.maxOf { sideChangePaint.measureText(it) }
+                    sideChangePaint.measureText("Very dark"), darkReadoutLines.maxOf { sideChangePaint.measureText(it) }
                 ) + 12f
 
                 // The Sun marker sits just outside the rim and travels the whole circle over a
@@ -718,7 +676,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     val darkLabelY = cy + valueDrop + sideChangePaint.textSize + 8f
                     nc.drawText("Very dark", xRight, darkLabelY, sideChangePaint)
                     var darkRangeY = darkLabelY + sideChangePaint.textSize + 4f
-                    for (rangeStr in darkRangeStrs) {
+                    for (rangeStr in darkReadoutLines) {
                         nc.drawText(rangeStr, xRight, darkRangeY, sideChangePaint)
                         darkRangeY += sideChangePaint.textSize + 4f
                     }

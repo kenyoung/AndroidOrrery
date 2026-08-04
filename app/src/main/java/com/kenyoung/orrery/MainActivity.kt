@@ -99,61 +99,39 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Navigation Enum
-enum class Screen {
-    TRANSITS, ELEVATIONS, PHENOMENA, SUNLIGHT_TODAY, DARK_TIME, COMPASS, PLANET_PATHS, ANGULAR_SIZE, PLANET_MAGNITUDE, OBJECT_VISIBILITY, MOON, MOON_ON_DAY, MOON_THIS_MONTH, MOON_CALENDAR,
-    LUNAR_ECLIPSES, SOLAR_ECLIPSES, JOVIAN_MOONS, JOVIAN_EVENTS, SATURN, URANUS, NEPTUNE,
-    SCHEMATIC, SCALE, CONSTELLATIONS, TIMES, ANALEMMA, METEOR_SHOWERS
+// Navigation Enum. menuTitle is the name shown in the 3-dot menu and the top-bar title.
+enum class Screen(val menuTitle: String) {
+    TRANSITS("Planet Transits"), ELEVATIONS("Planet Elevations"), PHENOMENA("Planet Phenomena"),
+    SUNLIGHT_TODAY("Sunlight Today"), DARK_TIME("Dark Time"), COMPASS("Planet Compass"),
+    PLANET_PATHS("Planet Paths"), ANGULAR_SIZE("Planet Angular Size"),
+    PLANET_MAGNITUDE("Planet Magnitude"), OBJECT_VISIBILITY("Object Visibility"),
+    MOON("Moon Now"), MOON_ON_DAY("Moon On Day"), MOON_THIS_MONTH("Moon This Month"),
+    MOON_CALENDAR("Lunar Calendar"),
+    LUNAR_ECLIPSES("Lunar Eclipses"), SOLAR_ECLIPSES("Solar Eclipses"),
+    JOVIAN_MOONS("Jovian Moons"), JOVIAN_EVENTS("Jovian Moon Events"),
+    SATURN("Saturn"), URANUS("Uranus"), NEPTUNE("Neptune"),
+    SCHEMATIC("Schematic Orrery"), SCALE("To-scale Orrery"),
+    CONSTELLATIONS("Constellations"), TIMES("Astronomical Times"), ANALEMMA("Analemma"),
+    METEOR_SHOWERS("Meteor Showers")
 }
 
-// Menu names for each screen, grouped as they appear in the 3-dot menu. Shared by the
-// dropdown menu and the top-bar title so the two can never disagree.
+// Menu ordering, grouped as the 3-dot menu presents them. MOON_ON_DAY is reached
+// from the Lunar Calendar, not the menu, so it appears in no group.
 private val screensBeforeOuter = listOf(
-    "Planet Transits" to Screen.TRANSITS,
-    "Planet Elevations" to Screen.ELEVATIONS,
-    "Planet Compass" to Screen.COMPASS,
-    "Planet Paths" to Screen.PLANET_PATHS,
-    "Planet Angular Size" to Screen.ANGULAR_SIZE,
-    "Planet Magnitude" to Screen.PLANET_MAGNITUDE,
-    "Object Visibility" to Screen.OBJECT_VISIBILITY,
-    "Planet Phenomena" to Screen.PHENOMENA,
-    "Sunlight Today" to Screen.SUNLIGHT_TODAY,
-    "Dark Time" to Screen.DARK_TIME,
+    Screen.TRANSITS, Screen.ELEVATIONS, Screen.COMPASS, Screen.PLANET_PATHS,
+    Screen.ANGULAR_SIZE, Screen.PLANET_MAGNITUDE, Screen.OBJECT_VISIBILITY,
+    Screen.PHENOMENA, Screen.SUNLIGHT_TODAY, Screen.DARK_TIME,
 )
-private val moonScreens = listOf(
-    "Moon Now" to Screen.MOON,
-    "Moon This Month" to Screen.MOON_THIS_MONTH,
-    "Lunar Calendar" to Screen.MOON_CALENDAR,
-)
-private val eclipseScreens = listOf(
-    "Lunar Eclipses" to Screen.LUNAR_ECLIPSES,
-    "Solar Eclipses" to Screen.SOLAR_ECLIPSES,
-)
+private val moonScreens = listOf(Screen.MOON, Screen.MOON_THIS_MONTH, Screen.MOON_CALENDAR)
+private val eclipseScreens = listOf(Screen.LUNAR_ECLIPSES, Screen.SOLAR_ECLIPSES)
 private val outerPlanetScreens = listOf(
-    "Jovian Moons" to Screen.JOVIAN_MOONS,
-    "Jovian Moon Events" to Screen.JOVIAN_EVENTS,
-    "Saturn" to Screen.SATURN,
-    "Uranus" to Screen.URANUS,
-    "Neptune" to Screen.NEPTUNE,
+    Screen.JOVIAN_MOONS, Screen.JOVIAN_EVENTS, Screen.SATURN, Screen.URANUS, Screen.NEPTUNE,
 )
-private val orreryScreens = listOf(
-    "Schematic Orrery" to Screen.SCHEMATIC,
-    "To-scale Orrery" to Screen.SCALE,
-)
-private val screensAfterOuter = listOf(
-    "Analemma" to Screen.ANALEMMA,
-    "Meteor Showers" to Screen.METEOR_SHOWERS,
-    "Constellations" to Screen.CONSTELLATIONS,
-)
-private val screensAfterOrreries = listOf(
-    "Astronomical Times" to Screen.TIMES,
-)
-// MOON_ON_DAY is reached from the Lunar Calendar, not the menu, so it needs its own entry.
-private val screenMenuTitles: Map<Screen, String> =
-    (screensBeforeOuter + moonScreens + eclipseScreens + outerPlanetScreens +
-        orreryScreens + screensAfterOuter + screensAfterOrreries)
-        .associate { (title, screen) -> screen to title } +
-        (Screen.MOON_ON_DAY to "Moon On Day")
+private val orreryScreens = listOf(Screen.SCHEMATIC, Screen.SCALE)
+private val screensAfterOuter = listOf(Screen.ANALEMMA, Screen.METEOR_SHOWERS, Screen.CONSTELLATIONS)
+private val screensAfterOrreries = listOf(Screen.TIMES)
+
+private val utSecondsFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("UTC"))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -455,36 +433,40 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
             TopAppBar(
                 title = {
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        // Manual-time readout and Reset Time sit above the centered
-                        // page title; the -25.2dp offset keeps them clear of it.
+                        // Manual-time readout and Reset Time sit in their own band
+                        // above the centered page title.
+                        val aboveTitleOffset = (-25.2).dp
+                        // The title slot ends 52dp short of the screen edge (3-dot actions column:
+                        // 48dp icon + 4dp end padding). Since the button floats above that row,
+                        // shift it right so its text right-justifies with a 16dp screen margin,
+                        // mirroring the readout's left margin.
+                        val resetTimeModifier = Modifier.align(Alignment.CenterEnd).offset(x = 36.dp, y = aboveTitleOffset)
+                        val resetTimeColors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00))
                         if (!usePhoneTime) {
                             Text(
-                                text = "$dateString ${DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("UTC")).format(currentInstant)} UT",
+                                text = "$dateString ${utSecondsFormatter.format(currentInstant)} UT",
                                 style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                                modifier = Modifier.align(Alignment.CenterStart).offset(y = (-25.2).dp)
+                                modifier = Modifier.align(Alignment.CenterStart).offset(y = aboveTitleOffset)
                             )
                             if (!isAnimating) {
-                                TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd).offset(y = (-25.2).dp)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
+                                TextButton(onClick = { usePhoneTime = true; val now = LocalDate.now(); manualEpochDay = now.toEpochDay().toDouble(); currentInstant = Instant.now() }, colors = resetTimeColors, contentPadding = PaddingValues(0.dp), modifier = resetTimeModifier) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                             }
                         }
                         if (screenAnimStopped && usePhoneTime) {
-                            TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF00FF00)), modifier = Modifier.align(Alignment.CenterEnd).offset(y = (-25.2).dp)) { Text("Reset Time", fontWeight = FontWeight.Bold) }
+                            TextButton(onClick = { screenAnimResetTrigger++; screenAnimStopped = false }, colors = resetTimeColors, contentPadding = PaddingValues(0.dp), modifier = resetTimeModifier) { Text("Reset Time", fontWeight = FontWeight.Bold) }
                         }
                         Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Orrery ${screenMenuTitles[currentScreen] ?: ""}",
+                                text = "Orrery ${currentScreen.menuTitle}",
                                 style = TextStyle(color = Color.White, fontSize = 15.8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                             )
-                            // Sunlight Today has its own date/time title, so the header subtitle is redundant there
-                            if (currentScreen != Screen.SUNLIGHT_TODAY) {
-                                val timeDisplay = if (useStandardTime) {
-                                    val localFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).toInt()))
-                                    "${localFormatter.format(currentInstant)} $stdTimeLabel"
-                                } else {
-                                    "$utString UT"
-                                }
-                                Text(text = "$dateString  $timeDisplay", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
+                            val timeDisplay = if (useStandardTime) {
+                                val localFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.ofTotalSeconds((stdOffsetHours * 3600).toInt()))
+                                "${localFormatter.format(currentInstant)} $stdTimeLabel"
+                            } else {
+                                "$utString UT"
                             }
+                            Text(text = "$dateString  $timeDisplay", style = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
                         }
                     }
                 },
@@ -493,8 +475,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }) {
                         val compactItem = Modifier.height(38.dp)
                         fun selectScreen(screen: Screen) { isAnimating = false; screenAnimStopped = false; currentScreen = screen; showMenu = false; moonExpanded = false; eclipsesExpanded = false; outerPlanetsExpanded = false; orreriesExpanded = false }
-                        screensBeforeOuter.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        screensBeforeOuter.forEach { screen ->
+                            DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
                         DropdownMenuItem(
                             text = { Text("${if (moonExpanded) "▼" else "▶"} Moon") },
@@ -502,8 +484,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             modifier = compactItem
                         )
                         if (moonExpanded) {
-                            moonScreens.forEach { (title, screen) ->
-                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            moonScreens.forEach { screen ->
+                                DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
                             }
                         }
                         DropdownMenuItem(
@@ -512,8 +494,8 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             modifier = compactItem
                         )
                         if (eclipsesExpanded) {
-                            eclipseScreens.forEach { (title, screen) ->
-                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            eclipseScreens.forEach { screen ->
+                                DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
                             }
                         }
                         DropdownMenuItem(
@@ -522,12 +504,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             modifier = compactItem
                         )
                         if (outerPlanetsExpanded) {
-                            outerPlanetScreens.forEach { (title, screen) ->
-                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            outerPlanetScreens.forEach { screen ->
+                                DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
                             }
                         }
-                        screensAfterOuter.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        screensAfterOuter.forEach { screen ->
+                            DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
                         DropdownMenuItem(
                             text = { Text("${if (orreriesExpanded) "▼" else "▶"} Orreries") },
@@ -535,12 +517,12 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                             modifier = compactItem
                         )
                         if (orreriesExpanded) {
-                            orreryScreens.forEach { (title, screen) ->
-                                DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
+                            orreryScreens.forEach { screen ->
+                                DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem.padding(start = 24.dp))
                             }
                         }
-                        screensAfterOrreries.forEach { (title, screen) ->
-                            DropdownMenuItem(text = { Text(title) }, onClick = { selectScreen(screen) }, modifier = compactItem)
+                        screensAfterOrreries.forEach { screen ->
+                            DropdownMenuItem(text = { Text(screen.menuTitle) }, onClick = { selectScreen(screen) }, modifier = compactItem)
                         }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("Location") }, onClick = { showMenu = false; showLocationDialog = true }, modifier = compactItem)

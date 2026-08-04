@@ -36,7 +36,7 @@ private val DARK_READOUT_DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE d MMMM 
 // Signed hours from solar midnight (mirrors GraphicsWindow.normalizeGraphTime). The
 // dial maps x = centerX + offset * pixelsPerHour; a normal night runs monotonically
 // from negative (evening) through 0 (midnight) to positive (morning).
-private fun darkGraphOffset(solarHour: Double): Double {
+internal fun darkGraphOffset(solarHour: Double): Double {
     var diff = solarHour - 24.0
     if (diff < -12.0) diff += 24.0 else if (diff > 12.0) diff -= 24.0
     return diff
