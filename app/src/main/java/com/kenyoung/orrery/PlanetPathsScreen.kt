@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 import kotlin.math.*
 
 private const val TRAIL_HALF_HOURS = 12.0
@@ -40,6 +41,9 @@ private const val SEGMENT_WRAP_DEG = 90.0
 private const val TIME_LABEL_PAD_PX = 24f
 private const val DIM_TRAIL_ALPHA = 100
 
+// Selected symbols flash at 2 Hz: 250 ms on, 250 ms off.
+private const val FLASH_HALF_PERIOD_MS = 250L
+
 @Composable
 fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
     val jd = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY + UNIX_EPOCH_JD
@@ -51,6 +55,15 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val horizonColorInt = Color(0xFF444444).toArgb()
 
     val trailVisible = remember { mutableStateMapOf("Sun" to true) }
+    // Read only inside the Canvas draw lambda, so each toggle invalidates just
+    // the draw pass — no recomposition, no trail recomputation.
+    var flashOn by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(FLASH_HALF_PERIOD_MS)
+            flashOn = !flashOn
+        }
+    }
     val planets = remember { getOrreryPlanets().filter { it.name != "Earth" } }
 
     val axisLabelPaint = remember {
@@ -287,7 +300,8 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         for (body in bodies) {
             val x = azToX(body.az)
             val y = altToY(body.alt)
-            symbolPaint.color = body.colorInt
+            val flashedOff = trailVisible[body.name] == true && !flashOn
+            symbolPaint.color = if (flashedOff) android.graphics.Color.BLACK else body.colorInt
             drawIntoCanvas { nc ->
                 nc.nativeCanvas.drawText(body.symbol, x, y + 14f, symbolPaint)
             }
