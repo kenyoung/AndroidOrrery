@@ -401,6 +401,10 @@ fun normalizeTime(t: Double): Double {
 fun jdFracToLocalHours(jd: Double, timezoneOffset: Double): Double =
     normalizeTime((jd - floor(jd)) * 24.0 + timezoneOffset)
 
+// Convert a local solar hour to the display clock (standard/daylight time or UT)
+fun solarToDisplayHour(solarHour: Double, solarOffset: Double, displayOffsetHours: Double): Double =
+    normalizeTime(solarHour - solarOffset + displayOffsetHours)
+
 // Normalize hour angle to -12 to +12 range
 fun normalizeHourAngle(ha: Double): Double {
     if (!ha.isFinite()) return Double.NaN

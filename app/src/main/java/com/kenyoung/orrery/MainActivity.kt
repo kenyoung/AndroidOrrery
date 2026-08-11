@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
 enum class Screen(val menuTitle: String) {
     TRANSITS("Planet Transits"), ELEVATIONS("Planet Elevations"), PHENOMENA("Planet Phenomena"),
     SUNLIGHT_TODAY("Sunlight Today"), DARK_TIME("Dark Time"), COMPASS("Planet Compass"),
-    PLANET_PATHS("Planet Paths"), ANGULAR_SIZE("Planet Angular Size"),
+    PLANET_CLOCK("Planet Clock"), PLANET_PATHS("Planet Paths"), ANGULAR_SIZE("Planet Angular Size"),
     PLANET_MAGNITUDE("Planet Magnitude"), OBJECT_VISIBILITY("Object Visibility"),
     MOON("Moon Now"), MOON_ON_DAY("Moon On Day"), MOON_THIS_MONTH("Moon This Month"),
     MOON_CALENDAR("Lunar Calendar"),
@@ -118,7 +118,7 @@ enum class Screen(val menuTitle: String) {
 // Menu ordering, grouped as the 3-dot menu presents them. MOON_ON_DAY is reached
 // from the Lunar Calendar, not the menu, so it appears in no group.
 private val screensBeforeOuter = listOf(
-    Screen.TRANSITS, Screen.ELEVATIONS, Screen.COMPASS, Screen.PLANET_PATHS,
+    Screen.TRANSITS, Screen.ELEVATIONS, Screen.COMPASS, Screen.PLANET_CLOCK, Screen.PLANET_PATHS,
     Screen.ANGULAR_SIZE, Screen.PLANET_MAGNITUDE, Screen.OBJECT_VISIBILITY,
     Screen.PHENOMENA, Screen.SUNLIGHT_TODAY, Screen.DARK_TIME,
 )
@@ -579,6 +579,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
                     Screen.SUNLIGHT_TODAY -> SunlightTodayScreen(obs)
                     Screen.DARK_TIME -> if (cache != null && darkCache != null) DarkTimeScreen(obs, cache!!, darkCache!!) else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Drawing Dark Time Display", color = Color.White) }
                     Screen.COMPASS -> PlanetCompassScreen(obs) { useStandardTime = it }
+                    Screen.PLANET_CLOCK -> PlanetClockScreen(obs) { useStandardTime = it }
                     Screen.PLANET_PATHS -> PlanetPathsScreen(obs) { useStandardTime = it }
                     Screen.ANGULAR_SIZE -> PlanetAngularSizeScreen(obs) { useStandardTime = it }
                     Screen.PLANET_MAGNITUDE -> PlanetMagnitudeScreen(obs) { useStandardTime = it }

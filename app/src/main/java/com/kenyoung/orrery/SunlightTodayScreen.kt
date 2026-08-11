@@ -40,7 +40,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
     val lst = calculateLSTHours(currentJd, lon)
     val (currentAzRaw, currentAltRaw) = calculateAzAlt(lst, lat, sunAppRa / 15.0, sunAppDec)
     val currentAlt = applyRefraction(currentAltRaw)
-    val currentLocalSolar = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + offset)
+    val currentLocalSolar = jdFracToLocalHours(currentUtEpochDay, offset)
 
     // Skip the moon-altitude calc when not in darkness — its only consumer
     // is the "Moon is up" indicator that draws only during darkness.
@@ -72,7 +72,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
     // Map a dark-interval edge (signed hours from local solar midnight, the frame
     // computeDarkNight stores intervals in) onto the dial's display clock, the same
     // UT-hour + displayOffsetHours mapping the dial uses for the Sun marker.
-    fun darkDisplayHour(g: Double) = normalizeTime(g - offset + displayOffsetHours)
+    fun darkDisplayHour(g: Double) = solarToDisplayHour(g, offset, displayOffsetHours)
     // Round to the nearest minute (matching the Dark Time page's fmtStd) so the two pages'
     // start/end times agree exactly; formatTimeMM would truncate and read ~1 min earlier.
     fun fmtDarkTime(displayHour: Double): String {
@@ -565,10 +565,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     val dialTopLeft = Offset(cx - r, cy - r)
                     val dialSize = Size(diameter, diameter)
 
-                    // Map a display-clock hour to a drawArc angle (0° = +x/3-o'clock, clockwise).
-                    fun hourToArc(hr: Double) = (hr / 24.0 * 360.0 - 90.0).toFloat()
-
-                    val riseDisplay = if (hasRiseSet) normalizeTime(riseTime - offset + displayOffsetHours) else 0.0
+                    val riseDisplay = if (hasRiseSet) solarToDisplayHour(riseTime, offset, displayOffsetHours) else 0.0
                     // Is a given display hour within the (yellow) daylight span?
                     fun isDaylightHour(hr: Double): Boolean {
                         if (!hasRiseSet) return polarDay
@@ -577,7 +574,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
 
                     if (hasRiseSet) {
                         drawCircle(dialNightColor, radius = r, center = Offset(cx, cy))
-                        drawArc(Color.Yellow, hourToArc(riseDisplay), (dayLenHours / 24.0 * 360.0).toFloat(),
+                        drawArc(Color.Yellow, hourToArcDeg(riseDisplay), (dayLenHours / 24.0 * 360.0).toFloat(),
                             useCenter = true, topLeft = dialTopLeft, size = dialSize)
                     } else {
                         drawCircle(if (polarDay) Color.Yellow else dialNightColor, radius = r, center = Offset(cx, cy))
@@ -589,17 +586,8 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     // start or end time is undefined (a phase never reached in high-latitude
                     // summer) is skipped. The deepest-night base shows through between the two
                     // astronomical wedges.
-                    fun dialDisplayHour(solarH: Double) = normalizeTime(solarH - offset + displayOffsetHours)
-                    fun drawDialWedge(startSolar: Double, endSolar: Double, color: Color) {
-                        if (startSolar.isNaN() || endSolar.isNaN()) return
-                        val startHr = dialDisplayHour(startSolar)
-                        var sweepHr = dialDisplayHour(endSolar) - startHr
-                        while (sweepHr < 0.0) sweepHr += 24.0
-                        while (sweepHr > 24.0) sweepHr -= 24.0
-                        if (sweepHr <= 0.0) return
-                        drawArc(color, hourToArc(startHr), (sweepHr / 24.0 * 360.0).toFloat(),
-                            useCenter = true, topLeft = dialTopLeft, size = dialSize)
-                    }
+                    fun drawDialWedge(startSolar: Double, endSolar: Double, color: Color) =
+                        drawHourWedge(startSolar, endSolar, color, offset, displayOffsetHours, dialTopLeft, dialSize)
                     // Altitude-crossing index: 0=+6° (golden hour), 1=horizon (sunrise/sunset),
                     // 2=-6° (civil), 3=-12° (nautical), 4=-18° (astro). dusk = evening, dawn = morning.
                     val dusk = twilightData.dusk
@@ -623,7 +611,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     // below astronomical twilight (-18°) plus a Moon condition, so the wedges sit
                     // within the dial's deepest-night (astro-dark) band.
                     for ((gStart, gEnd) in darkNight.intervals) {
-                        val startArc = hourToArc(darkDisplayHour(gStart))
+                        val startArc = hourToArcDeg(darkDisplayHour(gStart))
                         val sweepArc = ((gEnd - gStart) / 24.0 * 360.0).toFloat()
                         drawArc(Color.Black, startArc, sweepArc,
                             useCenter = true, topLeft = dialTopLeft, size = dialSize)
@@ -644,7 +632,7 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     drawLine(if (isDaylightHour(12.0)) axisDark else Color.White, Offset(cx, cy), Offset(cx, cy + r), strokeWidth = 1f)
 
                     // Midnight / Noon rim labels, just outside the rim
-                    val clockPrefix = if (useLocalTime) "Timezone" else "UTC"
+                    val clockPrefix = clockCaptionPrefix(useLocalTime)
                     nc.drawText("$clockPrefix Midnight", cx, cy - r - 12f, dialLabelPaint)
                     nc.drawText("$clockPrefix Noon", cx, cy + r + dialLabelPaint.textSize + 4f, dialLabelPaint)
 
@@ -682,8 +670,8 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     }
 
                     // Current-time Sun marker, just outside the rim, with a dotted radial line
-                    val currentDisplayHour = normalizeTime((currentUtEpochDay - floor(currentUtEpochDay)) * 24.0 + displayOffsetHours)
-                    val sunArcRad = Math.toRadians(hourToArc(currentDisplayHour).toDouble())
+                    val currentDisplayHour = jdFracToLocalHours(currentUtEpochDay, displayOffsetHours)
+                    val sunArcRad = Math.toRadians(hourToArcDeg(currentDisplayHour).toDouble())
                     val sunDist = (r + sunBeyondRim) * 1.03f    // 3% farther out from center
                     val sunX = (cx + sunDist * cos(sunArcRad)).toFloat()
                     val sunY = (cy + sunDist * sin(sunArcRad)).toFloat()

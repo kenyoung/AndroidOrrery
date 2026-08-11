@@ -1,18 +1,27 @@
 package com.kenyoung.orrery
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
 
 // --- UI CONSTANTS ---
 val LabelColor = Color(0xFFADD8E6) // Light Blue
+
+// Caption prefix for 24-hour dial labels ("Timezone Midnight" / "UTC Noon")
+fun clockCaptionPrefix(useStandardTime: Boolean) = if (useStandardTime) "Timezone" else "UTC"
 
 // --- PHYSICAL & ASTRONOMICAL CONSTANTS ---
 // Additional astronomy constants live in AstroMath.kt alongside the math
@@ -51,6 +60,57 @@ fun TimeDisplayToggle(useLocalTime: Boolean, useDst: Boolean = false, onTimeDisp
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = useLocalTime, onClick = { onTimeDisplayChange(true) })
             Text(localTimeLabel, color = Color.White, fontSize = 14.sp)
+        }
+    }
+}
+
+// One selectable body chip: name, astronomical symbol, and display color.
+data class ChipBody(val name: String, val symbol: String, val color: Color)
+
+// Rows of three clickable chips for choosing which bodies a screen displays.
+// Selection convention: present-and-true in the map = selected.
+@Composable
+fun BodySelectionChips(bodies: List<ChipBody>, selected: MutableMap<String, Boolean>) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        for (row in bodies.chunked(3)) {
+            Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                for (body in row) {
+                    val isSelected = selected[body.name] == true
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .width(120.dp)
+                            .then(
+                                if (isSelected) Modifier.border(1.dp, body.color, RoundedCornerShape(4.dp))
+                                else Modifier
+                            )
+                            .clickable {
+                                if (isSelected) selected.remove(body.name)
+                                else selected[body.name] = true
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = body.symbol,
+                            style = TextStyle(
+                                color = if (isSelected) body.color else Color.Gray,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = body.name,
+                            style = TextStyle(
+                                color = if (isSelected) body.color else Color.Gray,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }

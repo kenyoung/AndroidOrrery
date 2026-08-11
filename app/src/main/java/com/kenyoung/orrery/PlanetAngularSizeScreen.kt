@@ -94,6 +94,10 @@ private val YEAR_BUTTON_PADDING = PaddingValues(horizontal = 10.dp, vertical = 2
 
 private val MONTH_ABBREV = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
+// Mean Earth-Moon distance (384400 km) in AU, the reference distance of the
+// Moon magnitude formula below.
+private const val MOON_MEAN_DIST_AU = 0.002570
+
 // Apparent visual magnitude formulas from Mallama & Hilton (2018),
 // Astronomy and Computing 25, 10–24 — the set adopted by the Astronomical
 // Almanac starting in 2019 (IAU 2018). r = heliocentric distance (AU),
@@ -101,12 +105,14 @@ private val MONTH_ABBREV = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Ju
 // ringTiltBDeg = Saturn's ring tilt B (saturnicentric latitude of Earth).
 // Secular brightening of the ice giants and the Uranus sub-Earth-latitude
 // term (a few hundredths of a mag) are not included.
+// The Moon uses Allen's phase-angle formula plus a geocentric distance term.
 internal fun apparentMagnitude(
     name: String, r: Double, delta: Double, alphaDeg: Double, ringTiltBDeg: Double = 0.0
 ): Double {
     val rDelta5log = 5.0 * log10(r * delta)
     val a = alphaDeg
     return when (name) {
+        "Moon" -> -12.73 + 0.026 * a + 4.0e-9 * a * a * a * a + 5.0 * log10(delta / MOON_MEAN_DIST_AU)
         "Mercury" -> {
             // 6th-order polynomial valid for 2° < α < 170°.
             val phi = a * (6.3280e-2 + a * (-1.6336e-3 + a * (3.3644e-5 +
