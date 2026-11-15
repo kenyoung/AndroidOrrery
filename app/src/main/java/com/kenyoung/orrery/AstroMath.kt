@@ -356,6 +356,19 @@ fun calculateAzAlt(lstHours: Double, latDeg: Double, raHours: Double, decDeg: Do
     return AzAlt(azDeg, Math.toDegrees(altRad))
 }
 
+// Apparent az/alt of a body at jd; the Moon gets the parallax correction,
+// applied after precession (the order matters).
+internal fun apparentAzAlt(name: String, state: BodyState, jd: Double, lst: Double, lat: Double, lon: Double): AzAlt {
+    val apparent = j2000ToApparent(state.ra, state.dec, jd)
+    val (raH, dec) = if (name == "Moon") {
+        val topo = toTopocentric(apparent.ra, apparent.dec, state.distGeo, lat, lon, lst)
+        Pair(topo.ra / 15.0, topo.dec)
+    } else {
+        Pair(apparent.ra / 15.0, apparent.dec)
+    }
+    return calculateAzAlt(lst, lat, raH, dec)
+}
+
 // Calculate altitude only (when azimuth is not needed)
 // haHours: hour angle in hours, latDeg: latitude in degrees, decDeg: declination in degrees
 // Returns altitude in degrees

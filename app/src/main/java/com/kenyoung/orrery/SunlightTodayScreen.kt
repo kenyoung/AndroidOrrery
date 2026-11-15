@@ -604,25 +604,11 @@ fun SunlightTodayScreen(obs: ObserverState) {
                     drawDialWedge(dawn[2], dawn[1], dialCivilColor)          // ... → civil
 
 
-                    // Black wedges over the very-dark (meteor) sub-intervals — one per interval,
-                    // so a bright Moon rising mid-night leaves the moonlit gap unpainted instead
-                    // of blacking out hours that are not dark. Each wedge spans exactly the range
-                    // shown in the "Very dark" readout. The very-dark period requires the Sun
-                    // below astronomical twilight (-18°) plus a Moon condition, so the wedges sit
-                    // within the dial's deepest-night (astro-dark) band.
-                    for ((gStart, gEnd) in darkNight.intervals) {
-                        val startArc = hourToArcDeg(darkDisplayHour(gStart))
-                        val sweepArc = ((gEnd - gStart) / 24.0 * 360.0).toFloat()
-                        drawArc(Color.Black, startArc, sweepArc,
-                            useCenter = true, topLeft = dialTopLeft, size = dialSize)
-                        // Polar night only: the wedge is the whole disc, which would vanish
-                        // against the black page background — a thin gray rim keeps it visible.
-                        // Ordinary partial wedges get no rim (it reads as a stray white arc).
-                        if (gEnd - gStart >= 24.0 - 1e-9) {
-                            drawArc(Color(0xFF555555), startArc, sweepArc, useCenter = false,
-                                topLeft = dialTopLeft, size = dialSize, style = Stroke(width = 2f))
-                        }
-                    }
+                    // Each very-dark wedge spans exactly the range shown in the "Very dark"
+                    // readout. The very-dark period requires the Sun below astronomical
+                    // twilight (-18°) plus a Moon condition, so the wedges sit within the
+                    // dial's deepest-night (astro-dark) band.
+                    drawVeryDarkWedges(darkNight.intervals, offset, displayOffsetHours, dialTopLeft, dialSize)
 
                     // Thin line bisecting the dial vertically (Midnight at top through center to Noon).
                     // Each half is coloured to contrast with the fill under it (white over the dark

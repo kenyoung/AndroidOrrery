@@ -131,19 +131,12 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
 
     val startJd = jd - TRAIL_HALF_DAYS
 
-    fun computeTrail(name: String, isMoon: Boolean): List<Pair<Double, Double>> {
+    fun computeTrail(name: String): List<Pair<Double, Double>> {
         return (0..TRAIL_STEPS).map { i ->
             val sampleJd = startJd + i * TRAIL_STEP_DAYS
             val sampleLst = calculateLSTHours(sampleJd, obs.lon)
             val state = AstroEngine.getBodyState(name, sampleJd)
-            val apparent = j2000ToApparent(state.ra, state.dec, sampleJd)
-            val (raH, dec) = if (isMoon) {
-                val topo = toTopocentric(apparent.ra, apparent.dec, state.distGeo, lat, obs.lon, sampleLst)
-                Pair(topo.ra / 15.0, topo.dec)
-            } else {
-                Pair(apparent.ra / 15.0, apparent.dec)
-            }
-            val azAlt = calculateAzAlt(sampleLst, lat, raH, dec)
+            val azAlt = apparentAzAlt(name, state, sampleJd, sampleLst, lat, obs.lon)
             Pair(displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble())
         }
     }
@@ -151,24 +144,20 @@ fun PlanetPathsScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val bodies = mutableListOf<BodyData>()
 
     val sunState = AstroEngine.getBodyState("Sun", jd)
-    val sunApparent = j2000ToApparent(sunState.ra, sunState.dec, jd)
-    val sunAz = calculateAzAlt(lst, lat, sunApparent.ra / 15.0, sunApparent.dec)
+    val sunAz = apparentAzAlt("Sun", sunState, jd, lst, lat, obs.lon)
     bodies.add(BodyData("Sun", "\u2609", Color.Yellow, Color.Yellow.toArgb(), displayAz(sunAz.az), applyRefraction(sunAz.alt).toDouble(),
-        computeTrail("Sun", false)))
+        computeTrail("Sun")))
 
     val moonState = AstroEngine.getBodyState("Moon", jd)
-    val moonApparent = j2000ToApparent(moonState.ra, moonState.dec, jd)
-    val topoMoon = toTopocentric(moonApparent.ra, moonApparent.dec, moonState.distGeo, lat, obs.lon, lst)
-    val moonAz = calculateAzAlt(lst, lat, topoMoon.ra / 15.0, topoMoon.dec)
+    val moonAz = apparentAzAlt("Moon", moonState, jd, lst, lat, obs.lon)
     bodies.add(BodyData("Moon", "\u263E", Color.White, Color.White.toArgb(), displayAz(moonAz.az), applyRefraction(moonAz.alt).toDouble(),
-        computeTrail("Moon", true)))
+        computeTrail("Moon")))
 
     for (p in planets) {
         val state = AstroEngine.getBodyState(p.name, jd)
-        val apparent = j2000ToApparent(state.ra, state.dec, jd)
-        val azAlt = calculateAzAlt(lst, lat, apparent.ra / 15.0, apparent.dec)
+        val azAlt = apparentAzAlt(p.name, state, jd, lst, lat, obs.lon)
         bodies.add(BodyData(p.name, p.symbol, p.color, p.color.toArgb(), displayAz(azAlt.az), applyRefraction(azAlt.alt).toDouble(),
-            computeTrail(p.name, false)))
+            computeTrail(p.name)))
     }
 
     var minAlt = Double.MAX_VALUE

@@ -56,8 +56,8 @@ private val dottedBodies = setOf("Sun", "Moon")
 private val dottedLineEffect = DashPathEffect(floatArrayOf(4f, 10f), 0f)
 
 // Altitude of every body at each sample step; the sample's time is implicit
-// (windowStartUt + index * step), so the cache stays valid when the
-// Standard/UT display toggle changes.
+// (windowStartUt + index * step). The window is anchored to the display clock,
+// so the cache is rebuilt when the Standard/UT display toggle changes.
 private class ClockCurve(val name: String, val colorInt: Int, val dotted: Boolean, val samples: List<Double>)
 private class ClockData(
     val curves: List<ClockCurve>, val twilight: TwilightTimes, val noonAlt: Double,
@@ -67,19 +67,6 @@ private class ClockData(
 
 // Current azimuth/elevation/magnitude for the table below the dial.
 private class ClockRow(val name: String, val colorInt: Int, val az: Double, val alt: Double, val mag: Double)
-
-// Apparent az/alt of a body at jd; the Moon gets the parallax correction,
-// applied after precession (the order matters).
-private fun apparentAzAlt(name: String, state: BodyState, jd: Double, lst: Double, lat: Double, lon: Double): AzAlt {
-    val apparent = j2000ToApparent(state.ra, state.dec, jd)
-    val (raH, dec) = if (name == "Moon") {
-        val topo = toTopocentric(apparent.ra, apparent.dec, state.distGeo, lat, lon, lst)
-        Pair(topo.ra / 15.0, topo.dec)
-    } else {
-        Pair(apparent.ra / 15.0, apparent.dec)
-    }
-    return calculateAzAlt(lst, lat, raH, dec)
-}
 
 private fun format12h(hr: Double): String {
     val totalMin = ((round(hr * 60.0).toInt() % 1440) + 1440) % 1440
@@ -91,7 +78,7 @@ private fun format12h(hr: Double): String {
 
 // A 24-hour polar clock: angle is time of day (midnight at top, clockwise,
 // noon at bottom), radius is elevation (center = -90°, rim = +90°, horizon
-// halfway out). The window is the current night, local solar noon to the
+// halfway out). The window is the current night, display-clock noon to the
 // next noon, so the data seam hides at the bottom of the dial.
 @Composable
 fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
@@ -100,9 +87,11 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
     val offset = lon / 15.0
     val displayOffsetHours = if (obs.useStandardTime) obs.stdOffsetHours else 0.0
     val currentUtEpochDay = obs.now.epochSecond.toDouble() / SECONDS_PER_DAY
-    // Local solar date whose noon starts the shown window; rolls over at solar noon.
+    // Local solar date whose night is shown; rolls over at solar noon. The
+    // sample window starts at that date's display-clock noon (not solar noon),
+    // which maps to the bottom of the dial, hiding the curves' day-to-day seam.
     val nightAnchor = floor(currentUtEpochDay + offset / 24.0 - 0.5)
-    val windowStartUt = nightAnchor + 0.5 - offset / 24.0
+    val windowStartUt = nightAnchor + 0.5 - displayOffsetHours / 24.0
 
     val bodyList = remember {
         listOf(ChipBody("Sun", "☉", Color.Yellow), ChipBody("Moon", "☾", Color.White)) +
@@ -116,11 +105,77 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
         }
     }
 
-    val data = remember(nightAnchor, lat, lon) {
+    val captionTextSize = 44f   // Midnight / Noon captions
+    val tableTextSize = 30f
+    // Paints created once; only per-use fields (color, pathEffect, textAlign)
+    // are set inside the draw lambda, to avoid per-frame allocations.
+    val curvePaint = remember {
+        Paint().apply {
+            strokeWidth = 4f
+            style = Paint.Style.STROKE
+            isAntiAlias = true
+        }
+    }
+    val curvePath = remember { Path() }
+    val timePaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 30f
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+        }
+    }
+    val tickPaint = remember {
+        Paint().apply {
+            color = rimGreyColor.toArgb()
+            strokeWidth = 2f
+            style = Paint.Style.STROKE
+        }
+    }
+    val numeralPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 27f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+        }
+    }
+    val captionPaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = captionTextSize
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+        }
+    }
+    val datePaint = remember {
+        Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 33f
+            isAntiAlias = true
+        }
+    }
+    val headerPaint = remember {
+        Paint().apply {
+            color = LabelColor.toArgb()
+            textSize = tableTextSize
+            typeface = Typeface.MONOSPACE
+            isAntiAlias = true
+        }
+    }
+    val rowPaint = remember {
+        Paint().apply {
+            textSize = tableTextSize
+            typeface = Typeface.MONOSPACE
+            isAntiAlias = true
+        }
+    }
+
+    val data = remember(nightAnchor, lat, lon, displayOffsetHours) {
         val twilight = computeTwilightTimes(nightAnchor, lat, lon, offset)
         val noonAlt = 90.0 - abs(lat - calculateSunTransit(nightAnchor, lon, offset).dec)
-        // Same night window (local solar noon to noon) as the dial shows, and the
-        // same very-dark definition as the Sunlight Today and Dark Time pages.
+        // Very-dark spans for the same night, with the same definition as the
+        // Sunlight Today and Dark Time pages (scanned local solar noon to noon).
         val darkNight = computeDarkNight(nightAnchor.toLong(), lat, lon)
         val curves = bodyList.map { body ->
             val samples = (0..CLOCK_STEPS).map { i ->
@@ -147,7 +202,14 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
             val state = if (body.name == "Sun") sunState else AstroEngine.getBodyState(body.name, currentJd)
             val azAlt = apparentAzAlt(body.name, state, currentJd, lstNow, lat, lon)
             val mag = if (body.name == "Sun") sunMagnitude else {
-                val alphaDeg = Math.toDegrees(phaseAngleRad(state.distSun, state.distGeo, earthSunDist))
+                // The Moon's phase angle comes from its elongation in ecliptic
+                // longitude (0° = new, 180° = full), which stays valid outside
+                // the ephemeris range; the law-of-cosines form needs the real
+                // distances the Moon's Keplerian fallback does not supply.
+                val alphaDeg = if (body.name == "Moon")
+                    abs(180.0 - calculateMoonPhaseAngle(currentUtEpochDay))
+                else
+                    Math.toDegrees(phaseAngleRad(state.distSun, state.distGeo, earthSunDist))
                 val ringB = if (body.name == "Saturn")
                     SaturnMoonEngine.calculateRingTiltB(state.eclipticLon, state.eclipticLat, currentJd)
                 else 0.0
@@ -166,10 +228,8 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
             val tickLen = 12f
             val numeralBand = 44f   // rotated hour numerals outside the ticks
             val captionBand = 54f   // Midnight / Noon captions
-            val captionTextSize = 44f
             val outerBand = tickLen + numeralBand
             val tableRowH = 34f
-            val tableTextSize = 30f
             val tableHeight = (shownRows.size + 1) * tableRowH + 12f
             // Dial as high as it fits under the Midnight caption; the table
             // gets the remaining space below the Noon caption.
@@ -201,14 +261,7 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
                 drawWedge(data.twilight.dusk[k], data.twilight.dawn[k], belowColors[k])
             }
             // Very dark (no Sun or Moon interference): exact black over the night band.
-            // The g-frame values are hours relative to local solar midnight, so they
-            // map like any other local solar hour; the frame is monotonic, so the
-            // sweep is a plain difference.
-            for ((gStart, gEnd) in data.darkIntervals) {
-                drawArc(Color.Black, hourToArcDeg(solarToDisplayHour(gStart, offset, displayOffsetHours)),
-                    ((gEnd - gStart) / 24.0 * 360.0).toFloat(),
-                    useCenter = true, topLeft = dialTopLeft, size = dialSize)
-            }
+            drawVeryDarkWedges(data.darkIntervals, offset, displayOffsetHours, dialTopLeft, dialSize)
 
             // Below-horizon disk
             drawCircle(Color.Black, radius / 2f, center)
@@ -231,14 +284,8 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
                 sinA[i] = sin(rad).toFloat()
             }
 
-            val curvePaint = Paint().apply {
-                strokeWidth = 4f
-                style = Paint.Style.STROKE
-                isAntiAlias = true
-            }
             // Each curve is one Path so the dotted pattern flows continuously
             // across the 15-minute segments instead of restarting at each one.
-            val curvePath = Path()
             drawIntoCanvas { nc ->
                 // Reversed so the Moon and Sun draw last, on top of the planets.
                 for (curve in data.curves.asReversed()) {
@@ -263,12 +310,6 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
             val rimPoint = Offset(cx + radius * cos(arcRad).toFloat(), cy + radius * sin(arcRad).toFloat())
             drawLine(Color.Red, center, rimPoint, strokeWidth = 3f)
             drawIntoCanvas { nc ->
-                val timePaint = Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 30f
-                    typeface = Typeface.DEFAULT_BOLD
-                    isAntiAlias = true
-                }
                 val ax = cx + (radius - 12f) * cos(arcRad).toFloat()
                 val ay = cy + (radius - 12f) * sin(arcRad).toFloat()
                 nc.nativeCanvas.save()
@@ -286,17 +327,6 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
             }
 
             drawIntoCanvas { nc ->
-                val tickPaint = Paint().apply {
-                    color = rimGreyColor.toArgb()
-                    strokeWidth = 2f
-                    style = Paint.Style.STROKE
-                }
-                val numeralPaint = Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 27f
-                    textAlign = Paint.Align.CENTER
-                    isAntiAlias = true
-                }
                 for (hour in 0 until 24) {
                     val arc = hourToArcDeg(hour.toDouble())
                     val rad = Math.toRadians(arc.toDouble())
@@ -319,37 +349,15 @@ fun PlanetClockScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit
                     nc.nativeCanvas.restore()
                 }
 
-                val captionPaint = Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = captionTextSize
-                    textAlign = Paint.Align.CENTER
-                    isAntiAlias = true
-                }
                 val clockPrefix = clockCaptionPrefix(obs.useStandardTime)
                 nc.nativeCanvas.drawText("$clockPrefix Midnight", cx, cy - radius - outerBand - 10f, captionPaint)
                 nc.nativeCanvas.drawText("$clockPrefix Noon", cx, cy + radius + outerBand + captionPaint.textSize, captionPaint)
 
-                val datePaint = Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 33f
-                    isAntiAlias = true
-                }
                 val midnightDate = LocalDate.ofEpochDay(nightAnchor.toLong() + 1)
                 nc.nativeCanvas.drawText(clockDateFormatter.format(midnightDate), 16f, 44f, datePaint)
 
                 // Az/El/Mag table below the dial, one row per object in its usual color
                 val tableTop = cy + radius + outerBand + captionTextSize + 14f
-                val headerPaint = Paint().apply {
-                    color = LabelColor.toArgb()
-                    textSize = tableTextSize
-                    typeface = Typeface.MONOSPACE
-                    isAntiAlias = true
-                }
-                val rowPaint = Paint().apply {
-                    textSize = tableTextSize
-                    typeface = Typeface.MONOSPACE
-                    isAntiAlias = true
-                }
                 val nameX = cx - radius
                 val azX = cx + radius * 0.3f
                 val elX = cx + radius * 0.65f
