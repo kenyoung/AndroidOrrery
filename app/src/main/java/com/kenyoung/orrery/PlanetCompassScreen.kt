@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,8 +43,14 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-// Heading low-pass filter coefficient at SENSOR_DELAY_UI (~60 ms per sample).
-private const val HEADING_FILTER_ALPHA = 0.2f
+// Cardinal labels around the azimuth circle's rim, with their azimuths.
+private val cardinalLabels = listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "W" to 270.0)
+
+// The sensor that provides headings: the rotation vector, or the geomagnetic
+// variant on devices without a gyroscope. Null when neither exists.
+private fun headingSensor(sensorManager: SensorManager): Sensor? =
+    sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        ?: sensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
 
 @Composable
 fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Unit) {
@@ -56,17 +63,15 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
     // Hardware-compass rotation: opt-in via a toggle that only appears when a
     // suitable sensor exists; the choice persists across app restarts.
     val context = LocalContext.current
-    val hasCompassSensor = remember {
-        val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) != null ||
-            sm.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR) != null
+    val compassSensor = remember {
+        headingSensor(context.getSystemService(Context.SENSOR_SERVICE) as SensorManager)
     }
-    val prefs = remember { context.getSharedPreferences("orrery_prefs", Context.MODE_PRIVATE) }
+    val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
     var useHardwareCompass by remember { mutableStateOf(prefs.getBoolean("useHardwareCompass", false)) }
     LaunchedEffect(useHardwareCompass) {
         prefs.edit().putBoolean("useHardwareCompass", useHardwareCompass).apply()
     }
-    val headingState = rememberTrueHeadingDegrees(lat, lon, hasCompassSensor && useHardwareCompass)
+    val headingState = rememberTrueHeadingDegrees(lat, lon, if (useHardwareCompass) compassSensor else null)
 
     val timeLabel = if (useLocalTime) stdTimeLabel else "UT"
 
@@ -285,13 +290,18 @@ fun PlanetCompassScreen(obs: ObserverState, onTimeDisplayChange: (Boolean) -> Un
                 )
             }
         }
-        if (hasCompassSensor) {
+        if (compassSensor != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Checkbox(checked = useHardwareCompass, onCheckedChange = { useHardwareCompass = it })
+                Checkbox(
+                    checked = useHardwareCompass,
+                    onCheckedChange = { useHardwareCompass = it },
+                    colors = CheckboxDefaults.colors(checkedColor = Color.White,
+                        uncheckedColor = Color.Gray, checkmarkColor = Color.Black)
+                )
                 Text("Use hardware compass", color = Color.White, fontSize = 14.sp)
             }
         }
@@ -406,9 +416,10 @@ private fun CompassCanvas(
             // Cardinal labels placed by angle so they rotate with the heading;
             // text itself stays upright for legibility.
             paints.label.textAlign = Paint.Align.CENTER
-            val labelRadius = radius - textInset + 15f
+            val cardinalLabelInset = textInset - 15f   // label center distance in from the rim
+            val labelRadius = radius - cardinalLabelInset
             val baselineNudge = -(paints.label.ascent() + paints.label.descent()) / 2f
-            for ((label, azDeg) in listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "W" to 270.0)) {
+            for ((label, azDeg) in cardinalLabels) {
                 val ang = Math.toRadians(azDeg - hdg - 90.0)
                 val cosA = cos(ang); val sinA = sin(ang)
                 nc.drawText(label, (centerRightX + labelRadius * cosA).toFloat(),
@@ -634,82 +645,99 @@ class CompassPaints(
     val tableDataRight = Paint().apply { textSize=29f; textAlign=Paint.Align.RIGHT; typeface=Typeface.MONOSPACE; isAntiAlias=true }
 }
 
-// Realtime true-north heading from the rotation-vector sensor, in degrees
-// (0 when the top of the screen faces true north, phone held flat). Stays 0
-// when disabled or when the device has no suitable sensor, leaving the
-// azimuth circle in its fixed north-up orientation. The listener runs only
-// while enabled and the owning screen is composed and resumed.
+// Realtime true-north heading from the given rotation-vector sensor, in
+// degrees (0 when the top of the screen faces true north, phone held flat).
+// A null sensor (toggle off, or no suitable hardware) keeps the heading at 0,
+// leaving the azimuth circle in its fixed north-up orientation. The listener
+// runs only while the owning screen is composed and resumed.
 @Composable
-private fun rememberTrueHeadingDegrees(lat: Double, lon: Double, enabled: Boolean): State<Float> {
+private fun rememberTrueHeadingDegrees(lat: Double, lon: Double, sensor: Sensor?): State<Float> {
     val headingState = remember { mutableFloatStateOf(0f) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, lat, lon, enabled) {
-        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-            ?: sensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
-        if (!enabled || sensor == null) {
+    DisposableEffect(lifecycleOwner, lat, lon, sensor) {
+        if (sensor == null) {
             headingState.floatValue = 0f   // snap back to north-up
-            onDispose { }
-        } else {
-            // Magnetic-to-true-north correction for the observer's location.
-            // Wall-clock time, not obs.now, which can be manual or animated.
-            val declination = GeomagneticField(
-                lat.toFloat(), lon.toFloat(), 0f, System.currentTimeMillis()
-            ).declination
-            val listener = object : SensorEventListener {
-                private val rotationMatrix = FloatArray(9)
-                private val remapped = FloatArray(9)
-                private val orientation = FloatArray(3)
-                private var smoothed = Float.NaN
+            return@DisposableEffect onDispose { }
+        }
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        // Magnetic-to-true-north correction for the observer's location.
+        // Wall-clock time, not obs.now, which can be manual or animated.
+        val declination = GeomagneticField(
+            lat.toFloat(), lon.toFloat(), 0f, System.currentTimeMillis()
+        ).declination
+        val listener = object : SensorEventListener {
+            private val rotationMatrix = FloatArray(9)
+            private val remapped = FloatArray(9)
+            private val orientation = FloatArray(3)
+            private var smoothed = Float.NaN
+            private var lastWritten = Float.NaN
+            // Remap axes, recomputed only when the display rotation changes
+            private var lastRotation = -1
+            private var axisX = SensorManager.AXIS_X
+            private var axisY = SensorManager.AXIS_Y
+            // Low-pass filter coefficient at SENSOR_DELAY_UI (~60 ms per sample)
+            private val filterAlpha = 0.2f
+            // Heading changes below this don't redraw (invisible jitter)
+            private val minRedrawDeg = 0.3f
 
-                override fun onSensorChanged(event: SensorEvent) {
-                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    // configChanges keeps the activity alive across device rotation,
-                    // so the display rotation must be re-read on every event.
-                    val displayRotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                        context.display?.rotation ?: Surface.ROTATION_0
-                    else
-                        @Suppress("DEPRECATION")
-                        (context as? Activity)?.windowManager?.defaultDisplay?.rotation
-                            ?: Surface.ROTATION_0
-                    val (axisX, axisY) = when (displayRotation) {
-                        Surface.ROTATION_90 -> Pair(SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X)
-                        Surface.ROTATION_180 -> Pair(SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y)
-                        Surface.ROTATION_270 -> Pair(SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X)
-                        else -> Pair(SensorManager.AXIS_X, SensorManager.AXIS_Y)
+            override fun onSensorChanged(event: SensorEvent) {
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                // configChanges keeps the activity alive across device rotation,
+                // so the display rotation must be re-read on every event.
+                val displayRotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                    context.display?.rotation ?: Surface.ROTATION_0
+                else
+                    @Suppress("DEPRECATION")
+                    (context as? Activity)?.windowManager?.defaultDisplay?.rotation
+                        ?: Surface.ROTATION_0
+                if (displayRotation != lastRotation) {
+                    lastRotation = displayRotation
+                    when (displayRotation) {
+                        Surface.ROTATION_90 -> { axisX = SensorManager.AXIS_Y; axisY = SensorManager.AXIS_MINUS_X }
+                        Surface.ROTATION_180 -> { axisX = SensorManager.AXIS_MINUS_X; axisY = SensorManager.AXIS_MINUS_Y }
+                        Surface.ROTATION_270 -> { axisX = SensorManager.AXIS_MINUS_Y; axisY = SensorManager.AXIS_X }
+                        else -> { axisX = SensorManager.AXIS_X; axisY = SensorManager.AXIS_Y }
                     }
-                    SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remapped)
-                    SensorManager.getOrientation(remapped, orientation)
-                    val trueDeg = (Math.toDegrees(orientation[0].toDouble()).toFloat() +
-                        declination + 360f) % 360f
-                    // Low-pass filter along the shortest arc so the display is
-                    // steady and never spins the long way through 0/360.
-                    smoothed = if (smoothed.isNaN()) trueDeg else {
-                        var delta = trueDeg - smoothed
-                        if (delta > 180f) delta -= 360f else if (delta < -180f) delta += 360f
-                        (smoothed + HEADING_FILTER_ALPHA * delta + 360f) % 360f
-                    }
+                }
+                SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remapped)
+                SensorManager.getOrientation(remapped, orientation)
+                val trueDeg = normalizeDegrees(
+                    Math.toDegrees(orientation[0].toDouble()) + declination
+                ).toFloat()
+                // Low-pass filter along the shortest arc so the display is
+                // steady and never spins the long way through 0/360.
+                smoothed = if (smoothed.isNaN()) trueDeg else {
+                    var delta = trueDeg - smoothed
+                    if (delta > 180f) delta -= 360f else if (delta < -180f) delta += 360f
+                    normalizeDegrees((smoothed + filterAlpha * delta).toDouble()).toFloat()
+                }
+                // Skip the redraw when the phone is effectively still, so an
+                // idle screen stays at its once-per-minute update cadence.
+                var writeDelta = smoothed - lastWritten
+                if (writeDelta > 180f) writeDelta -= 360f else if (writeDelta < -180f) writeDelta += 360f
+                if (lastWritten.isNaN() || abs(writeDelta) >= minRedrawDeg) {
+                    lastWritten = smoothed
                     headingState.floatValue = smoothed
                 }
+            }
 
-                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        // addObserver replays events up to the current state, so the listener
+        // registers immediately when the screen is already resumed.
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME ->
+                    sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                Lifecycle.Event.ON_PAUSE -> sensorManager.unregisterListener(listener)
+                else -> {}
             }
-            // addObserver replays events up to the current state, so the listener
-            // registers immediately when the screen is already resumed.
-            val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_RESUME ->
-                        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
-                    Lifecycle.Event.ON_PAUSE -> sensorManager.unregisterListener(listener)
-                    else -> {}
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose {
-                sensorManager.unregisterListener(listener)
-                lifecycleOwner.lifecycle.removeObserver(observer)
-            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            sensorManager.unregisterListener(listener)
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
     return headingState

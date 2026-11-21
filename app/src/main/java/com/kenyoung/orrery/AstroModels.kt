@@ -20,6 +20,9 @@ import java.time.Instant
 // --- UI CONSTANTS ---
 val LabelColor = Color(0xFFADD8E6) // Light Blue
 
+// SharedPreferences file for all persisted settings
+const val PREFS_NAME = "orrery_prefs"
+
 // Caption prefix for 24-hour dial labels ("Timezone Midnight" / "UTC Noon")
 fun clockCaptionPrefix(useStandardTime: Boolean) = if (useStandardTime) "Timezone" else "UTC"
 

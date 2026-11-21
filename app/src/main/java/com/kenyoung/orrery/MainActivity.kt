@@ -148,7 +148,7 @@ fun OrreryApp(initialGpsLat: Double, initialGpsLon: Double, locationDenied: Bool
     var selectedMoonDay by remember { mutableStateOf<LocalDate?>(null) }
 
     // --- TIME DISPLAY STATE ---
-    val prefs = context.getSharedPreferences("orrery_prefs", Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     var useStandardTime by remember { mutableStateOf(prefs.getBoolean("useStandardTime", true)) }
     LaunchedEffect(useStandardTime) {
         prefs.edit().putBoolean("useStandardTime", useStandardTime).apply()
